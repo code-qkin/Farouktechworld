@@ -117,7 +117,7 @@ const NavBar = () => {
               </NavLink>
             )
           )}
-          <NavLink to="/get-quote">
+          <NavLink to="/pricing">
             <button className="w-full mt-2 bg-white text-purple-800 px-4 py-2 rounded hover:bg-gray-200 transition">
               Get a quote now
             </button>
