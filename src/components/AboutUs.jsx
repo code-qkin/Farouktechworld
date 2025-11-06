@@ -1,5 +1,5 @@
-import About from '../assets/images/Aboutimg.jpg';
-import Aboutim from '../assets/images/Aboutimg1.jpg';
+import About from '../assets/images/aboutimg.jpg';
+import Aboutim from '../assets/images/aboutimg1.jpg';
 const AboutUs = () => {
     return (
         <section id="about" className="mb-1 bg-purple-50">
