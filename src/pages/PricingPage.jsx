@@ -11,7 +11,7 @@ import {
   Slash,
   MessageCircle,
 } from "lucide-react"
-const iphoneModels = [
+const phoneModels = [
   // iPhone 6 Series
   "iPhone 6",
   "iPhone 6 Plus",
@@ -178,14 +178,14 @@ export default function PricingPage() {
     <section className="bg-purple-50 py-16 px-4">
       <div className="max-w-4xl mx-auto">
         <h2 className="text-4xl font-extrabold text-purple-900 text-center mb-10">
-          iPhone Repair Pricing
+          Phone Repair Pricing
         </h2>
 
         <div className="space-y-6 bg-white p-8 rounded-xl shadow-lg">
           {/* Model Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Select iPhone Model
+              Select Phone Model
             </label>
             <select
               value={selectedModel}
@@ -193,7 +193,7 @@ export default function PricingPage() {
               className="w-full border border-gray-300 rounded-md p-3 focus:ring-purple-500 focus:border-purple-500"
             >
               <option value="">Choose model</option>
-              {iphoneModels.map((model, index) => (
+              {phoneModels.map((model, index) => (
                 <option key={index} value={model}>
                   {model}
                 </option>
