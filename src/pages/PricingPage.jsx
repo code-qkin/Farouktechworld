@@ -178,7 +178,7 @@ export default function PricingPage() {
     <section className="bg-purple-50 pt-32 sm:pt-16 px-4">
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-10">
         {/* Main Form */}
-        <div className="lg:col-span-2 space-y-8 bg-white p-8 rounded-xl shadow-lg">
+        <div className="lg:col-span-2 space-y-8 bg-white p-8 rounded-xl shadow-lg mb-5">
           <h2 className="text-4xl font-extrabold text-purple-900 text-center mb-6">
             Phone Repair Pricing
           </h2>
