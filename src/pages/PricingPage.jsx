@@ -169,22 +169,23 @@ export default function PricingPage() {
       const price =
         pricingMatrix[service] && pricingMatrix[service][selectedModel];
       if (price) total += price;
-      else return null; // unsupported model
+      else return null;
     }
     return total;
   };
 
   return (
-    <section className="bg-purple-50 py-16 px-4">
-      <div className="max-w-4xl mx-auto">
-        <h2 className="text-4xl font-extrabold text-purple-900 text-center mb-10">
-          Phone Repair Pricing
-        </h2>
+    <section className="bg-purple-50 pt-32 sm:pt-16 px-4">
+      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-10">
+        {/* Main Form */}
+        <div className="lg:col-span-2 space-y-8 bg-white p-8 rounded-xl shadow-lg">
+          <h2 className="text-4xl font-extrabold text-purple-900 text-center mb-6">
+            Phone Repair Pricing
+          </h2>
 
-        <div className="space-y-6 bg-white p-8 rounded-xl shadow-lg">
           {/* Model Selection */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Select Phone Model
             </label>
             <select
@@ -213,59 +214,67 @@ export default function PricingPage() {
                   <div
                     key={index}
                     onClick={() => toggleService(name)}
-                    className={`flex flex-col items-center p-4 rounded-lg cursor-pointer transition transform hover:scale-105 ${
+                    className={`flex flex-col items-center justify-center p-5 rounded-xl cursor-pointer transition transform hover:scale-105 shadow-sm ${
                       isSelected
                         ? "bg-purple-600 text-white"
                         : "bg-purple-100 text-purple-800"
                     }`}
                   >
-                    <Icon className="w-8 h-8 mb-2" />
-                    <span className="text-sm font-medium text-center">
-                      {name}
-                    </span>
+                    <Icon className="w-10 h-10 mb-3" />
+                    <span className="text-sm font-semibold text-center">{name}</span>
                   </div>
                 );
               })}
             </div>
           </div>
+        </div>
 
-          {/* Quote Summary */}
-          {selectedModel && selectedServices.length > 0 && (
-            <div className="mt-8 animate-fade-in">
-              {getTotalPrice() !== null ? (
-                <div className="bg-purple-100 p-6 rounded-lg shadow-md">
-                  <h4 className="text-lg font-semibold text-purple-900 mb-2">
-                    Quote Summary
-                  </h4>
-                  <p className="text-sm text-gray-700 mb-1">
-                    <strong>Model:</strong> {selectedModel}
-                  </p>
-                  <p className="text-sm text-gray-700 mb-1">
-                    <strong>Services:</strong>{" "}
-                    {selectedServices.join(", ")}
-                  </p>
-                  <p className="text-lg font-bold text-purple-800 mt-2">
-                    Total: ₦{getTotalPrice().toLocaleString()}
-                  </p>
-                </div>
-              ) : (
-                <div className="text-red-600 font-medium">
-                  model not supported.
-                  <a
-                    href="https://wa.me/2348095115931?text=Hello%20FaroukTechWorld"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ml-2 inline-flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-full hover:bg-green-600 transition mt-2"
-                  >
-                    <MessageCircle className="w-5 h-5" />
-                    Chat on WhatsApp
-                  </a>
-                </div>
-              )}
+        {/* Desktop Quote Summary (optional inline or sticky) */}
+        <div className="hidden sm:block lg:sticky lg:top-24 h-fit">
+          {selectedModel && selectedServices.length > 0 && getTotalPrice() !== null && (
+            <div className="bg-purple-100 p-6 rounded-xl shadow-md animate-fade-in">
+              <h4 className="text-xl font-bold text-purple-900 mb-4">Quote Summary</h4>
+              <ul className="text-sm text-gray-700 space-y-1">
+                <li><strong>Model:</strong> {selectedModel}</li>
+                <li><strong>Services:</strong> {selectedServices.join(", ")}</li>
+              </ul>
+              <p className="text-xl font-bold text-purple-800 mt-4">
+                Total: ₦{getTotalPrice().toLocaleString()}
+              </p>
             </div>
           )}
         </div>
       </div>
+
+      {/* Mobile Quote Summary Fixed Under Navbar */}
+      {selectedModel && selectedServices.length > 0 && getTotalPrice() !== null && (
+        <div className="fixed top-20 left-4 right-4 z-50 sm:hidden bg-purple-100 p-4 rounded-xl shadow-xl animate-fade-in">
+          <h4 className="text-lg font-bold text-purple-900 mb-2">Quote Summary</h4>
+          <ul className="text-sm text-gray-700 space-y-1">
+            <li><strong>Model:</strong> {selectedModel}</li>
+            <li><strong>Services:</strong> {selectedServices.join(", ")}</li>
+          </ul>
+          <p className="text-xl font-bold text-purple-800 mt-4">
+            Total: ₦{getTotalPrice().toLocaleString()}
+          </p>
+        </div>
+      )}
+
+      {/* Unsupported Model Fallback */}
+      {selectedModel && selectedServices.length > 0 && getTotalPrice() === null && (
+        <div className="fixed top-20 left-4 right-4 z-50 sm:hidden bg-red-100 p-4 rounded-xl shadow-xl animate-fade-in text-red-700 font-medium">
+          Model not supported.
+          <a
+            href="https://wa.me/2348095115931?text=Hello%20FaroukTechWorld"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 inline-flex items-center gap-2 bg-green-600 text-white px-5 py-3 rounded-full hover:bg-green-700 transition"
+          >
+            <MessageCircle className="w-5 h-5" />
+            Chat on WhatsApp
+          </a>
+        </div>
+      )}
 
       {/* Fade-in animation */}
       <style>{`
