@@ -13,8 +13,8 @@ const NavBar = () => {
   const [isOpen, setIsOpen] = useState(false);
 
   const navLinks = [
-    { name: "About us", path: "#about" },
-    { name: "Services", path: "#services", scroll: true },
+    { name: "About us", path: "/#about" },
+    { name: "Services", path: "/#services", scroll: true },
     // { name: "Testimonials", path: "#testimonials", scroll: true },
     { name: "Pricing", path: "/pricing" },
     { name: "Contact us", path: "#contact", scroll: true },
