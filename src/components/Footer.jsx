@@ -52,6 +52,12 @@ const Footer = () => {
               <Phone className="w-4 h-4" /> +234 809 511 5931
             </li>
             <li className="flex items-center gap-2">
+              <Phone className="w-4 h-4" /> +234 816 970 6106
+            </li>
+            <li className="flex items-center gap-2">
+              <Phone className="w-4 h-4" /> +234 810 531 4509
+            </li>
+            <li className="flex items-center gap-2">
               <Mail className="w-4 h-4" /> farouktechworld@gmail.com
             </li>
             <li>Mokola Rd, Mokola Hill, Ibadan 200285, Oyo State</li>

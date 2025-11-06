@@ -1,21 +1,19 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Link, NavLink } from "react-router-dom";
-// import Logo from "../assets/images/farouk logo.png";
+import Logo from "../assets/images/farouklogo.png";
 
 const NavBar = () => {
   const navigate = useNavigate();
+  const [isOpen, setIsOpen] = useState(false);
 
   const handleLink = (hash) => {
-    navigate(`/${hash}`); 
+    navigate(`/${hash}`);
   };
-
-  const [isOpen, setIsOpen] = useState(false);
 
   const navLinks = [
     { name: "About us", path: "/#about" },
     { name: "Services", path: "/#services", scroll: true },
-    // { name: "Testimonials", path: "#testimonials", scroll: true },
     { name: "Pricing", path: "/pricing" },
     { name: "Contact us", path: "#contact", scroll: true },
   ];
@@ -24,15 +22,15 @@ const NavBar = () => {
     <nav className="bg-purple-800 text-white shadow-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          {/* Logo and Title */}
-          <div className="flex items-center">
-            {/* <img src={Logo} alt="FaroukTechWorld Logo" className="h-10 w-10" /> */}
-            <Link to="/">
-            <h1 className="text-2xl font-bold ml-2">
-              FaroukTechWorld <i className="italic">Limited</i>
-            </h1>
-            </Link>
-          </div>
+          {/* Logo Only */}
+          <Link to="/" className="flex items-center">
+            <img
+              src={Logo}
+              alt="FaroukTechWorld Logo"
+              className="h-30 w-auto max-w-[160px] object-contain"
+            />
+
+          </Link>
 
           {/* Desktop Nav */}
           <div className="hidden md:flex space-x-6">
@@ -50,8 +48,7 @@ const NavBar = () => {
                   key={link.name}
                   to={link.path}
                   className={({ isActive }) =>
-                    `hover:font-bold transition ${isActive ? "text-purple-300 font-bold" : ""
-                    }`
+                    `hover:font-bold transition ${isActive ? "text-purple-300 font-bold" : ""}`
                   }
                 >
                   {link.name}
@@ -108,8 +105,7 @@ const NavBar = () => {
                 key={link.name}
                 to={link.path}
                 className={({ isActive }) =>
-                  `block hover:font-bold transition ${isActive ? "text-purple-300 font-bold" : ""
-                  }`
+                  `block hover:font-bold transition ${isActive ? "text-purple-300 font-bold" : ""}`
                 }
                 onClick={() => setIsOpen(false)}
               >

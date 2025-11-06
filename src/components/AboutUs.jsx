@@ -1,5 +1,5 @@
-import Aboutimg from '../assets/images/hero2.jpg';
-import phone from '../assets/images/hero1.jpg';
+import Aboutimg from '../assets/images/Aboutimg.jpg';
+import Aboutimg1 from '../assets/images/Aboutimg1.jpg';
 const AboutUs = () => {
     return (
         <section id="about" className="mb-1 bg-purple-50">
@@ -22,7 +22,7 @@ const AboutUs = () => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2">
                 <div>
-                    <img src={phone} alt="About Us" className="w-full h-full object-cover" />
+                    <img src={Aboutimg1} alt="About Us" className="w-full h-full object-cover" />
                 </div>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
                     <h2 className="text-3xl font-extrabold text-purple-900 mb-6">Our Mission.</h2>
