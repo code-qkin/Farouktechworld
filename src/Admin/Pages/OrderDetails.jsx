@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore'; 
 import { db } from '../../firebaseConfig.js';
 import { useAuth } from '../AdminContext';
-import { Toast, ConfirmModal, PromptModal } from '../components/Feedback.jsx';
+import { Toast, ConfirmModal, PromptModal } from '../Components/Feedback.jsx';
 
 const OrderDetails = () => {
     const { orderId } = useParams(); 
