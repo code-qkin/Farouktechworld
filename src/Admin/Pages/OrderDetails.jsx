@@ -252,6 +252,14 @@ const OrderDetails = () => {
     };
 
     const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
+    const formatDate = (date) => {
+        if (!date) return '';
+        return new Date(date).toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        });
+    };
     
     // Helper to categorize Order
     const isReturn = order?.orderType === 'return';
