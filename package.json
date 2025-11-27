@@ -12,6 +12,7 @@
   "dependencies": {
     "boring-avatar": "^1.7.0",
     "boring-avatars": "^2.0.4",
+    "firebase": "^12.6.0",
     "flowbite": "^3.1.2",
     "lucide-react": "^0.552.0",
     "react": "^19.1.1",
@@ -19,7 +20,9 @@
     "react-fast-marquee": "^1.6.5",
     "react-icons": "^5.5.0",
     "react-router-dom": "^7.9.4",
-    "swiper": "^12.0.2"
+    "recharts": "^3.4.1",
+    "swiper": "^12.0.2",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

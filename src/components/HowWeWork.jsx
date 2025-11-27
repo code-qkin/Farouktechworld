@@ -23,7 +23,7 @@ const steps = [
 
 const HowWeWork = () => {
   return (
-    <section className="bg-gradient-to-br from-purple-50 to-white text-purple-900 py-16 px-16  transition-all duration-500">
+    <section className="bg-gradient-to-br from-purple-100 to-gray-100 text-purple-900 py-16 px-10  transition-all duration-500">
       <div className="mx-auto">
         <h2 className="text-4xl font-extrabold text-center mb-12">How We Work</h2>
 

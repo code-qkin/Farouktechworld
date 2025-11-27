@@ -14,8 +14,10 @@ const NavBar = () => {
   const navLinks = [
     { name: "About us", path: "/#about" },
     { name: "Services", path: "/#services", scroll: true },
+    // { name: "Proof of Work", path: "/proof-of-work" }, 
     { name: "Pricing", path: "/pricing" },
-    { name: "Contact us", path: "#contact", scroll: true },
+    // { name: "Contact us", path: "#contact", scroll: true },
+    { name: "Track Order", path: "/track-order", },
   ];
 
   return (

@@ -87,8 +87,8 @@ const servicesData = [
 
 export default function Services() {
   return (
-    <section className="bg-purple-50 py-16" id="services">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="bg-gradient-to-br from-purple-100 to-gray-100 py-16" id="services">
+      <div className="mx-auto px-4 sm:px-6 lg:px-8">
         <h2 className="text-4xl font-extrabold text-purple-900 mb-12 text-center">Our Services</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
           {servicesData.map((service, index) => {
@@ -107,7 +107,7 @@ export default function Services() {
                 </div>
                 <p className="text-gray-600 text-sm mb-6">{service.description}</p>
                 <div className="flex justify-between items-center mt-auto">
-                  <span className="text-sm font-medium text-purple-800">{service.price}</span>
+                  <span className="text-sm font-medium text-purple-800"></span>
                   <Link to="/pricing">
                     <button className="text-sm px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition">
                       Pricing

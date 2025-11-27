@@ -2,7 +2,7 @@ import About from '../assets/images/aboutimg.jpg';
 import Aboutim from '../assets/images/aboutimg1.jpg';
 const AboutUs = () => {
     return (
-        <section id="about" className="mb-1 bg-purple-50">
+        <section id="about" className="bg-gradient-to-br from-purple-100 to-gray-100">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
                     <h2 className="text-3xl font-extrabold text-purple-900 mb-6">About Us.</h2>
@@ -35,28 +35,6 @@ const AboutUs = () => {
                     <p className="text-lg text-gray-700">
                         At FaroukTechWorld Limited, we believe that technology should enhance your life, not complicate it. That's why we are dedicated to providing solutions that are not only effective but also convenient and affordable.
                     </p>
-                </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 bg-purple-800 lg:grid-cols-4">
-                <div className="p-10">
-                    <p className="text-white text-8xl font-bold mb-6">15 +</p>
-                    <p className="text-white mt-4  font-bold">Years of Experience</p>
-                    <p className="text-white mt-4">We bring unparalleled expertise and know-how to every repair job, ensuring high quality and your satisfaction.</p>
-                </div>
-                <div className="p-10">
-                    <p className="text-white text-8xl font-bold mb-6">35 +</p>
-                    <p className="text-white mt-4  font-bold">Gadget Repaired Daily</p>
-                    <p className="text-white mt-4">With meticulous attention to detail, we prioritize getting your devices back in your hands as quickly as possible.</p>
-                </div>
-                <div className="p-10">
-                    <p className="text-white text-8xl font-bold mb-6">6</p>
-                    <p className="text-white mt-4  font-bold">Tech Expert</p>
-                    <p className="text-white mt-4">With their combined expertise, we deliver superior service and technical proficiency with every repair job.</p>
-                </div>
-                <div className="p-10">
-                    <p className="text-white text-8xl font-bold mb-6">10K +</p>
-                    <p className="text-white mt-4  font-bold">Clients served in Nigeria</p>
-                    <p className="text-white mt-4">we take pride in our extensive client base across Nigeria, reflecting our commitment to quality service and customer satisfaction. </p>
                 </div>
             </div> 
         </section>

@@ -4,10 +4,12 @@ import Hero from '../components/Hero.jsx';
 import AboutUs from '../components/AboutUs.jsx';
 import Services from '../components/Services.jsx';
 import HowWeWork from '../components/HowWeWork.jsx';
+// import ProofOfWork from '../components/ProofOfWork.jsx';
+import Stats from '../components/Stats.jsx';
 // import Testimonals from '../components/Testimonals.jsx';
 import Contact from '../components/Contact.jsx';
- 
- const Homepage = () => {
+
+const Homepage = () => {
   const location = useLocation();
 
   useEffect(() => {
@@ -18,17 +20,18 @@ import Contact from '../components/Contact.jsx';
       }
     }
   }, [location]);
-   return (
-     <div>
-       <Hero />
-       <AboutUs />
+  return (
+    <div>
+      <Hero />
+      <AboutUs />
+      <Stats />
       <Services />
       <HowWeWork />
       {/* <Testimonals /> */}
+      {/* <ProofOfWork /> */}
       <Contact />
-     </div>
-   )
- }
- 
- export default Homepage
- 
+    </div>
+  )
+}
+
+export default Homepage
