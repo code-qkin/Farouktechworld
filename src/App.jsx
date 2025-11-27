@@ -16,7 +16,7 @@ import Dashboard from './Admin/Pages/Dashboards/DashboardHandler';
 import OrdersManagement from './Admin/Pages/OrderManagement';
 import UserManagement from './Admin/Pages/UserManagement';
 import StoreInventory from './Admin/Pages/StoreInventory';
-import CompleteSignupPage from './Admin/Pages/CompleteSignUp';
+// import CompleteSignupPage from './Admin/Pages/CompleteSignUp';
 import OrderDetails from './Admin/Pages/OrderDetails';
 import Settings from './Admin/Components/Settings';
 import PerformancePage from './Admin/Pages/PerformancePage';
@@ -45,7 +45,7 @@ const router = createBrowserRouter(
       <Route path="admin">
         {/* Unprotected Login Route */}
         <Route path="login" element={<LoginPage />} />
-        <Route path="complete-signup" element={<CompleteSignupPage />} />
+        {/* <Route path="complete-signup" element={<CompleteSignupPage />} /> */}
         {/*
           The Guard Route: Checks authentication and role.
         */}
