@@ -12,7 +12,7 @@ import {
     runTransaction, increment, arrayUnion 
 } from 'firebase/firestore';
 // ✅ Import Custom UI Components
-import { Toast, ConfirmModal } from '../../components/Feedback.jsx'; 
+import { Toast, ConfirmModal } from '../../Components/Feedback.jsx'; 
 
 const getTimeAgo = (timestamp) => {
     if (!timestamp) return 'Just now';
