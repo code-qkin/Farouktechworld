@@ -248,7 +248,7 @@ const StoreInventory = () => {
                     <span className="text-2xl font-black text-slate-900">{formatCurrency(stats.totalValue)}</span>
                 </div>
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between h-28">
-                    <div className="flex justify-between"><span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total SKUs</span><div className="bg-blue-50 p-1.5 rounded-lg text-blue-600"><Package size={16}/></div></div>
+                    <div className="flex justify-between"><span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Stock</span><div className="bg-blue-50 p-1.5 rounded-lg text-blue-600"><Package size={16}/></div></div>
                     <span className="text-2xl font-black text-slate-900">{stats.totalItems}</span>
                 </div>
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between h-28">

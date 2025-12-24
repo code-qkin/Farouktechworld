@@ -243,7 +243,7 @@ const Dashboard = () => {
                             title="Inventory Count" 
                             value={stats.inventoryCount} 
                             icon={Package} 
-                            subtext="Total SKUs in store"
+                            subtext="Total Stock in store"
                             onClick={() => navigate('/admin/store')}
                         />
                     )}

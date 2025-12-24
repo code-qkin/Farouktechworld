@@ -14,7 +14,7 @@ import {
 } from 'firebase/firestore';
 import { Toast, ConfirmModal } from '../../Components/Feedback.jsx'; 
 import { 
-    BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid 
+    BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, CartesianGrid 
 } from 'recharts';
 
 // --- UTILS ---
@@ -30,19 +30,19 @@ const getTimeAgo = (timestamp) => {
 
 // --- COMPONENTS ---
 const StatCard = ({ title, value, icon: Icon, color }) => (
-    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex items-center justify-between transition-all hover:shadow-md hover:border-purple-200">
-        <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{title}</p>
-            <h3 className="text-3xl font-black text-slate-800">{value}</h3>
+    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-between h-24 relative overflow-hidden group">
+        <div className="flex justify-between items-start z-10">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{title}</p>
+            <div className={`p-1.5 rounded-lg ${
+                color === 'purple' ? 'bg-purple-50 text-purple-600' :
+                color === 'blue' ? 'bg-blue-50 text-blue-600' :
+                color === 'green' ? 'bg-green-50 text-green-600' :
+                'bg-orange-50 text-orange-600'
+            }`}>
+                <Icon size={16} />
+            </div>
         </div>
-        <div className={`p-3 rounded-xl ${
-            color === 'purple' ? 'bg-purple-50 text-purple-600' :
-            color === 'blue' ? 'bg-blue-50 text-blue-600' :
-            color === 'green' ? 'bg-green-50 text-green-600' :
-            'bg-orange-50 text-orange-600'
-        }`}>
-            <Icon size={24} />
-        </div>
+        <h3 className="text-2xl font-black text-slate-800 z-10">{value}</h3>
     </div>
 );
 
@@ -137,7 +137,7 @@ const WorkerDashboard = ({ user: propUser }) => {
       return { myActive, poolCount, myCompleted, chartData };
   }, [orders, user]);
 
-  // --- ACTIONS ---
+  // --- ACTIONS (With Toast & ConfirmModal) ---
   
   const claimService = (order, itemIndex, serviceIndex) => {
       setConfirmConfig({
@@ -184,10 +184,7 @@ const WorkerDashboard = ({ user: propUser }) => {
               try {
                   const newItems = JSON.parse(JSON.stringify(order.items));
                   newItems[itemIndex].services[serviceIndex].status = 'In Progress';
-                  
-                  // Reset main order status if needed
                   await updateDoc(doc(db, "Orders", order.id), { items: newItems, status: 'In Progress' });
-                  
                   setToast({ message: "Task moved to Workbench", type: 'success' });
                   setActiveTab('my-jobs');
               } catch (e) { setToast({ message: "Update failed.", type: 'error' }); }
@@ -227,7 +224,6 @@ const WorkerDashboard = ({ user: propUser }) => {
     } catch (e) { setToast({ message: `Error: ${e}`, type: 'error' }); }
   };
 
-  // 🔥 UPDATED: Replaced window.confirm with ConfirmModal
   const handleUndoPart = (orderId, partItem) => {
       setConfirmConfig({
           isOpen: true,
@@ -238,7 +234,6 @@ const WorkerDashboard = ({ user: propUser }) => {
           action: async () => {
               try {
                   await runTransaction(db, async (t) => {
-                      // 1. Restore Stock
                       if (partItem.partId) {
                           const partRef = doc(db, "Inventory", partItem.partId);
                           const partDoc = await t.get(partRef);
@@ -246,10 +241,7 @@ const WorkerDashboard = ({ user: propUser }) => {
                               t.update(partRef, { stock: increment(1) });
                           }
                       }
-
-                      // 2. Remove from Order
-                      const orderRef = doc(db, "Orders", orderId);
-                      t.update(orderRef, {
+                      t.update(doc(db, "Orders", orderId), {
                           items: arrayRemove(partItem)
                       });
                   });
@@ -293,14 +285,13 @@ const WorkerDashboard = ({ user: propUser }) => {
       return { ...order, visibleItems };
   }).filter(Boolean);
 
-  // Filter Parts for Modal
   const filteredInventory = inventory.filter(i => 
       i.name.toLowerCase().includes(partSearch.toLowerCase()) || 
       i.model?.toLowerCase().includes(partSearch.toLowerCase())
   );
 
   return (
-    <div className="min-h-screen bg-gray-50/50 font-sans text-slate-800">
+    <div className="min-h-screen bg-gray-50/50 font-sans text-slate-800 pb-20 sm:pb-6">
       <Toast message={toast.message} type={toast.type} onClose={() => setToast({message:'', type:''})} />
       <ConfirmModal 
         isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmText={confirmConfig.confirmText} confirmColor={confirmConfig.confirmColor}
@@ -308,39 +299,34 @@ const WorkerDashboard = ({ user: propUser }) => {
       />
 
       {/* --- HEADER --- */}
-      <header className="bg-white sticky top-0 z-30 px-6 py-4 border-b border-gray-200 shadow-sm flex justify-between items-center">
-        <div className="flex items-center gap-4">
-            <div className="bg-blue-600 p-2 rounded-lg text-white shadow-lg shadow-blue-200">
-                <Wrench size={20}/>
+      <header className="bg-white sticky top-0 z-30 px-4 sm:px-6 py-3 border-b border-gray-200 shadow-sm flex justify-between items-center">
+        <div className="flex items-center gap-3">
+            <div className="bg-blue-600 p-2 rounded-lg text-white shadow-md">
+                <Wrench size={18}/>
             </div>
-            <div>
-                <h1 className="text-lg font-bold text-slate-900 leading-tight">Technician Hub</h1>
-                <p className="text-xs text-slate-500 font-medium">Logged in as: <span className="text-blue-700 font-bold">{user?.name || user?.email}</span></p>
+            <div className="leading-none">
+                <h1 className="text-base font-bold text-slate-900">Tech Hub</h1>
+                <p className="text-[10px] text-slate-500 font-medium truncate max-w-[120px]">{user?.name || user?.email}</p>
             </div>
         </div>
-        <button onClick={handleLogout} className="flex items-center gap-2 bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg font-bold hover:bg-red-50 text-xs transition">
-            <LogOut size={14} /> Sign Out
+        <button onClick={handleLogout} className="flex items-center gap-1.5 bg-red-50 border border-red-100 text-red-600 px-3 py-1.5 rounded-lg font-bold hover:bg-red-100 text-[10px] transition">
+            <LogOut size={12} /> Exit
         </button>
       </header>
 
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
+      <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
           
           {/* --- 1. METRICS --- */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <StatCard title="My Active Jobs" value={dashboardStats.myActive} icon={Briefcase} color="purple" />
-                  <StatCard title="Available in Pool" value={dashboardStats.poolCount} icon={Layers} color="blue" />
-                  <StatCard title="Total Completed" value={dashboardStats.myCompleted} icon={CheckCircle} color="green" />
-              </div>
-              <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm h-36 flex flex-col relative overflow-hidden">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-2 z-10"><TrendingUp size={14}/> Weekly Activity</h3>
-                  <div className="flex-1 w-full min-h-0 z-10">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+              <StatCard title="My Active" value={dashboardStats.myActive} icon={Briefcase} color="purple" />
+              <StatCard title="Pool" value={dashboardStats.poolCount} icon={Layers} color="blue" />
+              <StatCard title="Completed" value={dashboardStats.myCompleted} icon={CheckCircle} color="green" />
+              
+              <div className="hidden sm:block bg-white p-4 rounded-xl border border-gray-200 shadow-sm h-24">
+                  <div className="w-full h-full">
                       <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={dashboardStats.chartData}>
-                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
-                              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize:10, fill:'#94a3b8'}} dy={5}/>
-                              <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius:'8px', border:'none', fontSize:'12px'}}/>
-                              <Bar dataKey="done" radius={[4,4,0,0]} barSize={20} fill="#22c55e" />
+                              <Bar dataKey="done" radius={[2,2,0,0]} fill="#cbd5e1" />
                           </BarChart>
                       </ResponsiveContainer>
                   </div>
@@ -348,70 +334,66 @@ const WorkerDashboard = ({ user: propUser }) => {
           </div>
 
           {/* --- 2. CONTROLS --- */}
-          <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-              <div className="flex bg-white p-1 rounded-xl shadow-sm border border-gray-200 w-full sm:w-auto">
-                  <button onClick={() => setActiveTab('my-jobs')} className={`flex-1 sm:flex-none px-6 py-2.5 rounded-lg text-sm font-bold transition flex items-center justify-center gap-2 ${activeTab === 'my-jobs' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-                      <Wrench size={16}/> Workbench <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'my-jobs' ? 'bg-purple-500 text-white' : 'bg-slate-100 text-slate-600'}`}>{dashboardStats.myActive}</span>
+          <div className="flex flex-col gap-3">
+              <div className="bg-white p-1 rounded-xl shadow-sm border border-gray-200 flex w-full overflow-hidden">
+                  <button onClick={() => setActiveTab('my-jobs')} className={`flex-1 py-2.5 text-xs sm:text-sm font-bold transition flex items-center justify-center gap-1.5 rounded-lg ${activeTab === 'my-jobs' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+                      <Wrench size={14}/> Work ({dashboardStats.myActive})
                   </button>
-                  <button onClick={() => setActiveTab('pool')} className={`flex-1 sm:flex-none px-6 py-2.5 rounded-lg text-sm font-bold transition flex items-center justify-center gap-2 ${activeTab === 'pool' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-                      <Layers size={16}/> Job Pool <span className={`px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'pool' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-600'}`}>{dashboardStats.poolCount}</span>
+                  <button onClick={() => setActiveTab('pool')} className={`flex-1 py-2.5 text-xs sm:text-sm font-bold transition flex items-center justify-center gap-1.5 rounded-lg ${activeTab === 'pool' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+                      <Layers size={14}/> Pool ({dashboardStats.poolCount})
                   </button>
-                  <button onClick={() => setActiveTab('history')} className={`flex-1 sm:flex-none px-6 py-2.5 rounded-lg text-sm font-bold transition flex items-center justify-center gap-2 ${activeTab === 'history' ? 'bg-green-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-                      <Clock size={16}/> History
+                  <button onClick={() => setActiveTab('history')} className={`flex-1 py-2.5 text-xs sm:text-sm font-bold transition flex items-center justify-center gap-1.5 rounded-lg ${activeTab === 'history' ? 'bg-green-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+                      <Clock size={14}/> History
                   </button>
               </div>
-              <div className="relative w-full sm:w-80">
-                  <Search className="absolute left-3 top-3 text-slate-400" size={18}/>
-                  <input className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-purple-500 outline-none text-sm shadow-sm" placeholder="Search ticket..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              
+              <div className="relative w-full">
+                  <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
+                  <input className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-purple-500 outline-none text-sm" placeholder="Search ticket or name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
               </div>
           </div>
 
           {/* --- 3. TASK GRID --- */}
-          {loading ? <div className="text-center py-20 text-slate-400">Loading workspace...</div> : 
+          {loading ? <div className="text-center py-10 text-slate-400 text-sm">Loading...</div> : 
            displayOrders.length === 0 ? (
-               <div className="bg-white rounded-2xl p-16 text-center border-2 border-dashed border-gray-200">
-                   <BoxSelect className="text-slate-400 w-20 h-20 mx-auto mb-4"/>
-                   <h3 className="text-slate-900 font-bold text-lg mb-1">Clean Workbench</h3>
-                   <p className="text-slate-500 text-sm mb-6">{activeTab === 'my-jobs' ? `You have no pending repairs.` : "No new jobs available in the pool."}</p>
-                   {activeTab === 'my-jobs' && <button onClick={() => setActiveTab('pool')} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-lg">Check Job Pool</button>}
+               <div className="bg-white rounded-2xl p-10 text-center border-2 border-dashed border-gray-200 mt-4">
+                   <BoxSelect className="text-slate-300 w-12 h-12 mx-auto mb-3"/>
+                   <p className="text-slate-500 text-sm font-medium">No jobs found.</p>
                </div>
            ) : (
-              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-4 sm:gap-6 md:grid-cols-2 xl:grid-cols-3">
                   {displayOrders.map(order => (
-                    <div key={order.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col hover:shadow-md transition-all group">
-                        {/* Header */}
-                        <div className="p-4 border-b border-gray-100 flex justify-between items-start bg-slate-50/80">
-                            <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className="font-mono text-xs font-bold bg-white border border-gray-200 px-2 py-0.5 rounded text-slate-600">{order.ticketId}</span>
-                                    <span className="text-xs text-slate-400">{getTimeAgo(order.createdAt)}</span>
-                                </div>
-                                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2"><User size={14} className="text-slate-400"/> {order.customer?.name}</h3>
+                    <div key={order.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col hover:border-purple-200 transition-all">
+                        
+                        {/* Card Header */}
+                        <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center bg-slate-50/50">
+                            <div className="flex flex-col">
+                                <span className="font-mono text-[10px] font-bold text-slate-500 bg-white border border-gray-200 px-1.5 py-0.5 rounded w-fit mb-1">{order.ticketId}</span>
+                                <h3 className="font-bold text-slate-800 text-sm truncate max-w-[150px]">{order.customer?.name}</h3>
                             </div>
+                            <span className="text-[10px] font-bold text-slate-400 bg-white px-2 py-1 rounded-full border border-gray-100">{getTimeAgo(order.createdAt)}</span>
                         </div>
 
-                        {/* Body */}
+                        {/* Card Body */}
                         <div className="p-4 flex-1 space-y-4">
                             {order.visibleItems.map((item, idx) => (
-                                <div key={idx} className="bg-white rounded-xl p-3 border border-gray-100 shadow-sm relative">
-                                    <div className="absolute -top-3 left-3 bg-slate-800 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase">{item.name || item.deviceModel}</div>
-                                    
-                                    {/* SHOW PASSCODE */}
-                                    {item.passcode && (
-                                        <div className="mt-3 mb-2 flex items-center gap-2 bg-yellow-50 px-2 py-1.5 rounded-lg border border-yellow-100">
-                                            <Lock size={12} className="text-yellow-600"/>
-                                            <span className="text-xs font-bold text-yellow-800">Passcode:</span>
-                                            <span className="font-mono text-sm font-bold text-slate-800">{item.passcode}</span>
-                                        </div>
-                                    )}
+                                <div key={idx} className="relative">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <div className="bg-slate-800 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase truncate max-w-[200px]">{item.name || item.deviceModel}</div>
+                                        {item.passcode && (
+                                            <div className="flex items-center gap-1 bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-100">
+                                                <Lock size={10} className="text-yellow-600"/>
+                                                <span className="font-mono text-[10px] font-bold text-slate-800">{item.passcode}</span>
+                                            </div>
+                                        )}
+                                    </div>
 
-                                    <div className={item.passcode ? "mt-2 space-y-3" : "mt-3 space-y-3"}>
+                                    <div className="space-y-3 pl-1">
                                         {item.visibleServices.map((svc, sIdxKey) => (
-                                            <div key={sIdxKey} className="flex flex-col gap-2 border-b border-gray-50 pb-2 last:border-0 last:pb-0">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="font-bold text-sm text-slate-700">{svc.service}</span>
-                                                    {/* SERVICE STATUS BADGE */}
-                                                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
+                                            <div key={sIdxKey} className="flex flex-col gap-2 border-l-2 border-gray-100 pl-3 py-1">
+                                                <div className="flex justify-between items-start">
+                                                    <span className="font-bold text-xs text-slate-700 leading-tight">{svc.service}</span>
+                                                    <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${
                                                         svc.status === 'Completed' ? 'bg-green-100 text-green-700' : 
                                                         svc.status === 'In Progress' ? 'bg-purple-100 text-purple-700' :
                                                         'bg-gray-100 text-gray-600'
@@ -420,27 +402,21 @@ const WorkerDashboard = ({ user: propUser }) => {
                                                     </span>
                                                 </div>
                                                 
-                                                {/* ACTIONS */}
-                                                <div className="flex justify-end gap-2 flex-wrap">
+                                                {/* ACTION BUTTONS */}
+                                                <div className="flex gap-2 mt-1">
                                                     {activeTab === 'pool' && (
-                                                        <button onClick={() => claimService(order, item.iIdx, svc.sIdx)} className="w-full bg-blue-50 text-blue-700 py-2 rounded-lg text-xs font-bold hover:bg-blue-100 transition flex items-center justify-center gap-2">Claim Job <ArrowRight size={14}/></button>
+                                                        <button onClick={() => claimService(order, item.iIdx, svc.sIdx)} className="flex-1 bg-blue-50 text-blue-700 py-2 rounded-lg text-xs font-bold hover:bg-blue-100 transition flex items-center justify-center gap-1 active:scale-95">Claim</button>
                                                     )}
                                                     
                                                     {activeTab === 'my-jobs' && (
                                                         <>
-                                                            <button onClick={() => { setSelectedTask(order); setShowPartModal(true); }} className="px-3 py-1.5 bg-purple-50 text-purple-600 rounded-lg border border-purple-100 hover:bg-purple-100 text-xs font-bold flex items-center gap-1"><Box size={14}/> Part</button>
-                                                            <button onClick={() => markServiceDone(order, item.iIdx, svc.sIdx)} className="px-4 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-1"><CheckCircle size={14}/> Done</button>
+                                                            <button onClick={() => { setSelectedTask(order); setShowPartModal(true); }} className="flex-1 py-2 bg-purple-50 text-purple-700 rounded-lg text-xs font-bold border border-purple-100 hover:bg-purple-100 flex items-center justify-center gap-1 active:scale-95"><Box size={14}/> Part</button>
+                                                            <button onClick={() => markServiceDone(order, item.iIdx, svc.sIdx)} className="flex-[1.5] py-2 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 shadow-sm flex items-center justify-center gap-1 active:scale-95"><CheckCircle size={14}/> Done</button>
                                                         </>
                                                     )}
 
-                                                    {/* UNDO BUTTON (History Tab) */}
                                                     {activeTab === 'history' && (
-                                                        <button 
-                                                            onClick={() => undoCompletion(order, item.iIdx, svc.sIdx)}
-                                                            className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-200 text-slate-500 rounded-lg text-[10px] font-bold hover:bg-gray-50 hover:text-slate-700 transition shadow-sm w-full justify-center"
-                                                        >
-                                                            <Undo2 size={12}/> Undo
-                                                        </button>
+                                                        <button onClick={() => undoCompletion(order, item.iIdx, svc.sIdx)} className="w-full py-2 bg-gray-100 text-slate-600 rounded-lg text-xs font-bold hover:bg-gray-200 flex items-center justify-center gap-1 active:scale-95"><Undo2 size={14}/> Undo</button>
                                                     )}
                                                 </div>
                                             </div>
@@ -449,23 +425,23 @@ const WorkerDashboard = ({ user: propUser }) => {
                                 </div>
                             ))}
 
-                            {/* 🔥 PARTS USED SECTION (Per Order) */}
+                            {/* PARTS USED SECTION */}
                             {order.items.filter(i => i.type === 'part_usage' && isMyJob(i.worker)).length > 0 && (
-                                <div className="mt-4 pt-4 border-t border-dashed border-gray-200 bg-purple-50/50 p-3 rounded-lg">
-                                    <div className="flex items-center gap-2 mb-2 text-purple-800">
-                                        <Package size={14} />
-                                        <p className="text-[10px] font-bold uppercase tracking-wider">Parts Used</p>
+                                <div className="mt-3 pt-3 border-t border-dashed border-gray-200 bg-purple-50/30 p-2 rounded-lg">
+                                    <div className="flex items-center gap-1.5 mb-2 text-purple-800">
+                                        <Package size={12} />
+                                        <p className="text-[10px] font-bold uppercase">Parts Used</p>
                                     </div>
-                                    <div className="space-y-2">
+                                    <div className="space-y-1.5">
                                         {order.items.filter(i => i.type === 'part_usage' && isMyJob(i.worker)).map((part, pIdx) => (
-                                            <div key={pIdx} className="flex justify-between items-center bg-white border border-purple-100 p-2 rounded-lg shadow-sm">
-                                                <span className="text-xs font-semibold text-slate-700">{part.name.replace('Used: ', '')}</span>
+                                            <div key={pIdx} className="flex justify-between items-center bg-white border border-purple-100 px-2 py-1.5 rounded shadow-sm">
+                                                <span className="text-[10px] font-bold text-slate-700 truncate max-w-[150px]">{part.name.replace('Used: ', '')}</span>
                                                 <button 
                                                     onClick={() => handleUndoPart(order.id, part)}
-                                                    className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded transition"
-                                                    title="Undo (Restores Stock)"
+                                                    className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1 rounded"
+                                                    title="Undo & Restore Stock"
                                                 >
-                                                    <Undo2 size={14} />
+                                                    <Undo2 size={12}/>
                                                 </button>
                                             </div>
                                         ))}
@@ -479,47 +455,34 @@ const WorkerDashboard = ({ user: propUser }) => {
           )}
       </div>
 
-      {/* PART MODAL (Searchable) */}
+      {/* MOBILE FRIENDLY PART MODAL */}
       {showPartModal && (
-          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-              <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-sm animate-in zoom-in-95">
-                  <div className="flex justify-between items-center mb-4">
+          <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+              <div className="bg-white p-5 rounded-2xl shadow-2xl w-full max-w-sm animate-in zoom-in-95 flex flex-col max-h-[80vh]">
+                  <div className="flex justify-between items-center mb-4 shrink-0">
                       <h3 className="font-bold text-lg text-slate-800">Log Part Usage</h3>
-                      <button onClick={() => setShowPartModal(false)} className="text-gray-400 hover:text-red-500"><X size={20}/></button>
+                      <button onClick={() => setShowPartModal(false)} className="bg-gray-100 p-1.5 rounded-full text-gray-500"><X size={18}/></button>
                   </div>
                   
-                  {/* Search Box */}
-                  <div className="relative mb-4">
-                      <Search className="absolute left-3 top-3 text-gray-400" size={16}/>
-                      <input 
-                        autoFocus
-                        className="w-full pl-10 pr-4 py-2 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none text-sm" 
-                        placeholder="Search part (e.g. Screen 13 Pro)..."
-                        value={partSearch}
-                        onChange={e => setPartSearch(e.target.value)}
-                      />
+                  <div className="relative mb-3 shrink-0">
+                      <Search className="absolute left-3 top-2.5 text-gray-400" size={16}/>
+                      <input autoFocus className="w-full pl-10 pr-4 py-2 border rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none text-sm" placeholder="Search part..." value={partSearch} onChange={e => setPartSearch(e.target.value)} />
                   </div>
 
-                  {/* Scrollable List */}
-                  <div className="max-h-60 overflow-y-auto border rounded-xl bg-gray-50 mb-4 divide-y divide-gray-200">
+                  <div className="overflow-y-auto flex-1 border rounded-xl bg-gray-50 mb-4 divide-y divide-gray-200">
                       {filteredInventory.length === 0 ? (
-                          <div className="p-4 text-center text-xs text-gray-400">No parts found matching "{partSearch}"</div>
+                          <div className="p-4 text-center text-xs text-gray-400">No parts found</div>
                       ) : (
                           filteredInventory.map(part => (
-                              <button 
-                                key={part.id} 
-                                disabled={part.stock < 1}
-                                onClick={() => setSelectedPart(part.id)}
-                                className={`w-full p-3 text-left text-sm flex justify-between items-center hover:bg-purple-50 transition ${selectedPart === part.id ? 'bg-purple-100 ring-1 ring-purple-500 z-10' : ''}`}
-                              >
+                              <button key={part.id} disabled={part.stock < 1} onClick={() => setSelectedPart(part.id)} className={`w-full p-3 text-left text-sm flex justify-between items-center hover:bg-purple-50 transition active:bg-purple-100 ${selectedPart === part.id ? 'bg-purple-100 ring-1 ring-purple-500' : ''}`}>
                                   <span className={`font-medium ${part.stock < 1 ? 'text-gray-400' : 'text-gray-700'}`}>{part.name}</span>
-                                  <span className={`text-xs px-2 py-0.5 rounded ${part.stock < 1 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-700'}`}>{part.stock} left</span>
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${part.stock < 1 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-700'}`}>{part.stock} left</span>
                               </button>
                           ))
                       )}
                   </div>
 
-                  <button onClick={handleUsePart} disabled={!selectedPart} className="w-full bg-purple-600 text-white py-3 rounded-xl font-bold hover:bg-purple-700 shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
+                  <button onClick={handleUsePart} disabled={!selectedPart} className="w-full bg-purple-600 text-white py-3 rounded-xl font-bold hover:bg-purple-700 shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
                       Confirm Usage
                   </button>
               </div>

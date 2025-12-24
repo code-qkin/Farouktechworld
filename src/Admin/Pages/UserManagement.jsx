@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Users, Trash2, CheckCircle, Lock, Unlock, 
-    ArrowLeft, DollarSign, Save, X, Wrench, Shield, Edit2, Mail,
+    ArrowLeft, DollarSign, Save, X, Wrench, Shield, Edit2,
     UserPlus
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
@@ -39,15 +39,14 @@ const UserManagement = () => {
     
     if (role !== 'admin') return <Navigate to="/admin/dashboard" replace />;
 
-    // 1. FETCH & SORT USERS (Client-Side Sort to fix visibility issues)
+    // 1. FETCH & SORT USERS
     useEffect(() => {
-        // Removed 'orderBy' from query to ensure it runs even without indexes
         const q = query(collection(db, "Users")); 
         
         const unsubUsers = onSnapshot(q, (snap) => {
             const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             
-            // Sort by CreatedAt Descending (Newest First) in JS
+            // Sort by CreatedAt Descending (Newest First)
             fetched.sort((a, b) => {
                 const dateA = a.createdAt?.seconds || 0;
                 const dateB = b.createdAt?.seconds || 0;
@@ -63,20 +62,8 @@ const UserManagement = () => {
     const pendingUsers = useMemo(() => allUsers.filter(u => u.role === 'pending'), [allUsers]);
     const activeStaff = useMemo(() => allUsers.filter(u => u.role !== 'pending'), [allUsers]);
 
-    // --- HELPER: Send Welcome Email ---
-    const sendWelcomeEmail = (email, name, role) => {
-        const subject = encodeURIComponent("Welcome to FaroukTechWorld Team!");
-        const body = encodeURIComponent(
-            `Hi ${name},\n\n` +
-            `Your account has been approved! You have been assigned the role of: ${role.toUpperCase()}.\n\n` +
-            `You can now log in to the dashboard.\n\n` +
-            `Regards,\nAdmin`
-        );
-        window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
-    };
-
     // --- ACTIONS ---
-    const handleRoleUpdate = async (userId, newRole, userEmail, userName) => {
+    const handleRoleUpdate = async (userId, newRole) => {
         try { 
             const updates = { role: newRole };
             // Auto-assign tech access if worker
@@ -85,15 +72,6 @@ const UserManagement = () => {
             await updateDoc(doc(db, "Users", userId), updates); 
             setEditingUser(null); 
             setToast({ message: "Role updated!", type: 'success' }); 
-
-            // 🔥 Prompt to send email if user is approved
-            if (newRole !== 'pending' && userEmail) {
-                setTimeout(() => {
-                    if (window.confirm(`User Approved. Send Welcome Email to ${userEmail}?`)) {
-                        sendWelcomeEmail(userEmail, userName, newRole);
-                    }
-                }, 500);
-            }
         } 
         catch (error) { setToast({ message: "Failed.", type: 'error' }); }
     };
@@ -184,7 +162,7 @@ const UserManagement = () => {
             </td>
             <td className="px-6 py-4">
                 {editingUser === member.id ? (
-                    <select className="p-2 border rounded text-sm bg-white shadow-sm outline-none" defaultValue={member.role} onChange={(e) => handleRoleUpdate(member.id, e.target.value, member.email, member.name)} autoFocus onBlur={() => setEditingUser(null)}>
+                    <select className="p-2 border rounded text-sm bg-white shadow-sm outline-none" defaultValue={member.role} onChange={(e) => handleRoleUpdate(member.id, e.target.value)} autoFocus onBlur={() => setEditingUser(null)}>
                         <option value="pending">Pending</option><option value="worker">Worker</option><option value="secretary">Secretary</option><option value="admin">Admin</option>
                     </select>
                 ) : (
@@ -201,7 +179,6 @@ const UserManagement = () => {
             </td>
             <td className="px-6 py-4 text-right flex justify-end gap-2">
                 {member.role !== 'pending' && <button onClick={() => openPayrollModal(member)} className="p-2 rounded-full text-green-600 hover:bg-green-100 transition"><DollarSign size={18}/></button>}
-                <button onClick={() => sendWelcomeEmail(member.email, member.name, member.role)} className="p-2 rounded-full text-blue-600 hover:bg-blue-100 transition"><Mail size={18}/></button>
                 {member.id !== currentUser.uid && <button onClick={() => handleDelete(member)} className="text-red-600 hover:bg-red-100 p-2 rounded-full"><Trash2 size={18}/></button>}
             </td>
         </tr>
