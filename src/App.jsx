@@ -28,7 +28,7 @@ import NotFoundPage from './components/NotFoundPage';
 import PricingPage from './pages/PricingPage';
 // import ProofOfWorkPage from './pages/ProofOfWorkPage';
 import TrackingPage from './pages/TrackingPage';
-import SiteGuard from './components/SiteGuard';
+// import SiteGuard from './components/SiteGuard';
 
 
 const router = createBrowserRouter(
@@ -69,11 +69,9 @@ const router = createBrowserRouter(
 
 function App() {
   return (
-    <SiteGuard>
       <AuthProvider>
         <RouterProvider router={router} />
       </AuthProvider>
-    </SiteGuard>
   )
 }
 
