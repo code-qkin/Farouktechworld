@@ -1,34 +1,81 @@
-// src/Admin/Pages/Dashboard.jsx
 import React from 'react';
 import { useAuth } from '../../AdminContext';
+import { Wrench, ShieldCheck, RefreshCw } from 'lucide-react';
 
-// Import your three existing dashboards
+// Import Dashboards
 import AdminDashboard from './Dashboard';
 import SecretaryDashboard from './SecretaryDashboard';
 import WorkerDashboard from './WorkerDashboard';
 
 const DashboardHandler = () => {
-    const { role, user } = useAuth();
+    const { user, role, viewRole, setViewRole } = useAuth();
 
-    // 🚦 Traffic Control Logic
-    switch (role) {
+    // 1. Check if user has "Double Role" capabilities
+    const canSwitch = (role === 'admin' || role === 'secretary') && user?.isTechnician;
+
+    // 2. Handle The Switch
+    const toggleView = () => {
+        if (viewRole === 'worker') {
+            setViewRole(role); // Go back to Main Role (Admin/Secretary)
+        } else {
+            setViewRole('worker'); // Go to Technician Mode
+        }
+    };
+
+    // 3. Render the correct Dashboard based on VIEW ROLE
+    let DashboardComponent;
+    switch (viewRole) {
         case 'admin':
-            return <AdminDashboard user={user} />;
+            DashboardComponent = <AdminDashboard user={user} />;
+            break;
         case 'secretary':
-            return <SecretaryDashboard user={user} />;
+            DashboardComponent = <SecretaryDashboard user={user} />;
+            break;
         case 'worker':
-            return <WorkerDashboard user={user} />;
+            // Pass 'true' prop if they are an admin viewing as worker (optional)
+            DashboardComponent = <WorkerDashboard user={user} isViewMode={true} />;
+            break;
         default:
-            return (
+            DashboardComponent = (
                 <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                    <div className="text-center">
-                        <h2 className="text-2xl font-bold text-gray-700">Unknown Role</h2>
-                        <p className="text-gray-500">Your account does not have a valid role assigned.</p>
-                    </div>
+                    <p className="text-gray-500">Unknown Role</p>
                 </div>
             );
     }
-};
 
+    return (
+        <div className="relative">
+            {/* The Active Dashboard */}
+            {DashboardComponent}
+
+            {/* 🔥 FLOATING SWITCHER BUTTON (Only for Dual-Role Users) */}
+            {canSwitch && (
+                <div className="fixed bottom-6 right-6 z-50 animate-bounce-in">
+                    <button 
+                        onClick={toggleView}
+                        className={`flex items-center gap-3 px-6 py-4 rounded-full shadow-2xl font-bold text-white transition-all transform hover:scale-105 ${
+                            viewRole === 'worker' 
+                            ? 'bg-purple-900 border-4 border-purple-200' // Button to go back to Admin
+                            : 'bg-blue-600 border-4 border-blue-200'     // Button to go to Worker
+                        }`}
+                    >
+                        {viewRole === 'worker' ? (
+                            <>
+                                <ShieldCheck size={24} />
+                                <span>Back to Admin</span>
+                            </>
+                        ) : (
+                            <>
+                                <Wrench size={24} />
+                                <span>Technician Mode</span>
+                            </>
+                        )}
+                        <RefreshCw size={18} className="opacity-50"/>
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default DashboardHandler;

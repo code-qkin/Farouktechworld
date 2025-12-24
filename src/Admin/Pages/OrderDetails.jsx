@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-    ArrowLeft, Printer, User, Calendar, DollarSign, AlertTriangle, 
-    CheckCircle, ShoppingBag, Wrench, Trash2, LogOut, PlusCircle, 
-    X, RotateCcw, Ban, Clock, CheckSquare, RefreshCw, ArrowRight
+    ArrowLeft, Printer, DollarSign, 
+    CheckCircle, Wrench, Ban, PlusCircle, 
+    X, RotateCcw, RefreshCw, Lock, Smartphone
 } from 'lucide-react';
 import { 
-    collection, query, where, getDocs, doc, getDoc, 
-    updateDoc, deleteDoc, runTransaction, addDoc, serverTimestamp, Timestamp
+    collection, query, where, getDocs, doc, 
+    updateDoc, runTransaction, addDoc, serverTimestamp, Timestamp, onSnapshot 
 } from 'firebase/firestore'; 
 import { db } from '../../firebaseConfig.js';
 import { useAuth } from '../AdminContext';
@@ -17,6 +17,7 @@ const OrderDetails = () => {
     const { orderId } = useParams(); 
     const id = orderId;
     const navigate = useNavigate();
+    // eslint-disable-next-line no-unused-vars
     const { role } = useAuth();
     
     const [order, setOrder] = useState(null);
@@ -34,43 +35,85 @@ const OrderDetails = () => {
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
     const [promptConfig, setPromptConfig] = useState({ isOpen: false, title: '', message: '', max: 1, action: null });
 
+    // 1. FETCH ORDER DATA (Real-time)
     useEffect(() => {
+        let unsubscribe;
         const fetchData = async () => {
             try {
-                let foundOrder = null;
-                const q = query(collection(db, "Orders"), where("ticketId", "==", id));
-                const snap = await getDocs(q);
-                if (!snap.empty) foundOrder = { id: snap.docs[0].id, ...snap.docs[0].data() };
-                else {
-                    try {
-                        const docSnap = await getDoc(doc(db, "Orders", id));
-                        if (docSnap.exists()) foundOrder = { id: docSnap.id, ...docSnap.data() };
-                    } catch(e) {}
+                let docId = id;
+                if (id.startsWith('FTW')) {
+                    const q = query(collection(db, "Orders"), where("ticketId", "==", id));
+                    const snap = await getDocs(q);
+                    if (!snap.empty) docId = snap.docs[0].id;
                 }
-                if (foundOrder) setOrder(foundOrder);
-                else { navigate('/admin/orders'); return; }
 
-                const wQ = query(collection(db, "Users"), where("role", "==", "worker"));
-                const wSnap = await getDocs(wQ);
-                setWorkers(wSnap.docs.map(doc => doc.data().name).filter(Boolean));
-            } catch (e) { console.error(e); } finally { setLoading(false); }
+                unsubscribe = onSnapshot(doc(db, "Orders", docId), (docSnap) => {
+                    if (docSnap.exists()) {
+                        setOrder({ id: docSnap.id, ...docSnap.data() });
+                    } else {
+                        navigate('/admin/orders');
+                    }
+                    setLoading(false);
+                });
+
+            } catch (e) { console.error(e); setLoading(false); }
         };
         fetchData();
+        return () => unsubscribe && unsubscribe();
     }, [id, navigate]);
 
-    // --- HANDLERS (Smart Void, Assign, Payments) ---
+    // 2. FETCH WORKERS
+    useEffect(() => {
+        const unsubUsers = onSnapshot(collection(db, "Users"), (snapshot) => {
+            const eligible = snapshot.docs
+                .map(doc => {
+                    const u = doc.data();
+                    const safeName = u.name && u.name.trim() !== "" ? u.name : u.email;
+                    return {
+                        value: safeName, 
+                        label: `${safeName} ${u.role !== 'worker' ? `(${u.role})` : ''}`,
+                        isTechnician: u.isTechnician || u.role === 'worker'
+                    };
+                })
+                .filter(u => u.isTechnician)
+                .sort((a, b) => a.label.localeCompare(b.label));
+
+            setWorkers(eligible);
+        });
+        return () => unsubUsers();
+    }, []);
+
+    // --- HANDLERS ---
+    
+    const handleServiceAssign = async (i, s, newWorker) => {
+        setIsUpdating(true);
+        try {
+            const newItems = JSON.parse(JSON.stringify(order.items));
+            newItems[i].services[s].worker = newWorker;
+            // Auto-update status based on assignment
+            if (newWorker === 'Unassigned') {
+                newItems[i].services[s].status = 'Pending';
+            } else if (newItems[i].services[s].status === 'Pending') {
+                newItems[i].services[s].status = 'In Progress';
+            }
+            
+            await updateDoc(doc(db, "Orders", order.id), { items: newItems });
+            setToast({message: `Assigned to ${newWorker}`, type: 'success'});
+        } catch(e) { console.error(e); setToast({message: "Assignment Failed", type: 'error'}); }
+        setIsUpdating(false);
+    };
+
     const handleVoidProductTrigger = (i) => {
         const item = order.items[i];
         if (item.returned) return;
-
         if (item.qty > 1) {
             setPromptConfig({
-                isOpen: true, title: "Partial Return", message: `How many items to return? (Max: ${item.qty})`, max: item.qty,
+                isOpen: true, title: "Partial Return", message: `Return quantity? (Max: ${item.qty})`, max: item.qty,
                 action: (qty) => executeVoidProduct(i, qty)
             });
         } else {
             setConfirmConfig({
-                isOpen: true, title: "Return Product?", message: "Restores stock & updates bill.", confirmText: "Return", confirmColor: "bg-red-600",
+                isOpen: true, title: "Return Product?", message: "Restores stock & updates refund.", confirmText: "Return", confirmColor: "bg-red-600",
                 action: () => executeVoidProduct(i, 1)
             });
         }
@@ -80,51 +123,70 @@ const OrderDetails = () => {
         setConfirmConfig({...confirmConfig, isOpen: false});
         setPromptConfig({...promptConfig, isOpen: false});
         setIsUpdating(true);
-        
         try {
             await runTransaction(db, async (t) => {
                 const ref = doc(db, "Orders", order.id);
                 const data = (await t.get(ref)).data();
                 const newItems = JSON.parse(JSON.stringify(data.items));
                 const item = newItems[i];
-                
                 if(item.returned) throw "Already returned";
                 
-                const invRef = doc(db, "Inventory", item.productId);
-                const invSnap = await t.get(invRef);
-                if(invSnap.exists()) t.update(invRef, { stock: (invSnap.data().stock || 0) + returnQty });
-
-                if (returnQty === item.qty) {
-                    newItems[i].returned = true;
-                } else {
-                    newItems[i].qty -= returnQty;
-                    newItems[i].total = newItems[i].price * newItems[i].qty;
-                    newItems.push({ ...item, qty: returnQty, total: item.price * returnQty, returned: true });
+                // Restock Inventory if product ID exists
+                if (item.productId) {
+                    const invRef = doc(db, "Inventory", item.productId);
+                    const invSnap = await t.get(invRef);
+                    if(invSnap.exists()) t.update(invRef, { stock: (invSnap.data().stock || 0) + returnQty });
                 }
 
+                // Mark item returned
+                if (returnQty === item.qty) { newItems[i].returned = true; } 
+                else { 
+                    newItems[i].qty -= returnQty; 
+                    newItems[i].total = newItems[i].price * newItems[i].qty; 
+                    newItems.push({ ...item, qty: returnQty, total: item.price * returnQty, returned: true }); 
+                }
+                
+                // Recalculate Finances
                 const deduction = item.price * returnQty;
                 const newTotalCost = (data.totalCost || 0) - deduction;
                 let newAmountPaid = data.amountPaid || 0;
                 let newRefundedAmount = data.refundedAmount || 0;
                 
-                if (newAmountPaid > newTotalCost) {
-                    const refundDue = newAmountPaid - newTotalCost;
-                    newAmountPaid = newTotalCost;
-                    newRefundedAmount += refundDue;
+                // If they paid more than the new total, the difference is a refund
+                if (newAmountPaid > newTotalCost) { 
+                    const refundDue = newAmountPaid - newTotalCost; 
+                    newAmountPaid = newTotalCost; 
+                    newRefundedAmount += refundDue; 
                 }
                 const newBalance = newTotalCost - newAmountPaid;
-
-                t.update(ref, { items: newItems, totalCost: newTotalCost, amountPaid: newAmountPaid, refundedAmount: newRefundedAmount, balance: newBalance });
-                setOrder(prev => ({ ...prev, items: newItems, totalCost: newTotalCost, amountPaid: newAmountPaid, refundedAmount: newRefundedAmount, balance: newBalance }));
+                
+                // 🔥 SAVE TO DB (Ensures Dashboard updates)
+                t.update(ref, { 
+                    items: newItems, 
+                    totalCost: newTotalCost, 
+                    amountPaid: newAmountPaid, 
+                    refundedAmount: newRefundedAmount, 
+                    balance: newBalance 
+                });
+                
+                setOrder(prev => ({ 
+                    ...prev, 
+                    items: newItems, 
+                    totalCost: newTotalCost, 
+                    amountPaid: newAmountPaid, 
+                    refundedAmount: newRefundedAmount, 
+                    balance: newBalance 
+                }));
             });
-            setToast({message: "Item Returned", type: 'success'});
+            setToast({message: "Item Returned & Refund Recorded", type: 'success'});
         } catch(e) { setToast({message: "Failed", type: 'error'}); }
         setIsUpdating(false);
     };
 
+    // VOID SERVICE LOGIC
     const handleVoidService = async (i, s) => {
         setConfirmConfig({
-            isOpen: true, title: "Void Service?", message: "Removes cost from bill.", confirmText: "Void", confirmColor: "bg-red-600",
+            isOpen: true, title: "Void Service?", message: "This removes the service and its cost from the ticket.", confirmText: "Void Service", confirmColor: "bg-red-600",
             action: async () => {
                 setIsUpdating(true);
                 try {
@@ -132,14 +194,27 @@ const OrderDetails = () => {
                         const ref = doc(db, "Orders", order.id);
                         const data = (await t.get(ref)).data();
                         const newItems = JSON.parse(JSON.stringify(data.items));
+                        
+                        // 1. Mark specific service as Void
                         const svc = newItems[i].services[s];
-                        svc.status = 'Void'; svc.worker = 'Unassigned';
-                        
-                        const deduction = Number(svc.cost || 0);
-                        const newTotalCost = (data.totalCost || 0) - deduction;
-                        
+                        if (svc.status === 'Void') throw "Service already voided"; 
+                        svc.status = 'Void'; 
+                        svc.worker = 'Unassigned';
+
+                        // 2. Recalculate Item Total
+                        if (newItems[i].type === 'repair') {
+                             newItems[i].total = newItems[i].services.reduce((acc, curr) => {
+                                 return acc + (curr.status !== 'Void' ? Number(curr.cost || 0) : 0);
+                             }, 0);
+                        }
+
+                        // 3. Recalculate Order Global Total
+                        const newTotalCost = newItems.reduce((acc, item) => acc + (Number(item.total) || 0), 0);
+
+                        // 4. Adjust Payments
                         let newAmountPaid = data.amountPaid || 0;
                         let newRefundedAmount = data.refundedAmount || 0;
+                        
                         if (newAmountPaid > newTotalCost) {
                             const refundDue = newAmountPaid - newTotalCost;
                             newAmountPaid = newTotalCost;
@@ -147,62 +222,32 @@ const OrderDetails = () => {
                         }
                         const newBalance = newTotalCost - newAmountPaid;
                         
-                        t.update(ref, { items: newItems, totalCost: newTotalCost, amountPaid: newAmountPaid, refundedAmount: newRefundedAmount, balance: newBalance });
-                        setOrder(prev => ({ ...prev, items: newItems, totalCost: newTotalCost, amountPaid: newAmountPaid, refundedAmount: newRefundedAmount, balance: newBalance }));
+                        t.update(ref, { 
+                            items: newItems, 
+                            totalCost: newTotalCost, 
+                            amountPaid: newAmountPaid, 
+                            refundedAmount: newRefundedAmount, 
+                            balance: newBalance 
+                        });
+                        
+                        setOrder(prev => ({ 
+                            ...prev, 
+                            items: newItems, 
+                            totalCost: newTotalCost, 
+                            amountPaid: newAmountPaid, 
+                            refundedAmount: newRefundedAmount, 
+                            balance: newBalance 
+                        }));
                     });
                     setToast({message: "Service Voided", type: 'success'});
-                } catch(e) { setToast({message: "Failed", type: 'error'}); }
+                } catch(e) { 
+                    console.error(e);
+                    setToast({message: "Failed to void service", type: 'error'}); 
+                }
                 setIsUpdating(false);
                 setConfirmConfig({...confirmConfig, isOpen: false});
             }
         });
-    };
-
-    const handleServiceAssign = async (i, s, newWorker) => {
-        setIsUpdating(true);
-        try {
-            const newItems = JSON.parse(JSON.stringify(order.items));
-            newItems[i].services[s].worker = newWorker;
-            newItems[i].services[s].status = newWorker === 'Unassigned' ? 'Pending' : 'In Progress';
-            await updateDoc(doc(db, "Orders", order.id), { items: newItems });
-            setOrder(prev => ({ ...prev, items: newItems }));
-            setToast({message: "Assigned", type: 'success'});
-        } catch(e) {}
-        setIsUpdating(false);
-    };
-    
-    const handleWarrantyReturn = async (item) => {
-        setIsUpdating(true);
-        const newId = `FTW-RMA-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(1000 + Math.random() * 9000)}`;
-        const warrantyItem = { ...item, services: item.services.map(s => ({ ...s, status: 'Pending', worker: 'Unassigned', cost: 0 })), total: 0, isWarranty: true };
-        await addDoc(collection(db, "Orders"), {
-            ticketId: newId, originalTicketId: order.ticketId, customer: order.customer, orderType: 'warranty',
-            items: [warrantyItem], totalCost: 0, amountPaid: 0, balance: 0, paymentStatus: 'Paid', paid: true, status: 'Pending',
-            createdAt: serverTimestamp(), warrantyExpiry: Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
-        });
-        alert(`Warranty Created: ${newId}`);
-        navigate('/admin/orders');
-        setIsUpdating(false);
-    };
-
-    const handleVoidOrder = async () => {
-         setIsUpdating(true);
-         try {
-            await runTransaction(db, async (t) => {
-                const ref = doc(db, "Orders", order.id);
-                const data = (await t.get(ref)).data();
-                const updates = [];
-                data.items?.forEach(item => {
-                    if(item.type==='product' && !item.returned) updates.push({ref: doc(db,"Inventory",item.productId), qty:item.qty});
-                    if(item.type==='part_usage') updates.push({ref: doc(db,"Inventory",item.partId), qty:1});
-                });
-                const snaps = await Promise.all(updates.map(u => t.get(u.ref)));
-                snaps.forEach((snap, idx) => { if(snap.exists()) t.update(updates[idx].ref, { stock: (snap.data().stock || 0) + updates[idx].qty }); });
-                t.update(ref, { status: 'Void', balance: 0, paymentStatus: 'Voided' });
-            });
-            navigate('/admin/orders');
-         } catch(e) { setToast({message: "Void Failed", type: 'error'}); }
-         setIsUpdating(false);
     };
 
     const handleAddPayment = async () => {
@@ -220,7 +265,30 @@ const OrderDetails = () => {
         setIsUpdating(false);
         setShowPaymentModal(false);
     };
-    
+
+    const handleVoidOrder = async () => {
+         setIsUpdating(true);
+         try {
+            await updateDoc(doc(db, "Orders", order.id), { status: 'Void', paymentStatus: 'Voided', balance: 0 });
+            navigate('/admin/orders');
+         } catch(e) { setToast({message: "Void Failed", type: 'error'}); }
+         setIsUpdating(false);
+    };
+
+    const handleWarrantyReturn = async (item) => {
+        setIsUpdating(true);
+        const newId = `FTW-RMA-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(1000 + Math.random() * 9000)}`;
+        const warrantyItem = { ...item, services: item.services.map(s => ({ ...s, status: 'Pending', worker: 'Unassigned', cost: 0 })), total: 0, isWarranty: true };
+        await addDoc(collection(db, "Orders"), {
+            ticketId: newId, originalTicketId: order.ticketId, customer: order.customer, orderType: 'warranty',
+            items: [warrantyItem], totalCost: 0, amountPaid: 0, balance: 0, paymentStatus: 'Paid', paid: true, status: 'Pending',
+            createdAt: serverTimestamp(), warrantyExpiry: Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
+        });
+        alert(`Warranty Created: ${newId}`);
+        navigate('/admin/orders');
+        setIsUpdating(false);
+    };
+
     const handleProcessRefund = async () => {
         setIsUpdating(true);
         await updateDoc(doc(db, "Orders", order.id), { amountPaid: 0, refundedAmount: order.amountPaid, paymentStatus: 'Refunded', balance: 0 });
@@ -252,29 +320,10 @@ const OrderDetails = () => {
     };
 
     const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
-    const formatDate = (date) => {
-        if (!date) return '';
-        return new Date(date).toLocaleDateString('en-GB', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
-        });
-    };
-    
-    // Helper to categorize Order
+    const formatDate = (date) => (!date ? '' : new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }));
     const isReturn = order?.orderType === 'return';
-    const isWarranty = order?.orderType === 'warranty';
-    const isSale = order?.orderType === 'store_sale';
 
-    if (loading) return (
-        <div className="min-h-screen flex items-center justify-center bg-purple-50">
-            <div className="flex flex-col items-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-200 border-t-purple-700 mb-4"></div>
-                <p className="text-purple-800 font-semibold animate-pulse">Loading...</p>
-            </div>
-        </div>
-    );
-    
+    if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-4 border-purple-900"></div></div>;
     if (!order) return null;
 
     return (
@@ -284,7 +333,7 @@ const OrderDetails = () => {
              <PromptModal isOpen={promptConfig.isOpen} title={promptConfig.title} message={promptConfig.message} max={promptConfig.max} onCancel={() => setPromptConfig({...promptConfig, isOpen: false})} onConfirm={promptConfig.action} />
 
             {/* Header */}
-            <div className="max-w-6xl mx-auto mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="max-w-7xl mx-auto mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <button onClick={() => navigate(-1)} className="flex items-center text-gray-600 hover:text-purple-700 transition bg-white px-4 py-2 rounded-lg shadow-sm border"><ArrowLeft size={20} className="mr-2"/> Back</button>
                 <div className="flex flex-wrap gap-2 no-print">
                     {order.status !== 'Void' && <button onClick={() => setConfirmConfig({isOpen:true, title:"Void Order?", message:"This cancels everything.", confirmText:"Void", confirmColor:"bg-red-600", action: handleVoidOrder})} disabled={isUpdating} className="flex items-center gap-2 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 text-sm font-bold"><Ban size={16}/> Void</button>}
@@ -292,84 +341,101 @@ const OrderDetails = () => {
                 </div>
             </div>
 
-            {/* Status Banner */}
-            <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200 mb-8">
-                <div className={`${isReturn ? 'bg-blue-700' : isWarranty ? 'bg-orange-600' : isSale ? 'bg-green-700' : 'bg-purple-900'} text-white p-6`}>
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                         <div>
-                            <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2 flex-wrap">
-                                {isReturn ? 'PRODUCT RETURN' : isWarranty ? 'WARRANTY CLAIM' : isSale ? 'STORE SALE' : 'REPAIR JOB'} 
-                                <span className="opacity-80 text-lg">#{order.ticketId}</span>
-                            </h1>
-                         </div>
-                         <div className="bg-white/20 px-3 py-1 rounded-lg border border-white/30 backdrop-blur-sm">
-                             <select value={order.status} onChange={handleStatusChange} disabled={isUpdating} className="bg-transparent text-white font-bold outline-none cursor-pointer text-sm sm:text-base">
-                                 <option className="text-black">Pending</option>
-                                 <option className="text-black">In Progress</option>
-                                 <option className="text-black">Ready for Pickup</option>
-                                 <option className="text-black">Completed</option>
-                                 <option className="text-black">Collected</option>
-                             </select>
-                         </div>
-                    </div>
-                </div>
-
-                {/* Main Grid */}
-                <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+                
+                {/* LEFT COLUMN: Order Info & Items */}
+                <div className="lg:col-span-2 space-y-6">
                     
-                    {/* Items Table */}
-                    <div className="lg:col-span-2 space-y-8">
-                        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-                            <table className="w-full text-sm min-w-[600px] sm:min-w-full">
+                    {/* Main Card */}
+                    <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
+                        <div className="bg-purple-900 p-6 text-white flex justify-between items-center">
+                            <div>
+                                <h1 className="text-2xl font-bold flex items-center gap-2">Order #{order.ticketId}</h1>
+                                <p className="text-purple-100 text-sm opacity-90">{order.customer?.name} • {order.customer?.phone}</p>
+                            </div>
+                            <div className="bg-white/20 px-3 py-1 rounded-lg backdrop-blur-sm">
+                                <select value={order.status} onChange={handleStatusChange} disabled={isUpdating} className="bg-transparent text-white font-bold outline-none cursor-pointer">
+                                    <option className="text-black">Pending</option>
+                                    <option className="text-black">In Progress</option>
+                                    <option className="text-black">Ready for Pickup</option>
+                                    <option className="text-black">Completed</option>
+                                    <option className="text-black">Collected</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Items Table */}
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
                                 <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left">Item / Service</th>
-                                        <th className="px-4 py-3 text-right">Price</th>
-                                    </tr>
+                                    <tr><th className="px-6 py-3 text-left">Item / Service</th><th className="px-6 py-3 text-right">Cost</th></tr>
                                 </thead>
-                                <tbody>
+                                <tbody className="divide-y divide-gray-100">
                                     {order.items.map((item, i) => {
                                         if (item.type === 'part_usage') return null;
                                         return (
-                                            <tr key={i} className="border-b last:border-0 hover:bg-gray-50 transition">
-                                                <td className="px-4 py-3">
-                                                    <div className="font-bold text-gray-900 text-base mb-1 flex items-center gap-2 flex-wrap">
-                                                        {item.name || item.deviceModel} 
-                                                        {item.returned && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded border border-red-200">Returned</span>}
-                                                        
-                                                        {/* Action Buttons */}
-                                                        {item.type === 'product' && !item.returned && !isReturn && order.status !== 'Void' && (
-                                                            <button onClick={() => handleVoidProductTrigger(i)} disabled={isUpdating} className="text-red-500 hover:bg-red-50 p-1 rounded ml-auto" title="Return Product"><RotateCcw size={16}/></button>
-                                                        )}
-                                                        {item.type === 'repair' && !isReturn && !isWarranty && !item.returned && (order.status === 'Completed' || order.status === 'Collected') && (
-                                                            <button onClick={() => handleWarrantyReturn(item)} className="bg-orange-100 text-orange-700 text-[10px] px-2 py-1 rounded ml-auto flex items-center gap-1"><RefreshCw size={12}/> Warranty</button>
+                                            <tr key={i} className="hover:bg-gray-50">
+                                                <td className="px-6 py-4">
+                                                    <div>
+                                                        <div className="font-bold text-gray-900 text-base flex items-center gap-2">
+                                                            {item.name || item.deviceModel}
+                                                            {item.returned && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded border border-red-200">Returned</span>}
+                                                            
+                                                            {/* Only show Return for PRODUCTS */}
+                                                            {item.type === 'product' && !item.returned && !isReturn && order.status !== 'Void' && (
+                                                                <button onClick={() => handleVoidProductTrigger(i)} disabled={isUpdating} className="text-red-500 hover:bg-red-50 p-1 rounded ml-auto" title="Return Product"><RotateCcw size={16}/></button>
+                                                            )}
+                                                            {item.type === 'repair' && !isReturn && !item.returned && (order.status === 'Completed' || order.status === 'Collected') && (
+                                                                <button onClick={() => handleWarrantyReturn(item)} className="bg-orange-100 text-orange-700 text-[10px] px-2 py-1 rounded ml-auto flex items-center gap-1"><RefreshCw size={12}/> Warranty</button>
+                                                            )}
+                                                        </div>
+
+                                                        {/* SHOW PASSCODE & IMEI FOR REPAIRS */}
+                                                        {item.type === 'repair' && (
+                                                            <div className="flex gap-4 text-xs mt-1 text-gray-500">
+                                                                {item.imei && <span className="flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded"><Smartphone size={10}/> IMEI: {item.imei}</span>}
+                                                                {item.passcode && <span className="flex items-center gap-1 bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded border border-yellow-100 font-bold"><Lock size={10}/> Pass: {item.passcode}</span>}
+                                                            </div>
                                                         )}
                                                     </div>
                                                     
-                                                    {/* Repair Services */}
-                                                    {item.type === 'repair' && <div className="mt-2 space-y-2">
+                                                    {/* Services List */}
+                                                    {item.type === 'repair' && <div className="mt-3 space-y-2">
                                                         {item.services?.map((svc, sIdx) => (
-                                                            <div key={sIdx} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-50 p-2 rounded border gap-2">
-                                                                <span className="font-medium text-gray-700">{svc.service}</span>
-                                                                <div className="flex items-center gap-2 w-full sm:w-auto justify-between">
+                                                            <div key={sIdx} className="p-3 rounded-lg border flex flex-col sm:flex-row justify-between gap-3 bg-gray-50 border-gray-100">
+                                                                <div className="flex items-center gap-2">
+                                                                    <Wrench size={16} className="text-gray-400"/>
+                                                                    <span className="font-medium text-gray-700">{svc.service}</span>
+                                                                    {/* SERVICE STATUS BADGE */}
+                                                                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
+                                                                        svc.status === 'Completed' ? 'bg-green-100 text-green-700' : 
+                                                                        svc.status === 'In Progress' ? 'bg-purple-100 text-purple-700' :
+                                                                        svc.status === 'Void' ? 'bg-red-100 text-red-700 line-through' :
+                                                                        'bg-yellow-100 text-yellow-700'
+                                                                    }`}>
+                                                                        {svc.status}
+                                                                    </span>
+                                                                </div>
+                                                                
+                                                                <div className="flex items-center gap-2">
                                                                     {svc.status !== 'Void' && order.status !== 'Void' && <button onClick={() => handleVoidService(i, sIdx)} disabled={isUpdating} className="text-gray-400 hover:text-red-500"><Ban size={14}/></button>}
-                                                                    <div className={`flex items-center gap-2 bg-white px-2 py-1 rounded border border-gray-200 ${svc.status === 'Completed' || svc.status === 'Void' ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                                                        <User size={12} className="text-gray-400"/>
-                                                                        <select className="bg-transparent text-xs font-bold text-blue-600 outline-none cursor-pointer w-full" value={svc.worker || "Unassigned"} onChange={(e) => handleServiceAssign(i, sIdx, e.target.value)} disabled={order.status === 'Void' || svc.status === 'Completed' || svc.status === 'Void'}>
-                                                                            <option value="Unassigned">Unassigned</option>
-                                                                            {workers.map(w => <option key={w} value={w}>{w}</option>)}
-                                                                        </select>
-                                                                    </div>
+                                                                    
+                                                                    {/* Assign Worker */}
+                                                                    <select 
+                                                                        className="bg-white border text-xs p-1.5 rounded font-bold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500" 
+                                                                        value={svc.worker || "Unassigned"} 
+                                                                        onChange={(e) => handleServiceAssign(i, sIdx, e.target.value)}
+                                                                        disabled={order.status === 'Void' || svc.status === 'Void'}
+                                                                    >
+                                                                        <option value="Unassigned">Unassigned</option>
+                                                                        {workers.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
+                                                                    </select>
                                                                 </div>
                                                             </div>
                                                         ))}
                                                     </div>}
                                                 </td>
-                                                <td className="px-4 py-3 text-right font-bold align-top text-gray-800">
-                                                    {item.services?.some(s => s.status === 'Void') || item.returned 
-                                                        ? <span className="text-red-500 line-through">{formatCurrency(item.total)}</span> 
-                                                        : formatCurrency(item.total)}
-                                                </td>
+                                                <td className="px-6 py-4 text-right font-bold text-gray-800 align-top">{formatCurrency(item.total || item.cost)}</td>
                                             </tr>
                                         )
                                     })}
@@ -377,14 +443,22 @@ const OrderDetails = () => {
                             </table>
                         </div>
                     </div>
+                </div>
 
-                    {/* Billing Card */}
-                    <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 shadow-sm h-fit">
-                        <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2"><DollarSign size={18}/> Payment Details</h3>
+                {/* RIGHT COLUMN: Payment Card */}
+                <div className="space-y-6">
+                    <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 shadow-sm h-fit">
+                        <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2"><DollarSign size={18}/> Payment Summary</h3>
                         <div className="space-y-3 text-sm mb-6">
-                            <div className="flex justify-between"><span>Total Cost</span><span className="font-bold text-gray-900">{formatCurrency(order.totalCost)}</span></div>
+                            <div className="flex justify-between"><span>Total Cost</span><span className="font-bold">{formatCurrency(order.totalCost)}</span></div>
                             <div className="flex justify-between text-green-600"><span>Amount Paid</span><span className="font-bold">-{formatCurrency(order.amountPaid || 0)}</span></div>
-                            {order.refundedAmount > 0 && <div className="flex justify-between text-red-600"><span>Refunded</span><span className="font-bold">+{formatCurrency(order.refundedAmount)}</span></div>}
+                            
+                            {/* 🔥 SHOW REFUND AMOUNT */}
+                            {order.refundedAmount > 0 && (
+                                <div className="flex justify-between text-red-600 bg-red-50 p-2 rounded border border-red-100">
+                                    <span>Refunded</span><span className="font-bold">+{formatCurrency(order.refundedAmount)}</span>
+                                </div>
+                            )}
                         </div>
                         
                         <div className="flex justify-between items-center border-t border-gray-200 pt-4 mb-6">

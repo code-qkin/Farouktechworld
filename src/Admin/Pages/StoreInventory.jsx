@@ -1,241 +1,380 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Package, Plus, Search, Edit, Trash2, Smartphone, RefreshCw, Layers, ShoppingBag, ArrowLeft, Box, ArrowUpCircle, Save, X } from 'lucide-react';
-import { Navigate } from 'react-router-dom';
-import { useNavigate } from 'react-router-dom';
+import { 
+    Package, Plus, Search, Edit2, Trash2, Smartphone, 
+    ArrowLeft, ArrowUpCircle, Save, X, 
+    AlertTriangle, DollarSign, CheckCircle, ClipboardEdit, Loader2,
+    Download, Filter, ChevronDown
+} from 'lucide-react';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AdminContext';
 import { db } from '../../firebaseConfig'; 
-import { collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, increment } from 'firebase/firestore';
+import { 
+    collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, increment, serverTimestamp 
+} from 'firebase/firestore';
+import { Toast, ConfirmModal } from '../Components/Feedback';
+import * as XLSX from 'xlsx';
+
+const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
+
+// --- HELPER: Crash-Proof Number Parsers ---
+const safeParseFloat = (val) => {
+    if (!val) return 0;
+    // Remove everything that isn't a number or a dot (e.g. removes commas, ₦, spaces)
+    const clean = String(val).replace(/[^0-9.]/g, ''); 
+    const num = parseFloat(clean);
+    return isNaN(num) ? 0 : num;
+};
+
+const safeParseInt = (val) => {
+    if (!val) return 0;
+    const clean = String(val).replace(/[^0-9]/g, '');
+    const num = parseInt(clean, 10);
+    return isNaN(num) ? 0 : num;
+};
+
+// --- SUB-COMPONENT: Stock Health Bar ---
+const StockHealth = ({ stock }) => {
+    let color = 'bg-green-500';
+    let width = '100%';
+    let label = 'In Stock';
+
+    if (stock === 0) {
+        color = 'bg-red-500';
+        width = '5%';
+        label = 'Out of Stock';
+    } else if (stock < 5) {
+        color = 'bg-orange-500';
+        width = '30%';
+        label = 'Low Stock';
+    } else if (stock < 20) {
+        color = 'bg-blue-500';
+        width = '60%';
+    }
+
+    return (
+        <div className="w-full max-w-[120px]">
+            <div className="flex justify-between text-[10px] uppercase font-bold text-gray-400 mb-1">
+                <span>{stock} Units</span>
+                <span className={stock === 0 ? 'text-red-500' : stock < 5 ? 'text-orange-500' : 'text-green-600'}>{label}</span>
+            </div>
+            <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                <div className={`h-full ${color} transition-all duration-500`} style={{ width }}></div>
+            </div>
+        </div>
+    );
+};
 
 const StoreInventory = () => {
     const { role } = useAuth(); 
     const navigate = useNavigate();
     
-    if (role !== 'admin') {
-        return <Navigate to="/admin/dashboard" replace />;
-    }
-
-    // --- State ---
-    const [activeTab, setActiveTab] = useState('inventory'); 
+    // State
+    const [viewMode, setViewMode] = useState('list'); // 'list' or 'create'
     const [products, setProducts] = useState([]); 
     const [loading, setLoading] = useState(true);
+    const [actionLoading, setActionLoading] = useState(false);
+    
     const [searchTerm, setSearchTerm] = useState('');
     const [filterCategory, setFilterCategory] = useState('All');
+    const [filterStock, setFilterStock] = useState('All'); 
 
-    // Restock Modal State
+    // Modals
     const [restockItem, setRestockItem] = useState(null); 
     const [restockQty, setRestockQty] = useState('');
+    const [editingItem, setEditingItem] = useState(null); 
 
-    // New Product Form State
-    const [newProduct, setNewProduct] = useState({
-        name: '', category: '', type: '', model: '', stock: ''
-    });
+    // Forms
+    const [newProduct, setNewProduct] = useState({ name: '', category: '', type: '', model: '', price: '', stock: 0 });
+
+    // Feedback
+    const [toast, setToast] = useState({ message: '', type: '' });
+    const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
     // 1. LIVE FETCH
     useEffect(() => {
         const q = query(collection(db, "Inventory"), orderBy("category"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const inventoryList = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            const inventoryList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setProducts(inventoryList);
             setLoading(false);
         }, (error) => {
-            console.error("Error fetching inventory:", error);
+            console.error("Fetch Error:", error);
+            setToast({ message: "Connection Error. Check Rules.", type: "error" });
             setLoading(false);
         });
         return () => unsubscribe();
     }, []);
 
-    // 2. 🔥 DYNAMIC CATEGORIES (The Magic Part)
-    // This automatically calculates the list of categories from your actual data
-    const dynamicCategories = useMemo(() => {
-        // Get all categories from products, remove nulls/undefined
-        const allCats = products.map(p => p.category).filter(Boolean);
-        // Remove duplicates using Set and sort A-Z
-        return [...new Set(allCats)].sort();
+    // 2. METRICS
+    const dynamicCategories = useMemo(() => [...new Set(products.map(p => p.category).filter(Boolean))].sort(), [products]);
+    
+    const stats = useMemo(() => {
+        const totalItems = products.length;
+        const lowStock = products.filter(p => p.stock > 0 && p.stock < 5).length;
+        const outOfStock = products.filter(p => p.stock === 0).length;
+        const totalValue = products.reduce((sum, p) => sum + (Number(p.price || 0) * Number(p.stock || 0)), 0);
+        return { totalItems, lowStock, outOfStock, totalValue };
     }, [products]);
 
-    // 3. CREATE PRODUCT
+    // 3. ACTIONS
+    const handleExport = () => {
+        const data = products.map(p => ({
+            "Product": p.name, "Category": p.category, "Model": p.model,
+            "Price": p.price, "Stock": p.stock, "Value": p.price * p.stock
+        }));
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Inventory");
+        XLSX.writeFile(wb, "FTW_Inventory.xlsx");
+    };
+
     const handleCreateProduct = async (e) => {
         e.preventDefault();
-        if (!newProduct.name || !newProduct.category) return;
-
+        if (!newProduct.name || !newProduct.category) return setToast({ message: "Details required", type: 'error' });
+        
+        setActionLoading(true);
         try {
+            // 🔥 CRITICAL FIX: Safe Parsing prevents "NaN" errors
+            const safePrice = safeParseFloat(newProduct.price);
+            const safeStock = safeParseInt(newProduct.stock);
+
             await addDoc(collection(db, "Inventory"), {
-                name: newProduct.name,
-                category: newProduct.category, // Saves whatever you typed or selected
-                type: newProduct.type,
-                model: newProduct.model,
-                stock: 0, 
-                lastUpdated: new Date()
+                name: newProduct.name.trim(),
+                category: newProduct.category.trim(),
+                model: newProduct.model ? newProduct.model.trim() : "",
+                type: newProduct.type ? newProduct.type.trim() : "",
+                price: safePrice,
+                stock: safeStock,
+                lastUpdated: serverTimestamp()
             });
 
-            setNewProduct({ name: '', category: '', type: '', model: '', stock: '' });
-            alert(`Success! Added new product to "${newProduct.category}"`);
-            setActiveTab('inventory'); 
-
-        } catch (error) {
-            console.error("Error:", error);
-            alert("Failed to create product.");
+            setNewProduct({ name: '', category: '', type: '', model: '', price: '', stock: 0 });
+            setToast({ message: "Product Added Successfully", type: "success" });
+            setViewMode('list');
+        } catch (e) { 
+            console.error("ADD ERROR:", e);
+            let msg = "Failed to add product.";
+            if(e.code === 'permission-denied') msg = "Permission Denied. Check Rules.";
+            setToast({ message: msg, type: "error" }); 
         }
+        setActionLoading(false);
     };
 
-    // 4. RESTOCK
-    const handleRestock = async (e) => {
+    const handleUpdateProduct = async (e) => {
         e.preventDefault();
-        if (!restockItem || !restockQty) return;
-
+        if (!editingItem) return;
+        setActionLoading(true);
         try {
-            const itemRef = doc(db, "Inventory", restockItem.id);
-            await updateDoc(itemRef, { stock: increment(parseInt(restockQty)) });
-            setRestockItem(null);
-            setRestockQty('');
-        } catch (error) {
-            console.error("Restock failed:", error);
-            alert("Failed to update stock.");
-        }
+            await updateDoc(doc(db, "Inventory", editingItem.id), {
+                name: editingItem.name,
+                category: editingItem.category,
+                model: editingItem.model,
+                price: safeParseFloat(editingItem.price),
+                stock: safeParseInt(editingItem.stock),
+                lastUpdated: serverTimestamp()
+            });
+            setToast({ message: "Saved Changes", type: "success" });
+            setEditingItem(null);
+        } catch (e) { setToast({ message: "Update Failed", type: "error" }); }
+        setActionLoading(false);
     };
 
-    const handleDeleteProduct = async (id) => {
-        if (!window.confirm("Delete this product definition permanently?")) return;
-        try { await deleteDoc(doc(db, "Inventory", id)); } catch (e) { console.error(e); }
+    const handleRestock = async () => {
+        if (!restockItem || !restockQty) return;
+        setActionLoading(true);
+        try {
+            const qty = safeParseInt(restockQty);
+            if(qty > 0) {
+                await updateDoc(doc(db, "Inventory", restockItem.id), { stock: increment(qty) });
+                setToast({ message: "Stock Added", type: "success" });
+                setRestockItem(null); setRestockQty('');
+            }
+        } catch (e) { setToast({ message: "Failed", type: "error" }); }
+        setActionLoading(false);
     };
 
+    const handleDelete = (item) => {
+        setConfirmConfig({
+            isOpen: true, title: "Delete Item?", message: `Permanently delete "${item.name}"?`, confirmText: "Delete", confirmColor: "bg-red-600",
+            action: async () => {
+                try {
+                    await deleteDoc(doc(db, "Inventory", item.id));
+                    setToast({ message: "Deleted.", type: "success" });
+                } catch(e) {
+                    setToast({message: "Delete Failed", type: "error"});
+                }
+                setConfirmConfig({ ...confirmConfig, isOpen: false });
+            }
+        });
+    };
+
+    // Filter Logic
     const filteredProducts = products.filter(product => {
         const term = searchTerm.toLowerCase();
-        const matchesSearch = product.name.toLowerCase().includes(term) || product.model.toLowerCase().includes(term);
+        const matchesSearch = product.name.toLowerCase().includes(term) || product.model?.toLowerCase().includes(term);
         const matchesCategory = filterCategory === 'All' || product.category === filterCategory;
-        return matchesSearch && matchesCategory;
+        const matchesStock = filterStock === 'All' || (filterStock === 'Low' && product.stock < 5 && product.stock > 0) || (filterStock === 'Out' && product.stock === 0);
+        return matchesSearch && matchesCategory && matchesStock;
     });
 
-    return (
-        <div className="space-y-6 p-10 relative">
-            
-            {/* Header & Tabs */}
-            <div className="flex flex-col gap-4">
-                <div className="flex items-center gap-4">
-                <button onClick={() => navigate('/admin/dashboard')} className="bg-white p-2 rounded-full shadow-sm border border-gray-200 hover:bg-gray-50 text-gray-600"><ArrowLeft size={24}/></button>
-                    <h1 className="text-3xl font-extrabold text-purple-900 flex items-center gap-2">
-                        <Package className="w-8 h-8 text-indigo-600"/> Store Management
-                    </h1>
-                </div>
+    if (role !== 'admin') return <Navigate to="/admin/dashboard" replace />;
 
-                <div className="flex space-x-1 bg-gray-100 p-1 rounded-xl w-fit">
-                    <button onClick={() => setActiveTab('inventory')} className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'inventory' ? 'bg-white text-purple-900 shadow-md' : 'text-gray-500'}`}>
-                        <Layers size={18} /> Inventory List
-                    </button>
-                    <button onClick={() => setActiveTab('create')} className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'create' ? 'bg-white text-purple-900 shadow-md' : 'text-gray-500'}`}>
-                        <Plus size={18} /> Define New Product
+    return (
+        <div className="min-h-screen bg-gray-50 p-6 sm:p-10 font-sans text-slate-900">
+            <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: '' })} />
+            <ConfirmModal isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmText={confirmConfig.confirmText} confirmColor={confirmConfig.confirmColor} onCancel={() => setConfirmConfig({...confirmConfig, isOpen: false})} onConfirm={confirmConfig.action} />
+
+            {/* --- HEADER --- */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                <div className="flex items-center gap-4">
+                    <button onClick={() => navigate('/admin/dashboard')} className="bg-white p-2.5 rounded-xl shadow-sm border border-gray-200 hover:bg-gray-100 text-slate-600 transition"><ArrowLeft size={20}/></button>
+                    <div>
+                        <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">Inventory</h1>
+                        <p className="text-sm font-medium text-slate-500">Manage stock levels & pricing</p>
+                    </div>
+                </div>
+                <div className="flex gap-3">
+                    <button onClick={handleExport} className="flex items-center gap-2 bg-white border border-gray-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition text-sm shadow-sm"><Download size={16} /> Export</button>
+                    <button onClick={() => setViewMode(viewMode === 'list' ? 'create' : 'list')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold shadow-md transition text-sm ${viewMode === 'list' ? 'bg-purple-900 text-white hover:bg-purple-800' : 'bg-white text-slate-700 hover:bg-gray-50 border border-gray-200'}`}>
+                        {viewMode === 'list' ? <><Plus size={18}/> Add Product</> : <><ArrowLeft size={18}/> Back to List</>}
                     </button>
                 </div>
             </div>
 
-            {/* --- TAB 1: INVENTORY LIST --- */}
-            {activeTab === 'inventory' && (
+            {/* --- STATS BAR --- */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between h-28">
+                    <div className="flex justify-between"><span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Value</span><div className="bg-green-50 p-1.5 rounded-lg text-green-600"><DollarSign size={16}/></div></div>
+                    <span className="text-2xl font-black text-slate-900">{formatCurrency(stats.totalValue)}</span>
+                </div>
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between h-28">
+                    <div className="flex justify-between"><span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total SKUs</span><div className="bg-blue-50 p-1.5 rounded-lg text-blue-600"><Package size={16}/></div></div>
+                    <span className="text-2xl font-black text-slate-900">{stats.totalItems}</span>
+                </div>
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between h-28">
+                    <div className="flex justify-between"><span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Low Stock</span><div className="bg-orange-50 p-1.5 rounded-lg text-orange-600"><AlertTriangle size={16}/></div></div>
+                    <span className="text-2xl font-black text-orange-600">{stats.lowStock} Items</span>
+                </div>
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between h-28">
+                    <div className="flex justify-between"><span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Out of Stock</span><div className="bg-red-50 p-1.5 rounded-lg text-red-600"><X size={16}/></div></div>
+                    <span className="text-2xl font-black text-red-600">{stats.outOfStock} Items</span>
+                </div>
+            </div>
+
+            {/* --- VIEW: INVENTORY LIST --- */}
+            {viewMode === 'list' && (
                 <div className="space-y-6 animate-in fade-in">
-                    {/* Filters */}
-                    <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                    
+                    {/* Control Bar */}
+                    <div className="bg-white p-2 rounded-2xl shadow-sm border border-gray-200 flex flex-col lg:flex-row gap-2">
                         <div className="relative flex-1">
-                            <Search className="absolute left-3 top-3 text-gray-400" size={18}/>
-                            <input type="text" placeholder="Search 'iPhone 13', 'OLED'..." className="w-full pl-10 p-2 border rounded-lg" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+                            <Search className="absolute left-3 top-3.5 text-gray-400" size={18}/>
+                            <input className="w-full pl-10 pr-4 py-3 bg-transparent outline-none text-sm text-slate-700 placeholder-slate-400 font-medium" placeholder="Search by Name, Model, Category..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
                         </div>
-                        
-                        {/* 🔥 DYNAMIC FILTER DROPDOWN */}
-                        <select className="p-2 border rounded-lg bg-white max-w-[200px]" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
-                            <option value="All">All Categories</option>
-                            {dynamicCategories.map(cat => (
-                                <option key={cat} value={cat}>{cat}</option>
-                            ))}
-                        </select>
+                        <div className="h-auto w-px bg-gray-200 mx-2 hidden lg:block"></div>
+                        <div className="flex gap-2 p-1 lg:p-0">
+                            <div className="relative min-w-[160px]">
+                                <Filter className="absolute left-3 top-3.5 text-gray-400" size={16}/>
+                                <select className="w-full pl-9 pr-8 py-3 bg-gray-50 rounded-xl border-none outline-none text-sm font-bold text-slate-600 cursor-pointer appearance-none" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+                                    <option value="All">All Categories</option>
+                                    {dynamicCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                                <ChevronDown className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" size={14}/>
+                            </div>
+                            <div className="relative min-w-[150px]">
+                                <AlertTriangle className="absolute left-3 top-3.5 text-gray-400" size={16}/>
+                                <select className="w-full pl-9 pr-8 py-3 bg-gray-50 rounded-xl border-none outline-none text-sm font-bold text-slate-600 cursor-pointer appearance-none" value={filterStock} onChange={e => setFilterStock(e.target.value)}>
+                                    <option value="All">All Levels</option>
+                                    <option value="Low">Low Stock</option>
+                                    <option value="Out">Out of Stock</option>
+                                </select>
+                                <ChevronDown className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" size={14}/>
+                            </div>
+                        </div>
                     </div>
 
-                    {/* Table */}
-                    <div className="bg-white rounded-2xl shadow-xl overflow-x-auto border border-gray-100">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Model</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock Level</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {filteredProducts.map((product) => (
-                                    <tr key={product.id} className="hover:bg-purple-50 transition">
-                                        <td className="px-6 py-4">
-                                            <div className="font-bold text-gray-900">{product.name}</div>
-                                            <div className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded w-fit mt-1">{product.category}</div>
-                                        </td>
-                                        <td className="px-6 py-4 flex items-center gap-2">
-                                            <Smartphone size={16} className="text-purple-500"/> <span className="text-sm">{product.model}</span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center gap-3">
-                                                <span className={`text-lg font-bold ${product.stock === 0 ? 'text-red-500' : 'text-gray-700'}`}>{product.stock}</span>
-                                                <button onClick={() => setRestockItem(product)} className="bg-green-100 hover:bg-green-200 text-green-700 p-1 rounded-full transition" title="Add Stock">
-                                                    <Plus size={16} />
-                                                </button>
-                                            </div>
-                                            {product.stock === 0 && <span className="text-[10px] text-red-500 font-bold uppercase">Out of Stock</span>}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium flex gap-3">
-                                            <button onClick={() => handleDeleteProduct(product.id)} className="text-red-600 hover:bg-red-50 p-2 rounded-full"><Trash2 size={18}/></button>
-                                        </td>
+                    {/* Data Grid */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-gray-50 border-b border-gray-200">
+                                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Product Info</th>
+                                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Category</th>
+                                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Price</th>
+                                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider w-40">Stock Level</th>
+                                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {filteredProducts.map((p) => (
+                                        <tr key={p.id} className="hover:bg-purple-50/30 transition group">
+                                            <td className="px-6 py-4">
+                                                <div className="font-bold text-slate-900">{p.name}</div>
+                                                <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                                                    <Smartphone size={10}/> {p.model}
+                                                    {p.type && <span className="bg-gray-100 px-1.5 rounded border border-gray-200">{p.type}</span>}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="inline-block px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">{p.category}</span>
+                                            </td>
+                                            <td className="px-6 py-4 text-right font-mono font-bold text-slate-800">{formatCurrency(p.price)}</td>
+                                            <td className="px-6 py-4"><StockHealth stock={p.stock}/></td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button onClick={() => setRestockItem(p)} className="p-2 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 hover:scale-105 transition shadow-sm" title="Add Stock"><ArrowUpCircle size={16}/></button>
+                                                    <button onClick={() => setEditingItem(p)} className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 hover:scale-105 transition shadow-sm" title="Edit"><Edit2 size={16}/></button>
+                                                    <button onClick={() => handleDelete(p)} className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 hover:scale-105 transition shadow-sm" title="Delete"><Trash2 size={16}/></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {filteredProducts.length === 0 && (
+                                        <tr><td colSpan="5" className="p-12 text-center text-slate-400 italic">No products found matching your search.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             )}
 
-            {/* --- TAB 2: CREATE PRODUCT --- */}
-            {activeTab === 'create' && (
-                <div className="max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4">
-                    <div className="bg-white p-8 rounded-2xl shadow-2xl border-t-4 border-purple-600">
-                        <div className="text-center mb-8">
-                            <h2 className="text-2xl font-extrabold text-gray-900">Define New Product</h2>
-                            <p className="text-gray-500">Create a new item. You can select an existing category or type a new one.</p>
-                        </div>
-
+            {/* --- VIEW: CREATE PRODUCT FORM --- */}
+            {viewMode === 'create' && (
+                <div className="max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4">
+                    <div className="bg-white p-8 rounded-2xl shadow-xl border border-gray-200">
+                        <h2 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2"><Package className="text-purple-600"/> Product Details</h2>
+                        
                         <form onSubmit={handleCreateProduct} className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="md:col-span-2">
-                                    <label className="block text-sm font-bold text-gray-700 mb-2">Product Name</label>
-                                    <input type="text" placeholder="e.g., Samsung S24 Ultra Screen" required className="w-full p-3 border rounded-lg" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
+                            <div className="grid grid-cols-2 gap-6">
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Item Name</label>
+                                    <input className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-bold text-slate-900 bg-gray-50 focus:bg-white transition" placeholder="e.g. iPhone 13 Pro Screen (OLED)" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
                                 </div>
-                                
-                                {/* 🔥 SMART CATEGORY INPUT (Select or Type) */}
                                 <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-2">Category</label>
-                                    <input 
-                                        list="category-options" 
-                                        type="text" 
-                                        placeholder="Select or Type New..." 
-                                        required
-                                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-purple-500"
-                                        value={newProduct.category} 
-                                        onChange={e => setNewProduct({...newProduct, category: e.target.value})}
-                                    />
-                                    {/* Datalist powers the dropdown suggestions */}
-                                    <datalist id="category-options">
-                                        {dynamicCategories.map(cat => <option key={cat} value={cat} />)}
-                                    </datalist>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Category</label>
+                                    <input list="catList" className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-purple-500" placeholder="Select..." value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} required />
+                                    <datalist id="catList">{dynamicCategories.map(c => <option key={c} value={c}/>)}</datalist>
                                 </div>
-
                                 <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-2">Type / Sub-category</label>
-                                    <input type="text" placeholder="e.g. OLED" required className="w-full p-3 border rounded-lg" value={newProduct.type} onChange={e => setNewProduct({...newProduct, type: e.target.value})} />
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Model</label>
+                                    <input className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-purple-500" placeholder="e.g. A2638" value={newProduct.model} onChange={e => setNewProduct({...newProduct, model: e.target.value})} />
                                 </div>
-                                <div className="md:col-span-2">
-                                    <label className="block text-sm font-bold text-gray-700 mb-2">Compatible Models</label>
-                                    <input type="text" placeholder="e.g., S24 Ultra" required className="w-full p-3 border rounded-lg" value={newProduct.model} onChange={e => setNewProduct({...newProduct, model: e.target.value})} />
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Selling Price</label>
+                                    <div className="relative">
+                                        <DollarSign className="absolute left-3 top-3.5 text-gray-400" size={16}/>
+                                        <input type="text" className="w-full pl-10 p-3 border border-gray-200 rounded-xl outline-none focus:border-purple-500 font-mono font-bold" placeholder="0.00" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Initial Stock</label>
+                                    <input type="number" className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-purple-500 font-bold" placeholder="0" value={newProduct.stock} onChange={e => setNewProduct({...newProduct, stock: e.target.value})} />
                                 </div>
                             </div>
-                            <button type="submit" className="w-full bg-purple-900 text-white font-bold py-4 rounded-xl hover:bg-purple-800 shadow-lg flex justify-center items-center gap-2">
-                                <Save size={20} /> Create Product Entry
+                            <button type="submit" disabled={actionLoading} className="w-full bg-purple-900 text-white font-bold py-4 rounded-xl hover:bg-purple-800 shadow-lg transition flex justify-center items-center gap-2 mt-4">
+                                {actionLoading ? <Loader2 className="animate-spin"/> : <><Save size={20}/> Save to Inventory</>}
                             </button>
                         </form>
                     </div>
@@ -244,28 +383,49 @@ const StoreInventory = () => {
 
             {/* --- RESTOCK MODAL --- */}
             {restockItem && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm animate-in zoom-in-95">
-                        <div className="flex justify-between items-center mb-4 border-b pb-2">
-                            <h3 className="text-lg font-bold text-purple-900">Add Stock</h3>
-                            <button onClick={() => setRestockItem(null)} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
+                <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-xs animate-in zoom-in-95">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold text-slate-900">Add Stock</h3>
+                            <button onClick={() => setRestockItem(null)} className="text-slate-400 hover:text-red-500"><X size={20}/></button>
                         </div>
-                        <div className="mb-4">
-                            <p className="text-sm text-gray-500">Product:</p>
-                            <p className="font-bold text-gray-800">{restockItem.name}</p>
-                            <p className="text-xs text-gray-500">{restockItem.model}</p>
+                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 mb-6 text-center">
+                            <p className="font-bold text-slate-700 line-clamp-1">{restockItem.name}</p>
+                            <p className="text-xs text-slate-500 mt-1">Current: {restockItem.stock}</p>
                         </div>
-                        <div className="mb-6">
-                            <label className="block text-sm font-bold text-gray-700 mb-2">Quantity Received</label>
-                            <div className="flex items-center border rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-purple-500">
-                                <div className="bg-gray-100 p-3 border-r"><ArrowUpCircle size={20} className="text-green-600"/></div>
-                                <input type="number" placeholder="0" autoFocus className="w-full p-3 outline-none font-bold text-lg" value={restockQty} onChange={e => setRestockQty(e.target.value)} />
-                            </div>
+                        <div className="relative mb-6">
+                            <ArrowUpCircle className="absolute left-4 top-3.5 text-green-500" size={24}/>
+                            <input type="number" autoFocus className="w-full pl-12 pr-4 py-3 border-2 border-green-100 rounded-xl focus:border-green-500 outline-none font-bold text-xl text-center" placeholder="Qty" value={restockQty} onChange={e => setRestockQty(e.target.value)}/>
                         </div>
-                        <button onClick={handleRestock} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 shadow-lg">Confirm Update</button>
+                        <button onClick={handleRestock} disabled={actionLoading} className="w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:bg-green-700 shadow-lg transition">Confirm</button>
                     </div>
                 </div>
             )}
+
+            {/* --- EDIT MODAL --- */}
+            {editingItem && (
+                <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md animate-in zoom-in-95">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-black text-slate-900 flex items-center gap-2"><ClipboardEdit className="text-blue-600"/> Edit Product</h3>
+                            <button onClick={() => setEditingItem(null)} className="text-slate-400 hover:text-red-500"><X size={20}/></button>
+                        </div>
+                        <form onSubmit={handleUpdateProduct} className="space-y-4">
+                            <div><label className="text-xs font-bold text-slate-400 uppercase">Name</label><input className="w-full p-3 border rounded-xl font-bold text-slate-800 bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-500" value={editingItem.name} onChange={e => setEditingItem({...editingItem, name: e.target.value})}/></div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div><label className="text-xs font-bold text-slate-400 uppercase">Category</label><input className="w-full p-3 border rounded-xl outline-none" value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}/></div>
+                                <div><label className="text-xs font-bold text-slate-400 uppercase">Model</label><input className="w-full p-3 border rounded-xl outline-none" value={editingItem.model} onChange={e => setEditingItem({...editingItem, model: e.target.value})}/></div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div><label className="text-xs font-bold text-slate-400 uppercase">Price</label><input type="text" className="w-full p-3 border rounded-xl outline-none font-mono font-bold" value={editingItem.price} onChange={e => setEditingItem({...editingItem, price: e.target.value})}/></div>
+                                <div><label className="text-xs font-bold text-red-400 uppercase flex gap-1"><AlertTriangle size={12}/> Manual Stock</label><input type="number" className="w-full p-3 border border-red-100 bg-red-50 rounded-xl outline-none font-bold text-red-900" value={editingItem.stock} onChange={e => setEditingItem({...editingItem, stock: e.target.value})}/></div>
+                            </div>
+                            <button type="submit" disabled={actionLoading} className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 shadow-lg mt-4">Save Changes</button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 };

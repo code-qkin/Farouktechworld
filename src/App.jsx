@@ -1,5 +1,3 @@
-// src/App.jsx (Full Final Code)
-
 import {
   Route,
   createBrowserRouter,
@@ -20,8 +18,10 @@ import StoreInventory from './Admin/Pages/StoreInventory';
 import OrderDetails from './Admin/Pages/OrderDetails';
 import Settings from './Admin/Components/Settings';
 import PerformancePage from './Admin/Pages/PerformancePage';
-
-// Public/Layout Components (omitted imports for brevity)
+import JobHistory from './Admin/Pages/JobHistory';
+import PayrollPage from './Admin/Pages/PayrollPage';
+import SignUp from './Admin/Components/SignUp';
+import SystemReset from './Admin/Components/SystemReset';
 import HomePage from './pages/Homepage';
 import MainLayout from './layout/MainLayout';
 import NotFoundPage from './components/NotFoundPage';
@@ -35,37 +35,32 @@ const router = createBrowserRouter(
   createRoutesFromElements(
     <Route path="/" element={<MainLayout />}>
 
-      {/* Public Routes */}
+     
       <Route index element={<HomePage />} />
       <Route path="pricing" element={<PricingPage />} />
       {/* <Route path="proof-of-work" element={<ProofOfWorkPage />} /> */}
       <Route path="track-order" element={<TrackingPage />} />
 
-      {/* ADMIN ROUTES */}
+     
       <Route path="admin">
-        {/* Unprotected Login Route */}
         <Route path="login" element={<LoginPage />} />
-        {/* <Route path="complete-signup" element={<CompleteSignupPage />} /> */}
-        {/*
-          The Guard Route: Checks authentication and role.
-        */}
+       <Route path="register" element={<SignUp />} />
         <Route element={<AdminAuthGuard />}>
-
-          {/* Default redirect for /admin */}
+        <Route path="system-reset" element={<SystemReset />} />
           <Route index element={<Navigate to="dashboard" replace />} />
-
-          {/* Protected Dashboard Pages */}
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="orders" element={<OrdersManagement />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="store" element={<StoreInventory />} />
           <Route path="orders/:orderId" element={<OrderDetails />} />
           <Route path="performance" element={<PerformancePage />} />
+          <Route path="job-history" element={<JobHistory />} />
+          <Route path="payroll" element={<PayrollPage />} />
           {/* <Route path="settings" element={<Settings/>} /> */}
         </Route>
       </Route>
 
-      {/* Catch All (404 Page) */}
+     
       <Route path="*" element={<NotFoundPage />} />
 
     </Route>

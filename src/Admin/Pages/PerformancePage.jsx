@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     TrendingUp, DollarSign, AlertCircle, ArrowDownLeft, 
-    Calendar, Filter, Download, PieChart as PieIcon, ArrowLeft, CheckCircle
+    Calendar, Filter, Download, PieChart as PieIcon, ArrowLeft, CheckCircle, Wallet
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
@@ -22,12 +22,22 @@ const StatCard = ({ title, value, subtext, icon: Icon, color }) => (
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">{title}</p>
                 <h3 className="text-2xl font-black text-gray-900 mt-1">{value}</h3>
             </div>
-            <div className={`p-2 rounded-lg ${color === 'green' ? 'bg-green-100 text-green-700' : color === 'red' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+            <div className={`p-2 rounded-lg ${
+                color === 'green' ? 'bg-green-100 text-green-700' : 
+                color === 'red' ? 'bg-red-100 text-red-700' : 
+                color === 'purple' ? 'bg-purple-100 text-purple-700' :
+                'bg-blue-100 text-blue-700'
+            }`}>
                 <Icon size={20} />
             </div>
         </div>
         <p className="text-xs text-gray-400 z-10">{subtext}</p>
-        <div className={`absolute -bottom-4 -right-4 w-24 h-24 rounded-full opacity-10 ${color === 'green' ? 'bg-green-500' : color === 'red' ? 'bg-red-500' : 'bg-blue-500'}`}></div>
+        <div className={`absolute -bottom-4 -right-4 w-24 h-24 rounded-full opacity-10 ${
+            color === 'green' ? 'bg-green-500' : 
+            color === 'red' ? 'bg-red-500' : 
+            color === 'purple' ? 'bg-purple-500' :
+            'bg-blue-500'
+        }`}></div>
     </div>
 );
 
@@ -77,20 +87,29 @@ const PerformanceReports = () => {
         return orders.filter(o => o.date >= start);
     }, [orders, filterRange]);
 
-    // --- 3. FILTER LOGIC (History Tabs) ---
+    // --- 3. FILTER LOGIC (History Tabs - FIXED) ---
     const historyData = useMemo(() => {
         return filteredData.filter(o => {
             if (historyTab === 'all') return true;
             if (historyTab === 'paid') return o.paymentStatus === 'Paid';
-            if (historyTab === 'refunded') return o.paymentStatus === 'Refunded' || o.status === 'Void';
+            
+            // 🔥 FIX: Include Voids and anything with a refund value in the "Refunded" tab
+            if (historyTab === 'refunded') {
+                return o.paymentStatus === 'Refunded' || 
+                       o.paymentStatus === 'Voided' || 
+                       o.status === 'Void' || 
+                       (Number(o.refundedAmount) > 0);
+            }
+            
             if (historyTab === 'debtors') return o.paymentStatus === 'Unpaid' || o.paymentStatus === 'Part Payment';
             return true;
         });
     }, [filteredData, historyTab]);
 
-    // --- 4. AGGREGATE STATS ---
+    // --- 4. AGGREGATE STATS (FIXED CALCULATIONS) ---
     const stats = useMemo(() => {
-        let cashIn = 0;
+        let grossSales = 0;
+        let netRevenue = 0;
         let refunds = 0;
         let debt = 0;
         let repairRev = 0;
@@ -99,28 +118,38 @@ const PerformanceReports = () => {
         const dailyMap = {};
 
         filteredData.forEach(o => {
-            if (o.refundedAmount && Number(o.refundedAmount) > 0) {
-                refunds += Number(o.refundedAmount);
+            // 1. Calculate Refunds (Always count these, even if Void)
+            const refundAmount = Number(o.refundedAmount || 0);
+            if (refundAmount > 0) {
+                refunds += refundAmount;
             }
 
-            if (o.status === 'Void') return;
-            
+            // 2. Financials
             const paid = Number(o.amountPaid) || 0;
-            cashIn += paid;
-            debt += (Number(o.balance) || 0);
+            netRevenue += paid; // What you actually have now
+            
+            // 3. Debt (Skip if Void)
+            if (o.status !== 'Void') {
+                debt += (Number(o.balance) || 0);
+            }
 
+            // 4. Category Split (Based on Net)
             if (o.orderType === 'repair' || o.orderType === 'warranty') {
                 repairRev += paid;
             } else {
                 storeRev += paid;
             }
 
+            // 5. Chart Data
             const dayKey = o.date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
             dailyMap[dayKey] = (dailyMap[dayKey] || 0) + paid;
         });
 
+        // 🔥 GROSS = What we kept + What we gave back
+        grossSales = netRevenue + refunds;
+
         const chartData = Object.keys(dailyMap).map(key => ({ name: key, amount: dailyMap[key] }));
-        return { cashIn, refunds, debt, repairRev, storeRev, chartData };
+        return { grossSales, netRevenue, refunds, debt, repairRev, storeRev, chartData };
     }, [filteredData]);
 
     // --- EXPORT ---
@@ -182,16 +211,17 @@ const PerformanceReports = () => {
             </div>
 
             {/* Metric Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-                <StatCard title="Total Revenue" value={formatCurrency(stats.cashIn)} subtext="Cash collected" icon={DollarSign} color="green" />
-                <StatCard title="Refunds" value={formatCurrency(stats.refunds)} subtext="Returned to customers" icon={ArrowDownLeft} color="red" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <StatCard title="Net Revenue" value={formatCurrency(stats.netRevenue)} subtext="Actual Cash in Hand" icon={Wallet} color="green" />
+                <StatCard title="Gross Sales" value={formatCurrency(stats.grossSales)} subtext="Total Volume (Before Refunds)" icon={DollarSign} color="purple" />
+                <StatCard title="Refunds" value={`-${formatCurrency(stats.refunds)}`} subtext="Returned to customers" icon={ArrowDownLeft} color="red" />
                 <StatCard title="Debt" value={formatCurrency(stats.debt)} subtext="Outstanding balance" icon={AlertCircle} color="blue" />
             </div>
 
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                 <div className="lg:col-span-2 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-200 h-[300px] sm:h-[350px]">
-                    <h3 className="font-bold text-gray-800 mb-4 text-sm sm:text-base">Revenue Trend</h3>
+                    <h3 className="font-bold text-gray-800 mb-4 text-sm sm:text-base">Revenue Trend (Net)</h3>
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={stats.chartData}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -271,7 +301,7 @@ const PerformanceReports = () => {
                                     <td className="p-4 text-center">
                                         <span className={`px-2 py-1 rounded text-[10px] font-bold whitespace-nowrap ${
                                             order.paymentStatus === 'Paid' ? 'bg-green-100 text-green-700' : 
-                                            order.paymentStatus === 'Refunded' ? 'bg-blue-100 text-blue-700' : 
+                                            order.paymentStatus === 'Refunded' || order.paymentStatus === 'Voided' ? 'bg-blue-100 text-blue-700' : 
                                             'bg-red-100 text-red-700'
                                         }`}>
                                             {order.paymentStatus}
