@@ -178,7 +178,7 @@ const UserManagement = () => {
                 </div>
             </td>
             <td className="px-6 py-4 text-right flex justify-end gap-2">
-                {member.role !== 'pending' && <button onClick={() => openPayrollModal(member)} className="p-2 rounded-full text-green-600 hover:bg-green-100 transition"><DollarSign size={18}/></button>}
+                {member.role !== 'pending' && <button onClick={() => openPayrollModal(member)} className="p-2 rounded-full text-green-600 hover:bg-green-100 transition">₦</button>}
                 {member.id !== currentUser.uid && <button onClick={() => handleDelete(member)} className="text-red-600 hover:bg-red-100 p-2 rounded-full"><Trash2 size={18}/></button>}
             </td>
         </tr>
@@ -194,7 +194,7 @@ const UserManagement = () => {
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in-up">
                         <div className="bg-purple-900 p-4 flex justify-between items-center text-white">
-                            <h3 className="font-bold text-lg flex items-center gap-2"><DollarSign size={20}/> Payroll Settings</h3>
+                            <h3 className="font-bold text-lg flex items-center gap-2">₦ Payroll Settings</h3>
                             <button onClick={() => setPayrollModal({...payrollModal, isOpen: false})}><X size={20}/></button>
                         </div>
                         <div className="p-6 space-y-4">

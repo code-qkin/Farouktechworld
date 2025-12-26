@@ -3,11 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
     ArrowLeft, Printer, DollarSign, 
     CheckCircle, Wrench, Ban, PlusCircle, 
-    X, RotateCcw, RefreshCw, Lock, Smartphone
+    X, RotateCcw, RefreshCw, Lock, Smartphone, Edit2, Trash2
 } from 'lucide-react';
 import { 
     collection, query, where, getDocs, doc, 
-    updateDoc, runTransaction, addDoc, serverTimestamp, Timestamp, onSnapshot 
+    updateDoc, runTransaction, addDoc, serverTimestamp, Timestamp, onSnapshot, deleteDoc
 } from 'firebase/firestore'; 
 import { db } from '../../firebaseConfig.js';
 import { useAuth } from '../AdminContext';
@@ -29,6 +29,10 @@ const OrderDetails = () => {
     const [showReceipt, setShowReceipt] = useState(false);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [paymentInput, setPaymentInput] = useState('');
+    
+    // Discount UI
+    const [showDiscountModal, setShowDiscountModal] = useState(false);
+    const [discountInput, setDiscountInput] = useState('');
     
     // Feedback
     const [toast, setToast] = useState({ message: '', type: '' });
@@ -85,22 +89,83 @@ const OrderDetails = () => {
 
     // --- HANDLERS ---
     
+    // 🔥 UPDATED: Automatically set Service AND Order status to 'In Progress'
     const handleServiceAssign = async (i, s, newWorker) => {
         setIsUpdating(true);
         try {
             const newItems = JSON.parse(JSON.stringify(order.items));
             newItems[i].services[s].worker = newWorker;
-            // Auto-update status based on assignment
+            
+            let newOrderStatus = order.status; // Default to current status
+
             if (newWorker === 'Unassigned') {
                 newItems[i].services[s].status = 'Pending';
-            } else if (newItems[i].services[s].status === 'Pending') {
+            } else {
+                // 1. Update Service Status
                 newItems[i].services[s].status = 'In Progress';
+                
+                // 2. Update Order Status (Only if currently Pending)
+                if (order.status === 'Pending') {
+                    newOrderStatus = 'In Progress';
+                }
             }
             
-            await updateDoc(doc(db, "Orders", order.id), { items: newItems });
+            // Update both fields in Firestore
+            await updateDoc(doc(db, "Orders", order.id), { 
+                items: newItems,
+                status: newOrderStatus
+            });
+
             setToast({message: `Assigned to ${newWorker}`, type: 'success'});
         } catch(e) { console.error(e); setToast({message: "Assignment Failed", type: 'error'}); }
         setIsUpdating(false);
+    };
+
+    const handleUpdateDiscount = async () => {
+        const val = Number(discountInput);
+        if (val < 0) return;
+        
+        setIsUpdating(true);
+        try {
+            await runTransaction(db, async (t) => {
+                const ref = doc(db, "Orders", order.id);
+                const docSnap = await t.get(ref);
+                const data = docSnap.data();
+                
+                const currentSubtotal = data.subtotal || (data.totalCost + (data.discount || 0));
+                const newDiscount = val;
+                const newTotalCost = Math.max(0, currentSubtotal - newDiscount);
+                
+                let finalPaid = data.amountPaid || 0;
+                let newRefunded = data.refundedAmount || 0;
+
+                if (finalPaid > newTotalCost) {
+                    const diff = finalPaid - newTotalCost;
+                    finalPaid = newTotalCost;
+                    newRefunded += diff; 
+                }
+                
+                const newBalance = newTotalCost - finalPaid;
+
+                t.update(ref, {
+                    subtotal: currentSubtotal,
+                    discount: newDiscount,
+                    totalCost: newTotalCost,
+                    amountPaid: finalPaid,
+                    refundedAmount: newRefunded,
+                    balance: newBalance,
+                    paymentStatus: finalPaid >= newTotalCost ? 'Paid' : (finalPaid > 0 ? 'Part Payment' : 'Unpaid'),
+                    paid: finalPaid >= newTotalCost
+                });
+            });
+            setToast({ message: "Discount Applied", type: "success" });
+            setShowDiscountModal(false);
+        } catch (e) {
+            console.error(e);
+            setToast({ message: "Update Failed", type: "error" });
+        } finally {
+            setIsUpdating(false);
+        }
     };
 
     const handleVoidProductTrigger = (i) => {
@@ -131,14 +196,12 @@ const OrderDetails = () => {
                 const item = newItems[i];
                 if(item.returned) throw "Already returned";
                 
-                // Restock Inventory if product ID exists
                 if (item.productId) {
                     const invRef = doc(db, "Inventory", item.productId);
                     const invSnap = await t.get(invRef);
                     if(invSnap.exists()) t.update(invRef, { stock: (invSnap.data().stock || 0) + returnQty });
                 }
 
-                // Mark item returned
                 if (returnQty === item.qty) { newItems[i].returned = true; } 
                 else { 
                     newItems[i].qty -= returnQty; 
@@ -146,13 +209,14 @@ const OrderDetails = () => {
                     newItems.push({ ...item, qty: returnQty, total: item.price * returnQty, returned: true }); 
                 }
                 
-                // Recalculate Finances
                 const deduction = item.price * returnQty;
-                const newTotalCost = (data.totalCost || 0) - deduction;
+                const currentDiscount = data.discount || 0;
+                const newSubtotal = (data.subtotal || data.totalCost) - deduction;
+                const newTotalCost = Math.max(0, newSubtotal - currentDiscount);
+
                 let newAmountPaid = data.amountPaid || 0;
                 let newRefundedAmount = data.refundedAmount || 0;
                 
-                // If they paid more than the new total, the difference is a refund
                 if (newAmountPaid > newTotalCost) { 
                     const refundDue = newAmountPaid - newTotalCost; 
                     newAmountPaid = newTotalCost; 
@@ -160,33 +224,19 @@ const OrderDetails = () => {
                 }
                 const newBalance = newTotalCost - newAmountPaid;
                 
-                // 🔥 SAVE TO DB (Ensures Dashboard updates)
                 t.update(ref, { 
-                    items: newItems, 
-                    totalCost: newTotalCost, 
-                    amountPaid: newAmountPaid, 
-                    refundedAmount: newRefundedAmount, 
-                    balance: newBalance 
+                    items: newItems, subtotal: newSubtotal, totalCost: newTotalCost, 
+                    amountPaid: newAmountPaid, refundedAmount: newRefundedAmount, balance: newBalance 
                 });
-                
-                setOrder(prev => ({ 
-                    ...prev, 
-                    items: newItems, 
-                    totalCost: newTotalCost, 
-                    amountPaid: newAmountPaid, 
-                    refundedAmount: newRefundedAmount, 
-                    balance: newBalance 
-                }));
             });
-            setToast({message: "Item Returned & Refund Recorded", type: 'success'});
+            setToast({message: "Item Returned", type: 'success'});
         } catch(e) { setToast({message: "Failed", type: 'error'}); }
         setIsUpdating(false);
     };
 
-    // VOID SERVICE LOGIC
     const handleVoidService = async (i, s) => {
         setConfirmConfig({
-            isOpen: true, title: "Void Service?", message: "This removes the service and its cost from the ticket.", confirmText: "Void Service", confirmColor: "bg-red-600",
+            isOpen: true, title: "Void Service?", message: "This removes the service cost from the ticket.", confirmText: "Void Service", confirmColor: "bg-red-600",
             action: async () => {
                 setIsUpdating(true);
                 try {
@@ -195,23 +245,20 @@ const OrderDetails = () => {
                         const data = (await t.get(ref)).data();
                         const newItems = JSON.parse(JSON.stringify(data.items));
                         
-                        // 1. Mark specific service as Void
                         const svc = newItems[i].services[s];
-                        if (svc.status === 'Void') throw "Service already voided"; 
-                        svc.status = 'Void'; 
-                        svc.worker = 'Unassigned';
+                        if (svc.status === 'Void') throw "Already voided"; 
+                        svc.status = 'Void'; svc.worker = 'Unassigned';
 
-                        // 2. Recalculate Item Total
                         if (newItems[i].type === 'repair') {
                              newItems[i].total = newItems[i].services.reduce((acc, curr) => {
                                  return acc + (curr.status !== 'Void' ? Number(curr.cost || 0) : 0);
                              }, 0);
                         }
 
-                        // 3. Recalculate Order Global Total
-                        const newTotalCost = newItems.reduce((acc, item) => acc + (Number(item.total) || 0), 0);
+                        const newSubtotal = newItems.reduce((acc, item) => acc + (Number(item.total) || 0), 0);
+                        const currentDiscount = data.discount || 0;
+                        const newTotalCost = Math.max(0, newSubtotal - currentDiscount);
 
-                        // 4. Adjust Payments
                         let newAmountPaid = data.amountPaid || 0;
                         let newRefundedAmount = data.refundedAmount || 0;
                         
@@ -223,27 +270,12 @@ const OrderDetails = () => {
                         const newBalance = newTotalCost - newAmountPaid;
                         
                         t.update(ref, { 
-                            items: newItems, 
-                            totalCost: newTotalCost, 
-                            amountPaid: newAmountPaid, 
-                            refundedAmount: newRefundedAmount, 
-                            balance: newBalance 
+                            items: newItems, subtotal: newSubtotal, totalCost: newTotalCost, 
+                            amountPaid: newAmountPaid, refundedAmount: newRefundedAmount, balance: newBalance 
                         });
-                        
-                        setOrder(prev => ({ 
-                            ...prev, 
-                            items: newItems, 
-                            totalCost: newTotalCost, 
-                            amountPaid: newAmountPaid, 
-                            refundedAmount: newRefundedAmount, 
-                            balance: newBalance 
-                        }));
                     });
                     setToast({message: "Service Voided", type: 'success'});
-                } catch(e) { 
-                    console.error(e);
-                    setToast({message: "Failed to void service", type: 'error'}); 
-                }
+                } catch(e) { setToast({message: "Failed", type: 'error'}); }
                 setIsUpdating(false);
                 setConfirmConfig({...confirmConfig, isOpen: false});
             }
@@ -260,7 +292,6 @@ const OrderDetails = () => {
             const newPaid = (data.amountPaid || 0) + amt;
             const newBal = data.totalCost - newPaid;
             t.update(ref, { amountPaid: newPaid, balance: newBal, paymentStatus: newBal <= 0 ? 'Paid' : 'Part Payment', paid: newBal <= 0 });
-            setOrder(prev => ({ ...prev, amountPaid: newPaid, balance: newBal, paymentStatus: newBal <= 0 ? 'Paid' : 'Part Payment', paid: newBal <= 0 }));
         });
         setIsUpdating(false);
         setShowPaymentModal(false);
@@ -273,6 +304,28 @@ const OrderDetails = () => {
             navigate('/admin/orders');
          } catch(e) { setToast({message: "Void Failed", type: 'error'}); }
          setIsUpdating(false);
+    };
+
+    const handleDeleteOrder = async () => {
+        setConfirmConfig({
+            isOpen: true,
+            title: "Delete Order?",
+            message: `Permanently delete this order? This cannot be undone.`,
+            confirmText: "Delete Forever",
+            confirmColor: "bg-red-600",
+            action: async () => {
+                setIsUpdating(true);
+                try {
+                    await deleteDoc(doc(db, "Orders", order.id));
+                    setToast({ message: "Order Deleted", type: "success" });
+                    navigate('/admin/orders');
+                } catch (e) {
+                    setToast({ message: "Delete Failed", type: "error" });
+                    setIsUpdating(false);
+                }
+                setConfirmConfig({ ...confirmConfig, isOpen: false });
+            }
+        });
     };
 
     const handleWarrantyReturn = async (item) => {
@@ -292,22 +345,25 @@ const OrderDetails = () => {
     const handleProcessRefund = async () => {
         setIsUpdating(true);
         await updateDoc(doc(db, "Orders", order.id), { amountPaid: 0, refundedAmount: order.amountPaid, paymentStatus: 'Refunded', balance: 0 });
-        setOrder(prev => ({ ...prev, amountPaid: 0, paymentStatus: 'Refunded', balance: 0 }));
         setIsUpdating(false);
     };
 
     const handleResetPayment = async () => {
          setIsUpdating(true);
          await updateDoc(doc(db, "Orders", order.id), { amountPaid: 0, balance: order.totalCost, paymentStatus: 'Unpaid', paid: false });
-         setOrder(prev => ({ ...prev, amountPaid: 0, balance: prev.totalCost, paymentStatus: 'Unpaid', paid: false }));
          setIsUpdating(false);
     };
     
     const handleStatusChange = async (e) => {
         const newStatus = e.target.value;
+        if (newStatus === 'Void') {
+            setConfirmConfig({
+                isOpen: true, title: "Void Order?", message: "This cancels everything and zeros the balance. Continue?", confirmText: "Void", confirmColor: "bg-red-600", action: handleVoidOrder
+            });
+            return;
+        }
         setIsUpdating(true);
         await updateDoc(doc(db, "Orders", order.id), { status: newStatus });
-        setOrder(prev => ({ ...prev, status: newStatus }));
         setIsUpdating(false);
     };
 
@@ -315,11 +371,14 @@ const OrderDetails = () => {
         const next = order.status === 'Collected' ? 'Ready for Pickup' : 'Collected';
         setIsUpdating(true);
         await updateDoc(doc(db, "Orders", order.id), { status: next });
-        setOrder(prev => ({ ...prev, status: next }));
         setIsUpdating(false);
     };
 
-    const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
+    const formatCurrency = (amount) => {
+        const num = Number(amount);
+        return isNaN(num) ? '₦0.00' : `₦${num.toLocaleString()}`;
+    };
+    
     const formatDate = (date) => (!date ? '' : new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }));
     const isReturn = order?.orderType === 'return';
 
@@ -336,6 +395,8 @@ const OrderDetails = () => {
             <div className="max-w-7xl mx-auto mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <button onClick={() => navigate(-1)} className="flex items-center text-gray-600 hover:text-purple-700 transition bg-white px-4 py-2 rounded-lg shadow-sm border"><ArrowLeft size={20} className="mr-2"/> Back</button>
                 <div className="flex flex-wrap gap-2 no-print">
+                    <button onClick={handleDeleteOrder} disabled={isUpdating} className="flex items-center gap-2 bg-red-100 text-red-700 border border-red-200 px-4 py-2 rounded-lg hover:bg-red-200 text-sm font-bold"><Trash2 size={16}/> Delete</button>
+                    
                     {order.status !== 'Void' && <button onClick={() => setConfirmConfig({isOpen:true, title:"Void Order?", message:"This cancels everything.", confirmText:"Void", confirmColor:"bg-red-600", action: handleVoidOrder})} disabled={isUpdating} className="flex items-center gap-2 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 text-sm font-bold"><Ban size={16}/> Void</button>}
                     <button onClick={() => setShowReceipt(true)} className="flex items-center gap-2 bg-purple-900 text-white px-4 py-2 rounded-lg hover:bg-purple-800 text-sm font-bold"><Printer size={16}/> Receipt</button>
                 </div>
@@ -343,10 +404,8 @@ const OrderDetails = () => {
 
             <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
                 
-                {/* LEFT COLUMN: Order Info & Items */}
+                {/* LEFT COLUMN */}
                 <div className="lg:col-span-2 space-y-6">
-                    
-                    {/* Main Card */}
                     <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
                         <div className="bg-purple-900 p-6 text-white flex justify-between items-center">
                             <div>
@@ -354,17 +413,17 @@ const OrderDetails = () => {
                                 <p className="text-purple-100 text-sm opacity-90">{order.customer?.name} • {order.customer?.phone}</p>
                             </div>
                             <div className="bg-white/20 px-3 py-1 rounded-lg backdrop-blur-sm">
-                                <select value={order.status} onChange={handleStatusChange} disabled={isUpdating} className="bg-transparent text-white font-bold outline-none cursor-pointer">
+                                <select value={order.status} onChange={handleStatusChange} disabled={isUpdating || order.status === 'Void'} className="bg-transparent text-white font-bold outline-none cursor-pointer disabled:opacity-80">
                                     <option className="text-black">Pending</option>
                                     <option className="text-black">In Progress</option>
                                     <option className="text-black">Ready for Pickup</option>
                                     <option className="text-black">Completed</option>
                                     <option className="text-black">Collected</option>
+                                    <option className="text-black">Void</option>
                                 </select>
                             </div>
                         </div>
 
-                        {/* Items Table */}
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
@@ -380,8 +439,6 @@ const OrderDetails = () => {
                                                         <div className="font-bold text-gray-900 text-base flex items-center gap-2">
                                                             {item.name || item.deviceModel}
                                                             {item.returned && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded border border-red-200">Returned</span>}
-                                                            
-                                                            {/* Only show Return for PRODUCTS */}
                                                             {item.type === 'product' && !item.returned && !isReturn && order.status !== 'Void' && (
                                                                 <button onClick={() => handleVoidProductTrigger(i)} disabled={isUpdating} className="text-red-500 hover:bg-red-50 p-1 rounded ml-auto" title="Return Product"><RotateCcw size={16}/></button>
                                                             )}
@@ -389,8 +446,6 @@ const OrderDetails = () => {
                                                                 <button onClick={() => handleWarrantyReturn(item)} className="bg-orange-100 text-orange-700 text-[10px] px-2 py-1 rounded ml-auto flex items-center gap-1"><RefreshCw size={12}/> Warranty</button>
                                                             )}
                                                         </div>
-
-                                                        {/* SHOW PASSCODE & IMEI FOR REPAIRS */}
                                                         {item.type === 'repair' && (
                                                             <div className="flex gap-4 text-xs mt-1 text-gray-500">
                                                                 {item.imei && <span className="flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded"><Smartphone size={10}/> IMEI: {item.imei}</span>}
@@ -399,34 +454,19 @@ const OrderDetails = () => {
                                                         )}
                                                     </div>
                                                     
-                                                    {/* Services List */}
                                                     {item.type === 'repair' && <div className="mt-3 space-y-2">
                                                         {item.services?.map((svc, sIdx) => (
                                                             <div key={sIdx} className="p-3 rounded-lg border flex flex-col sm:flex-row justify-between gap-3 bg-gray-50 border-gray-100">
                                                                 <div className="flex items-center gap-2">
                                                                     <Wrench size={16} className="text-gray-400"/>
                                                                     <span className="font-medium text-gray-700">{svc.service}</span>
-                                                                    {/* SERVICE STATUS BADGE */}
-                                                                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
-                                                                        svc.status === 'Completed' ? 'bg-green-100 text-green-700' : 
-                                                                        svc.status === 'In Progress' ? 'bg-purple-100 text-purple-700' :
-                                                                        svc.status === 'Void' ? 'bg-red-100 text-red-700 line-through' :
-                                                                        'bg-yellow-100 text-yellow-700'
-                                                                    }`}>
+                                                                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${svc.status === 'Completed' ? 'bg-green-100 text-green-700' : svc.status === 'In Progress' ? 'bg-purple-100 text-purple-700' : svc.status === 'Void' ? 'bg-red-100 text-red-700 line-through' : 'bg-yellow-100 text-yellow-700'}`}>
                                                                         {svc.status}
                                                                     </span>
                                                                 </div>
-                                                                
                                                                 <div className="flex items-center gap-2">
                                                                     {svc.status !== 'Void' && order.status !== 'Void' && <button onClick={() => handleVoidService(i, sIdx)} disabled={isUpdating} className="text-gray-400 hover:text-red-500"><Ban size={14}/></button>}
-                                                                    
-                                                                    {/* Assign Worker */}
-                                                                    <select 
-                                                                        className="bg-white border text-xs p-1.5 rounded font-bold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500" 
-                                                                        value={svc.worker || "Unassigned"} 
-                                                                        onChange={(e) => handleServiceAssign(i, sIdx, e.target.value)}
-                                                                        disabled={order.status === 'Void' || svc.status === 'Void'}
-                                                                    >
+                                                                    <select className="bg-white border text-xs p-1.5 rounded font-bold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500" value={svc.worker || "Unassigned"} onChange={(e) => handleServiceAssign(i, sIdx, e.target.value)} disabled={order.status === 'Void' || svc.status === 'Void'}>
                                                                         <option value="Unassigned">Unassigned</option>
                                                                         {workers.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
                                                                     </select>
@@ -435,7 +475,9 @@ const OrderDetails = () => {
                                                         ))}
                                                     </div>}
                                                 </td>
-                                                <td className="px-6 py-4 text-right font-bold text-gray-800 align-top">{formatCurrency(item.total || item.cost)}</td>
+                                                <td className="px-6 py-4 text-right font-bold text-gray-800 align-top">
+                                                    {formatCurrency(item.total ?? item.cost ?? 0)}
+                                                </td>
                                             </tr>
                                         )
                                     })}
@@ -445,15 +487,39 @@ const OrderDetails = () => {
                     </div>
                 </div>
 
-                {/* RIGHT COLUMN: Payment Card */}
+                {/* RIGHT COLUMN */}
                 <div className="space-y-6">
                     <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 shadow-sm h-fit">
                         <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2"><DollarSign size={18}/> Payment Summary</h3>
                         <div className="space-y-3 text-sm mb-6">
-                            <div className="flex justify-between"><span>Total Cost</span><span className="font-bold">{formatCurrency(order.totalCost)}</span></div>
+                            
+                            <div className="flex justify-between text-slate-500">
+                                <span>Subtotal</span>
+                                <span>{formatCurrency(order.subtotal || (order.totalCost + (order.discount || 0)))}</span>
+                            </div>
+                            
+                            <div className="flex justify-between items-center text-red-500 my-1">
+                                <div className="flex items-center gap-2">
+                                    <span>Discount</span>
+                                    {order.status !== 'Void' && (
+                                        <button 
+                                            onClick={() => { setDiscountInput(order.discount || ''); setShowDiscountModal(true); }}
+                                            className="bg-red-50 text-red-600 p-1 rounded hover:bg-red-100 transition"
+                                            title="Edit Discount"
+                                        >
+                                            <Edit2 size={12}/>
+                                        </button>
+                                    )}
+                                </div>
+                                <span>-{formatCurrency(order.discount || 0)}</span>
+                            </div>
+
+                            <div className="flex justify-between border-t border-dashed border-gray-200 pt-2">
+                                <span>Total Cost</span>
+                                <span className="font-bold">{formatCurrency(order.totalCost)}</span>
+                            </div>
                             <div className="flex justify-between text-green-600"><span>Amount Paid</span><span className="font-bold">-{formatCurrency(order.amountPaid || 0)}</span></div>
                             
-                            {/* 🔥 SHOW REFUND AMOUNT */}
                             {order.refundedAmount > 0 && (
                                 <div className="flex justify-between text-red-600 bg-red-50 p-2 rounded border border-red-100">
                                     <span>Refunded</span><span className="font-bold">+{formatCurrency(order.refundedAmount)}</span>
@@ -466,7 +532,6 @@ const OrderDetails = () => {
                             <span className={`text-2xl font-extrabold ${order.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>{formatCurrency(order.balance <= 0 ? 0 : order.balance)}</span>
                         </div>
 
-                        {/* Action Buttons */}
                         <div className="space-y-3">
                             {(order.status === 'Void' || isReturn) && order.amountPaid > 0 && order.paymentStatus !== 'Refunded' && (
                                 <button onClick={() => setConfirmConfig({isOpen:true, title:"Refund Payment?", message:"Mark as Refunded.", confirmText:"Refund", confirmColor:"bg-blue-600", action: handleProcessRefund})} disabled={isUpdating} className="w-full bg-red-600 text-white py-3 rounded-lg font-bold shadow-sm hover:bg-red-700 transition">Process Refund</button>
@@ -502,6 +567,29 @@ const OrderDetails = () => {
                 </div>
             )}
 
+            {/* Discount Modal */}
+            {showDiscountModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl animate-fade-in-up">
+                        <h3 className="font-bold text-xl mb-4 text-gray-900">Manage Discount</h3>
+                        <p className="text-xs text-gray-500 mb-4">Enter amount to deduct from subtotal.</p>
+                        <div className="relative mb-6">
+                            <span className="absolute left-4 top-3.5 text-gray-400 font-bold">₦</span>
+                            <input 
+                                type="number" 
+                                autoFocus 
+                                className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl font-bold text-lg focus:border-purple-600 outline-none" 
+                                value={discountInput} 
+                                onChange={e => setDiscountInput(e.target.value)} 
+                                placeholder="0.00" 
+                            />
+                        </div>
+                        <button onClick={handleUpdateDiscount} disabled={isUpdating} className="w-full bg-purple-900 text-white py-3 rounded-lg font-bold hover:bg-purple-800 transition shadow-lg mb-3">Apply Discount</button>
+                        <button onClick={() => setShowDiscountModal(false)} className="w-full text-gray-500 font-bold hover:bg-gray-100 py-3 rounded-lg">Cancel</button>
+                    </div>
+                </div>
+            )}
+
             {/* Receipt Modal */}
             {showReceipt && (
                 <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
@@ -528,14 +616,28 @@ const OrderDetails = () => {
                                     return (
                                         <tr key={i}>
                                             <td className="py-1 pr-2 align-top"><div className="font-bold">{item.name || item.deviceModel}</div></td>
-                                            <td className="text-right align-top whitespace-nowrap">{formatCurrency(item.total || item.cost)}</td>
+                                            <td className="text-right align-top whitespace-nowrap">{formatCurrency(item.total ?? item.cost ?? 0)}</td>
                                         </tr>
                                     ) 
                                 })}
                             </tbody>
                         </table>
                         
-                        <div className="flex justify-between text-lg font-bold border-t-2 border-black pt-2 mb-1"><span>TOTAL:</span><span>{formatCurrency(order.totalCost)}</span></div>
+                        <div className="flex justify-between text-lg font-bold border-t-2 border-black pt-2 mb-1">
+                            <span>SUBTOTAL:</span>
+                            <span>{formatCurrency(order.subtotal || (order.totalCost + (order.discount || 0)))}</span>
+                        </div>
+                        {order.discount > 0 && (
+                            <div className="flex justify-between text-sm font-medium mb-1">
+                                <span>DISCOUNT:</span>
+                                <span>-{formatCurrency(order.discount)}</span>
+                            </div>
+                        )}
+                        <div className="flex justify-between text-lg font-bold border-t-2 border-black pt-2 mb-1">
+                            <span>TOTAL:</span>
+                            <span>{formatCurrency(order.totalCost)}</span>
+                        </div>
+
                         <div className="space-y-1 text-sm font-mono mb-6 border-b border-black pb-4">
                             <div className="flex justify-between"><span>Paid:</span><span>{formatCurrency(order.amountPaid || 0)}</span></div>
                             <div className="flex justify-between font-bold"><span>Balance:</span><span>{formatCurrency(order.balance)}</span></div>

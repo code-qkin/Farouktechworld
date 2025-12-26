@@ -1,136 +1,96 @@
-export const storeData = {
-  // --- 1. SCREENS (OLED, Incell, Follow Come) ---
-  'Screen - OLED': [
-    { model: 'iPhone X', price: 45000 },
-    { model: 'iPhone XS', price: 45000 },
-    { model: 'iPhone XS Max', price: 45000 },
-    { model: 'iPhone 11 Pro', price: 45000 },
-    { model: 'iPhone 11 Pro Max', price: 53000 },
-    { model: 'iPhone 12 / 12 Pro', price: 73000 },
-    { model: 'iPhone 12 Pro Max', price: 85000 },
-    { model: 'iPhone 13', price: 77000 },
-    { model: 'iPhone 13 Pro', price: 110000 },
-    { model: 'iPhone 13 Pro Max', price: 110000 },
-    { model: 'iPhone 14', price: 80000 },
-    { model: 'iPhone 14 Plus', price: 180000 },
-    { model: 'iPhone 14 Pro', price: 200000 },
-    { model: 'iPhone 14 Pro Max', price: 200000 },
-    { model: 'iPhone 15', price: 200000 },
-    { model: 'iPhone 15 Plus', price: 200000 },
-    { model: 'iPhone 15 Pro', price: 250000 },
-    { model: 'iPhone 15 Pro Max', price: 230000 }
-  ],
-  'Screen - Incell': [
-    { model: 'iPhone X', price: 16000 },
-    { model: 'iPhone XS', price: 18000 },
-    { model: 'iPhone XR', price: 22000 },
-    { model: 'iPhone 11', price: 22000 },
-    { model: 'iPhone 11 Pro', price: 25000 },
-    { model: 'iPhone 11 Pro Max', price: 25000 },
-    { model: 'iPhone 12 / 12 Pro', price: 40000 },
-    { model: 'iPhone 12 Pro Max', price: 45000 },
-    { model: 'iPhone 13', price: 38000 },
-    { model: 'iPhone 13 Pro', price: 45000 },
-    { model: 'iPhone 13 Pro Max', price: 55000 }
-  ],
-  'Screen - Follow Come': [
-    { model: 'iPhone 12 Pro Max', price: 120000 },
-    { model: 'iPhone 13 Pro Max', price: 180000 },
-    { model: 'iPhone 14 Pro Max', price: 280000 },
-    { model: 'iPhone 15 Pro Max', price: 350000 },
-    { model: 'iPhone 16 Pro', price: 550000 },
-    { model: 'iPhone 16 Pro Max', price: 570000 }
-  ],
+// --- 1. DEFINE MODELS ---
+const models = {
+    // Helper to get range of models
+    getRange: (startStr, endStr) => {
+        const allModels = [
+            'iPhone 6', 'iPhone 6 Plus', 'iPhone 6s', 'iPhone 6s Plus', 
+            'iPhone 7', 'iPhone 7 Plus', 'iPhone 8', 'iPhone 8 Plus', 
+            'iPhone X', 'iPhone XR', 'iPhone XS', 'iPhone XS Max',
+            'iPhone 11', 'iPhone 11 Pro', 'iPhone 11 Pro Max',
+            'iPhone 12', 'iPhone 12 Mini', 'iPhone 12 Pro', 'iPhone 12 Pro Max',
+            'iPhone 13', 'iPhone 13 Mini', 'iPhone 13 Pro', 'iPhone 13 Pro Max',
+            'iPhone 14', 'iPhone 14 Plus', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
+            'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max',
+            'iPhone 16', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
+            'iPhone 17', 'iPhone 17 Plus', 'iPhone 17 Pro', 'iPhone 17 Pro Max'
+        ];
 
-  // --- 2. JCID TAGS (Battery, FaceID, Receiver) ---
-  'JCID Tag - Battery': [
-    { model: 'iPhone 11', price: 5000 },
-    { model: 'iPhone 11 Pro / Max', price: 5000 },
-    { model: 'iPhone 12 / 12 Pro', price: 6000 },
-    { model: 'iPhone 13 / 13 Pro', price: 7000 },
-    { model: 'iPhone 14 Series', price: 8000 }
-  ],
-  'JCID Tag - FaceID': [
-    { model: 'iPhone X/XS/XR', price: 11500 },
-    { model: 'iPhone 11', price: 12500 },
-    { model: 'iPhone 11 Pro Max', price: 12500 },
-    { model: 'iPhone 12 Series', price: 14500 },
-    { model: 'iPhone 13', price: 20000 },
-    { model: 'iPhone 13 Pro Max', price: 24000 },
-    { model: 'iPhone 14 Pro Max', price: 24000 },
-    { model: 'iPhone 15 Pro Max', price: 25000 }
-  ],
-  'JCID Tag - Receiver': [
-    { model: 'iPhone X/XS', price: 18000 },
-    { model: 'iPhone 11', price: 22000 },
-    { model: 'iPhone 12 Series', price: 28000 },
-    { model: 'iPhone 13 Series', price: 30000 },
-    { model: 'iPhone 13 Pro Max', price: 33000 }
-  ],
+        // Find start and end indices
+        const start = allModels.findIndex(m => m.toLowerCase().includes(startStr.toLowerCase().replace('iphone ', '')));
+        const end = allModels.findIndex(m => m.toLowerCase().includes(endStr.toLowerCase().replace('iphone ', '')));
 
-  // --- 3. AY TAGS ---
-  'AY Tag - Battery': [
-    { model: 'iPhone 11 Series', price: 8000 },
-    { model: 'iPhone 12 Series', price: 8500 },
-    { model: 'iPhone 13', price: 10500 },
-    { model: 'iPhone 13 Pro Max', price: 11000 },
-    { model: 'iPhone 14 Series', price: 11000 },
-    { model: 'iPhone 15 Series', price: 11500 }
-  ],
+        if (start === -1) return [];
+        // If end is found, slice up to it; otherwise go to end of list
+        return end !== -1 ? allModels.slice(start, end + 1) : allModels.slice(start);
+    }
+};
 
-  // --- 4. GLASS + OCA ---
-  'Glass + OCA': [
-    { model: 'iPhone 7 / 8 Plus', price: 2300 },
-    { model: 'iPhone X - XS Max', price: 2200 },
-    { model: 'iPhone 11 - 11 Pro Max', price: 2500 },
-    { model: 'iPhone 12 - 12 Pro Max', price: 2700 },
-    { model: 'iPhone 13 - 13 Pro Max', price: 2800 },
-    { model: 'iPhone 14 - 14 Pro Max', price: 3000 },
-    { model: 'iPhone 15 Series', price: 3100 },
-    { model: 'iPhone 16 Series', price: 3500 }
-  ],
+// --- 2. DEFINE PRODUCT RANGES ---
+const productDefinitions = [
+    // JCID Products
+    { name: "JCID Battery Tag", start: "11", end: "17 Pro Max", category: "Tags" },
+    { name: "JCID Face ID Tag", start: "11", end: "17 Pro Max", category: "Tags" },
+    { name: "JCID Receiver", start: "X", end: "17 Pro Max", category: "Tags" },
+    { name: "JCID Camera Tag", start: "X", end: "17 Pro Max", category: "Tags" },
+    { name: "JCID Board", single: true, category: "Tools" }, // Single Item
 
-  // --- 5. BACK GLASS ---
-  'Back Glass': [
-    { model: 'iPhone 8 - X', price: 3000 },
-    { model: 'iPhone XR - 11', price: 4000 },
-    { model: 'iPhone 12 - 13 Series', price: 5000 },
-    { model: 'iPhone 14 - 15 Series', price: 7000 }
-  ],
+    // AY Products
+    { name: "AY Battery Tag", start: "11", end: "17 Pro Max", category: "Tags" },
+    { name: "AY Face ID Tag", start: "11", end: "17 Pro Max", category: "Tags" },
 
-  // --- 6. FRAMES ---
-  'Frame': [
-    { model: 'iPhone X - XS Max', price: 2500 },
-    { model: 'iPhone 11 Series', price: 2700 },
-    { model: 'iPhone 12 Series', price: 3000 },
-    { model: 'iPhone 13 Series', price: 3000 },
-    { model: 'iPhone 14 Series', price: 3500 },
-    { model: 'iPhone 15 Series', price: 3700 },
-    { model: 'iPhone 16 Series', price: 4000 }
-  ],
+    // Screens
+    { name: "Screen (OLED)", start: "X", end: "17 Pro Max", category: "Screens" },
+    { name: "Screen (Incell)", start: "X", end: "14 Pro Max", category: "Screens" },
+    { name: "Screen (Follow Come)", start: "X", end: "17 Pro Max", category: "Screens" },
 
-  // --- 7. CASING (Full & Empty) ---
-  'Casing - Empty': [
-    { model: 'iPhone XR / 11', price: 15000 },
-    { model: 'iPhone 11 Pro Max', price: 30000 },
-    { model: 'iPhone 12 Pro Max', price: 35000 },
-    { model: 'iPhone 13 Pro Max', price: 40000 },
-    { model: 'iPhone 14 Pro Max', price: 43000 },
-    { model: 'iPhone 15 Pro Max', price: 55000 },
-    { model: 'iPhone 16 Pro Max', price: 57000 }
-  ],
-  'Casing - Full (Pulled)': [
-    { model: 'iPhone 12 Pro', price: 40000 },
-    { model: 'iPhone 13 Pro', price: 45000 },
-    { model: 'iPhone 14 Pro', price: 55000 },
-    { model: 'iPhone 15 Pro', price: 75000 },
-    { model: 'iPhone 16 Pro', price: 90000 }
-  ],
+    // Housing & Glass
+    { name: "Casing (Empty)", start: "X", end: "17 Pro Max", category: "Housing" },
+    { name: "Casing (Full)", start: "X", end: "17 Pro Max", category: "Housing" },
+    { name: "Back Glass", start: "8", end: "17 Pro Max", category: "Glass" },
+    { name: "Frame", start: "X", end: "17 Pro Max", category: "Housing" },
+    { name: "Laminating Glass", start: "6", end: "17 Pro Max", category: "Glass" },
 
-  // --- 8. EARPIECE ---
-  'Earpiece': [
-    { model: 'iPhone X - 11', price: 3000 },
-    { model: 'iPhone 12 - 13', price: 4500 },
-    { model: 'iPhone 14 - 15', price: 6000 }
-  ]
+    // Accessories
+    { name: "Earpiece", start: "X", end: "17 Pro Max", category: "Accessories" },
+    { name: "Touch Panel", start: "X", end: "12 Pro Max", category: "Glass" },
+    { name: "Down Speaker", start: "X", end: "17 Pro Max", category: "Accessories" },
+    { name: "Wireless Coil", start: "X", end: "17 Pro Max", category: "Accessories" },
+    { name: "Camera", start: "X", end: "17 Pro Max", category: "Cameras" },
+    { name: "Flashlight", start: "X", end: "17 Pro Max", category: "Accessories" },
+
+    // Batteries
+    { name: "Battery (Semi-Finished)", start: "6", end: "17 Pro Max", category: "Batteries" },
+    { name: "Battery (Finished)", start: "6", end: "17 Pro Max", category: "Batteries" }
+];
+
+// --- 3. GENERATOR FUNCTION ---
+export const generateStoreData = () => {
+    let data = [];
+
+    productDefinitions.forEach(prod => {
+        if (prod.single) {
+            // Handle single items like "JCID Board"
+            data.push({
+                name: prod.name,
+                category: prod.category,
+                model: "Universal",
+                price: 0,
+                stock: 0
+            });
+        } else {
+            // Handle Ranges
+            const range = models.getRange(prod.start, prod.end);
+            range.forEach(model => {
+                data.push({
+                    name: `${prod.name} - ${model}`,
+                    category: prod.category,
+                    model: model,
+                    price: 0, // Default price 0, edit in Dashboard
+                    stock: 0
+                });
+            });
+        }
+    });
+
+    return data;
 };

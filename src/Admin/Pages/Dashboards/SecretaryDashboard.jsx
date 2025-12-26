@@ -2,14 +2,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     ClipboardList, ShoppingBag, Search, DollarSign, Clock, 
     CheckCircle, LogOut, Bell, User, Phone, Calendar, 
-    ArrowRight, TrendingUp, Package, AlertCircle
+    ArrowRight, TrendingUp, Layers
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db, auth } from '../../../firebaseConfig'; 
 import { signOut } from 'firebase/auth'; 
 import { 
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell 
+    BarChart, Bar, XAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell 
 } from 'recharts';
 
 // --- UTILS ---
@@ -27,16 +27,23 @@ const getTimeAgo = (timestamp) => {
 
 // --- COMPONENTS ---
 const StatCard = ({ title, value, icon: Icon, color, subtext }) => (
-    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-start justify-between transition-all hover:shadow-md">
+    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-start justify-between transition-all hover:shadow-md h-full">
         <div>
             <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">{title}</p>
             <h3 className="text-2xl font-black text-gray-900">{value}</h3>
-            {subtext && <p className={`text-xs mt-1 font-medium ${color === 'green' ? 'text-green-600' : 'text-gray-400'}`}>{subtext}</p>}
+            {subtext && <p className={`text-xs mt-1 font-medium ${
+                color === 'green' ? 'text-green-600' : 
+                color === 'indigo' ? 'text-indigo-600' :
+                color === 'orange' ? 'text-orange-600' :
+                color === 'purple' ? 'text-purple-600' :
+                'text-blue-600'
+            }`}>{subtext}</p>}
         </div>
         <div className={`p-3 rounded-xl ${
             color === 'purple' ? 'bg-purple-50 text-purple-600' :
             color === 'green' ? 'bg-green-50 text-green-600' :
             color === 'orange' ? 'bg-orange-50 text-orange-600' :
+            color === 'indigo' ? 'bg-indigo-50 text-indigo-600' :
             'bg-blue-50 text-blue-600'
         }`}>
             <Icon size={22} />
@@ -112,7 +119,14 @@ const SecretaryDashboard = ({ user }) => {
           intake: intakeCounts[day] || 0
       }));
 
-      return { cashToday, activeJobs, readyForPickup, recentIntake, chartData };
+      return { 
+          cashToday, 
+          activeJobs, 
+          readyForPickup, 
+          recentIntake, 
+          chartData,
+          totalOrders: orders.length // 🔥 New Metric: Total Orders
+      };
   }, [orders]);
 
   // 3. Search Logic
@@ -146,10 +160,21 @@ const SecretaryDashboard = ({ user }) => {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-6 space-y-6">
+      <main className="max-w-[1600px] mx-auto p-6 space-y-6">
 
         {/* --- 1. METRICS ROW --- */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Updated grid to xl:grid-cols-5 to fit the new card */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+            
+            {/* 🔥 NEW CARD: All Time Orders */}
+            <StatCard 
+                title="All Time Orders" 
+                value={dashboardData.totalOrders} 
+                icon={Layers} 
+                color="indigo" 
+                subtext="Total Lifetime Volume" 
+            />
+
             <StatCard title="Cash Collected (Today)" value={formatCurrency(dashboardData.cashToday)} icon={DollarSign} color="green" subtext="Daily Revenue" />
             <StatCard title="Ready for Pickup" value={dashboardData.readyForPickup.length} icon={Bell} color="orange" subtext="Awaiting Customer" />
             <StatCard title="Active Jobs" value={dashboardData.activeJobs} icon={Clock} color="blue" subtext="In Workshop" />
@@ -162,14 +187,12 @@ const SecretaryDashboard = ({ user }) => {
             {/* LEFT: ACTIONS & PICKUP LIST */}
             <div className="lg:col-span-2 space-y-6">
                 
-                {/* Quick Actions Bar */}
+                {/* Quick Actions Bar - REMOVED CHECK INVENTORY */}
                 <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col sm:flex-row gap-3 items-center">
                     <button onClick={() => navigate('/admin/orders')} className="flex-1 w-full bg-purple-900 text-white h-12 rounded-lg font-bold hover:bg-purple-800 transition flex items-center justify-center gap-2 shadow-md">
                         <ClipboardList size={18}/> New Repair Order
                     </button>
-                    <button onClick={() => navigate('/admin/store')} className="flex-1 w-full bg-white border border-gray-300 text-gray-700 h-12 rounded-lg font-bold hover:bg-gray-50 transition flex items-center justify-center gap-2">
-                        <Package size={18}/> Check Inventory
-                    </button>
+                    {/* Inventory Button Removed Here */}
                     <div className="relative flex-1 w-full">
                         <Search className="absolute left-3 top-3.5 text-gray-400" size={16}/>
                         <input 
@@ -193,7 +216,7 @@ const SecretaryDashboard = ({ user }) => {
                     <div className="flex-1 overflow-y-auto p-4 space-y-3">
                         {filteredReadyList.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-gray-400">
-                                <Package size={48} className="mb-3 opacity-20"/>
+                                <ShoppingBag size={48} className="mb-3 opacity-20"/>
                                 <p className="text-sm">No items waiting for pickup.</p>
                             </div>
                         ) : (

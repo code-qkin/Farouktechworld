@@ -29,6 +29,7 @@ import PricingPage from './pages/PricingPage';
 // import ProofOfWorkPage from './pages/ProofOfWorkPage';
 import TrackingPage from './pages/TrackingPage';
 // import SiteGuard from './components/SiteGuard';
+import ServicePrices from './Admin/Pages/ServicePrices';
 
 
 const router = createBrowserRouter(
@@ -56,6 +57,7 @@ const router = createBrowserRouter(
           <Route path="performance" element={<PerformancePage />} />
           <Route path="job-history" element={<JobHistory />} />
           <Route path="payroll" element={<PayrollPage />} />
+          <Route path="pricing" element={<ServicePrices />} />
           {/* <Route path="settings" element={<Settings/>} /> */}
         </Route>
       </Route>

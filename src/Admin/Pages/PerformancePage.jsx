@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-    TrendingUp, DollarSign, AlertCircle, ArrowDownLeft, 
+    TrendingUp, Banknote, AlertCircle, ArrowDownLeft, 
     Calendar, Filter, Download, PieChart as PieIcon, ArrowLeft, CheckCircle, Wallet
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
@@ -213,7 +213,7 @@ const PerformanceReports = () => {
             {/* Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 <StatCard title="Net Revenue" value={formatCurrency(stats.netRevenue)} subtext="Actual Cash in Hand" icon={Wallet} color="green" />
-                <StatCard title="Gross Sales" value={formatCurrency(stats.grossSales)} subtext="Total Volume (Before Refunds)" icon={DollarSign} color="purple" />
+                <StatCard title="Gross Sales" value={formatCurrency(stats.grossSales)} subtext="Total Volume (Before Refunds)" icon={Banknote} color="purple" />
                 <StatCard title="Refunds" value={`-${formatCurrency(stats.refunds)}`} subtext="Returned to customers" icon={ArrowDownLeft} color="red" />
                 <StatCard title="Debt" value={formatCurrency(stats.debt)} subtext="Outstanding balance" icon={AlertCircle} color="blue" />
             </div>

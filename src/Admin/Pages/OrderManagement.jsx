@@ -12,9 +12,8 @@ import { db } from '../../firebaseConfig.js';
 import { useNavigate } from 'react-router-dom'; 
 import { 
     collection, doc, onSnapshot, query, orderBy, where, getDocs, 
-    serverTimestamp, runTransaction, Timestamp, addDoc, updateDoc, increment 
+    serverTimestamp, runTransaction, Timestamp, addDoc, updateDoc, increment, deleteDoc 
 } from 'firebase/firestore';
-import { repairPricing } from '../../Data/PriceData.js';
 import * as XLSX from 'xlsx';
 import { Toast, ConfirmModal } from '../Components/Feedback.jsx';
 
@@ -62,15 +61,22 @@ const OrdersManagement = () => {
     // Data State
     const [orders, setOrders] = useState([]);
     const [inventory, setInventory] = useState([]); 
+    const [dbServices, setDbServices] = useState([]); 
     const [loading, setLoading] = useState(true);
     
-    // Filters State
+    // Filters State (Main Page)
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterType, setFilterType] = useState('All');
     const [dateRange, setDateRange] = useState('30');
 
-    // Pagination State
+    // POS Store Filters
+    const [storeSearch, setStoreSearch] = useState('');
+    const [storeCategory, setStoreCategory] = useState('All');
+    const [storePage, setStorePage] = useState(1);
+    const itemsPerStorePage = 24;
+
+    // Pagination State (Main Table)
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
     
@@ -78,11 +84,12 @@ const OrdersManagement = () => {
     const [showPOS, setShowPOS] = useState(false);
     const [activeTab, setActiveTab] = useState('repair'); 
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [mobilePosTab, setMobilePosTab] = useState('input'); // 'input' or 'cart'
+    const [mobilePosTab, setMobilePosTab] = useState('input'); 
 
     // POS Data
     const [customer, setCustomer] = useState({ name: '', phone: '', email: '' });
     const [cart, setCart] = useState([]); 
+    const [discount, setDiscount] = useState(0); 
     const [repairInput, setRepairInput] = useState({ deviceModel: '', imei: '', passcode: '', condition: '' });
     const [serviceInput, setServiceInput] = useState({ type: '', cost: '' });
     const [currentDeviceServices, setCurrentDeviceServices] = useState([]); 
@@ -103,9 +110,17 @@ const OrdersManagement = () => {
             setOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             setLoading(false);
         });
+        
         const unsubInventory = onSnapshot(query(collection(db, "Inventory"), orderBy("name")), (snap) => {
             setInventory(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
+
+        const fetchServices = async () => {
+            const snap = await getDocs(collection(db, "Services"));
+            setDbServices(snap.docs.map(d => d.data()));
+        };
+        fetchServices();
+
         return () => { unsubOrders(); unsubInventory(); };
     }, []);
 
@@ -144,23 +159,63 @@ const OrdersManagement = () => {
         });
     }, [orders, searchTerm, filterStatus, filterType, dateRange]);
 
-    // --- PAGINATION LOGIC ---
+    // POS Store Logic
+    const filteredInventory = useMemo(() => {
+        return inventory.filter(item => {
+            const matchSearch = item.name.toLowerCase().includes(storeSearch.toLowerCase()) || 
+                                (item.model || '').toLowerCase().includes(storeSearch.toLowerCase());
+            const matchCategory = storeCategory === 'All' || item.category === storeCategory;
+            return matchSearch && matchCategory;
+        });
+    }, [inventory, storeSearch, storeCategory]);
+
+    const storeCategories = useMemo(() => ['All', ...new Set(inventory.map(i => i.category).filter(Boolean))].sort(), [inventory]);
+
+    // Store Pagination
+    useEffect(() => setStorePage(1), [storeSearch, storeCategory]); 
+    const indexOfLastStoreItem = storePage * itemsPerStorePage;
+    const indexOfFirstStoreItem = indexOfLastStoreItem - itemsPerStorePage;
+    const currentStoreItems = filteredInventory.slice(indexOfFirstStoreItem, indexOfLastStoreItem);
+    const totalStorePages = Math.ceil(filteredInventory.length / itemsPerStorePage);
+
+    // Main Table Pagination
     useEffect(() => { setCurrentPage(1); }, [searchTerm, filterStatus, filterType, dateRange]);
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
     const currentOrders = filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
     const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
 
-    // --- POS HANDLERS ---
-    const uniqueServices = useMemo(() => [...new Set(repairPricing.map(p => p.service))].sort(), []);
-    const uniqueModels = useMemo(() => {
-        const dbModels = repairPricing.map(p => p.model).filter(Boolean);
-        return [...new Set([...dbModels, "iPhone 11", "iPhone 12", "iPhone 13", "Samsung", "Android"])].sort();
-    }, []);
+    // --- 3. ACTIONS ---
+    const handleDeleteOrder = (order) => {
+        setConfirmConfig({
+            isOpen: true,
+            title: "Delete Order?",
+            message: `Are you sure you want to delete Ticket ${order.ticketId}? This action cannot be undone.`,
+            confirmText: "Delete Forever",
+            confirmColor: "bg-red-600",
+            action: async () => {
+                try {
+                    await deleteDoc(doc(db, "Orders", order.id));
+                    setToast({ message: "Order deleted successfully", type: "success" });
+                } catch (e) {
+                    console.error(e);
+                    setToast({ message: "Failed to delete order", type: "error" });
+                }
+                setConfirmConfig({ ...confirmConfig, isOpen: false });
+            }
+        });
+    };
+
+    // --- 4. POS LOGIC (Condensed for brevity, same as previous) ---
+    const uniqueServices = useMemo(() => [...new Set(dbServices.map(p => p.service))].sort(), [dbServices]);
+    const uniqueModels = useMemo(() => [...new Set(dbServices.map(p => p.model))].sort(), [dbServices]);
 
     const handleServiceChange = (e) => {
         const service = e.target.value;
-        const match = repairPricing.find(p => p.service === service && (p.model === repairInput.deviceModel || repairInput.deviceModel?.includes(p.model)));
+        const match = dbServices.find(p => 
+            p.service === service && 
+            (p.model === repairInput.deviceModel || repairInput.deviceModel?.includes(p.model))
+        );
         setServiceInput({ ...serviceInput, type: service, cost: match ? match.price : '' });
     };
 
@@ -207,7 +262,12 @@ const OrdersManagement = () => {
         if (!customer.name || cart.length === 0) return setToast({message: "Fill details & add items!", type: "error"});
         setIsSubmitting(true);
         const ticketId = `FTW-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(1000 + Math.random() * 9000)}`;
-        const cartTotal = cart.reduce((sum, item) => sum + item.total, 0);
+        
+        // Calculate Totals
+        const subtotal = cart.reduce((sum, item) => sum + item.total, 0);
+        const discountAmount = Number(discount) || 0;
+        const totalCost = Math.max(0, subtotal - discountAmount);
+
         const orderType = cart.some(i => i.type === 'repair') ? 'repair' : 'store_sale';
         const warrantyDate = new Date(); warrantyDate.setDate(warrantyDate.getDate() + 7);
         try {
@@ -218,13 +278,19 @@ const OrdersManagement = () => {
                 snaps.forEach((snap, idx) => { if (!snap.exists() || snap.data().stock < productUpdates[idx].item.qty) throw `Stock Error: ${productUpdates[idx].item.name}`; });
                 snaps.forEach((snap, idx) => t.update(productUpdates[idx].ref, { stock: snap.data().stock - productUpdates[idx].item.qty }));
                 const newOrderRef = doc(collection(db, "Orders"));
-                t.set(newOrderRef, { ticketId, customer, orderType, items: cart, totalCost: cartTotal, amountPaid: 0, balance: cartTotal, paymentStatus: 'Unpaid', paymentMethod: null, paid: false, status: orderType === 'repair' ? 'Pending' : 'Completed', createdAt: serverTimestamp(), warrantyExpiry: Timestamp.fromDate(warrantyDate) });
+                
+                t.set(newOrderRef, { 
+                    ticketId, customer, orderType, items: cart, 
+                    subtotal, discount: discountAmount, totalCost,
+                    amountPaid: 0, balance: totalCost, paymentStatus: 'Unpaid', paymentMethod: null, paid: false, 
+                    status: orderType === 'repair' ? 'Pending' : 'Completed', createdAt: serverTimestamp(), warrantyExpiry: Timestamp.fromDate(warrantyDate) 
+                });
             });
-            setShowPOS(false); setCart([]); setCustomer({ name: '', phone: '', email: '' }); setToast({message: `Order ${ticketId} Created!`, type: "success"});
+            setShowPOS(false); setCart([]); setCustomer({ name: '', phone: '', email: '' }); setDiscount(0);
+            setToast({message: `Order ${ticketId} Created!`, type: "success"});
         } catch (e) { setToast({message: `Error: ${e}`, type: "error"}); } finally { setIsSubmitting(false); }
     };
 
-    // --- 4. WARRANTY / RETURN HANDLERS ---
     const handleSearchReturnTicket = async () => {
         if(!warrantyTicketSearch) return;
         setLoading(true);
@@ -354,7 +420,6 @@ const OrdersManagement = () => {
                         </select>
                         <ChevronDown className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" size={14}/>
                     </div>
-                    {/* ... (Other filters remain same) ... */}
                 </div>
             </div>
 
@@ -370,6 +435,7 @@ const OrdersManagement = () => {
                                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Total</th>
                                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Payment</th>
                                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Status</th>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -394,6 +460,16 @@ const OrdersManagement = () => {
                                     <td className="px-6 py-4 text-right font-mono font-bold text-slate-800">{formatCurrency(order.totalCost)}</td>
                                     <td className="px-6 py-4 text-center"><PaymentBadge status={order.paymentStatus} /></td>
                                     <td className="px-6 py-4 text-center"><StatusBadge status={order.status} /></td>
+                                    {/* 🔥 DELETE BUTTON COLUMN */}
+                                    <td className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                                        <button 
+                                            onClick={() => handleDeleteOrder(order)}
+                                            className="text-gray-300 hover:text-red-600 hover:bg-red-50 p-2 rounded-full transition"
+                                            title="Delete Order"
+                                        >
+                                            <Trash2 size={18}/>
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -416,10 +492,11 @@ const OrdersManagement = () => {
             </div>
 
             {/* --- 4. RESPONSIVE POS MODAL --- */}
+            {/* ... (POS Modal code remains identical to previous, included in full response if needed but shortened here for brevity as focus is on Delete) */}
             {showPOS && (
                 <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-0 sm:p-4 backdrop-blur-sm">
+                    {/* ... POS Content ... */}
                     <div className="bg-white w-full max-w-[1400px] h-[100dvh] sm:h-[90vh] sm:rounded-2xl shadow-2xl flex flex-col lg:flex-row overflow-hidden relative">
-                        
                         {/* LEFT: INPUTS */}
                         <div className={`w-full lg:w-[65%] flex flex-col bg-gray-50 h-full ${mobilePosTab === 'cart' ? 'hidden lg:flex' : 'flex'}`}>
                             {/* Toolbar */}
@@ -502,19 +579,60 @@ const OrdersManagement = () => {
                                     </div>
                                 )}
 
-                                {/* STORE GRID */}
+                                {/* STORE GRID WITH SEARCH, FILTER & PAGINATION */}
                                 {activeTab === 'store' && (
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 pb-20">
-                                        {inventory.map(p => (
-                                            <button key={p.id} onClick={() => handleGridAddToCart(p)} disabled={p.stock < 1} className="p-3 sm:p-4 bg-white border border-gray-200 rounded-xl text-left h-32 flex flex-col justify-between hover:border-purple-500 hover:shadow-md transition group disabled:opacity-50 disabled:bg-gray-100">
-                                                <span className="font-bold text-xs sm:text-sm text-slate-700 line-clamp-2 group-hover:text-purple-700 transition">{p.name}</span>
-                                                <div className="flex justify-between items-end w-full">
-                                                    <span className="text-slate-900 font-black text-base sm:text-lg">{formatCurrency(p.price)}</span>
-                                                    <span className={`text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded ${p.stock < 3 ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>{p.stock} left</span>
+                                    <>
+                                        {/* SEARCH & CATEGORY BAR */}
+                                        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+                                            <div className="relative flex-1">
+                                                <Search className="absolute left-3 top-3 text-gray-400" size={18}/>
+                                                <input 
+                                                    className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                                                    placeholder="Search item..."
+                                                    value={storeSearch}
+                                                    onChange={e => setStoreSearch(e.target.value)}
+                                                />
+                                            </div>
+                                            <div className="relative min-w-[150px]">
+                                                <select 
+                                                    className="w-full p-2.5 bg-white border border-gray-200 rounded-lg outline-none text-sm font-bold text-slate-700 appearance-none"
+                                                    value={storeCategory}
+                                                    onChange={e => setStoreCategory(e.target.value)}
+                                                >
+                                                    {storeCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                                                </select>
+                                                <Filter className="absolute right-3 top-3 text-gray-400 pointer-events-none" size={16}/>
+                                            </div>
+                                        </div>
+
+                                        {/* ITEMS GRID */}
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 mb-6">
+                                            {currentStoreItems.map(p => (
+                                                <button key={p.id} onClick={() => handleGridAddToCart(p)} disabled={p.stock < 1} className="p-3 sm:p-4 bg-white border border-gray-200 rounded-xl text-left h-32 flex flex-col justify-between hover:border-purple-500 hover:shadow-md transition group disabled:opacity-50 disabled:bg-gray-100">
+                                                    <span className="font-bold text-xs sm:text-sm text-slate-700 line-clamp-2 group-hover:text-purple-700 transition">{p.name}</span>
+                                                    <div className="flex justify-between items-end w-full">
+                                                        <span className="text-slate-900 font-black text-base sm:text-lg">{formatCurrency(p.price)}</span>
+                                                        <span className={`text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded ${p.stock < 3 ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>{p.stock} left</span>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                            {filteredInventory.length === 0 && (
+                                                <div className="col-span-full py-10 text-center text-slate-400">
+                                                    <ShoppingBag size={48} className="mx-auto mb-2 opacity-20"/>
+                                                    <p className="font-medium">No items found.</p>
                                                 </div>
-                                            </button>
-                                        ))}
-                                    </div>
+                                            )}
+                                        </div>
+
+                                        {/* STORE PAGINATION */}
+                                        {filteredInventory.length > itemsPerStorePage && (
+                                            <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-200 mb-20">
+                                                <button onClick={() => setStorePage(p => Math.max(1, p - 1))} disabled={storePage === 1} className="p-2 hover:bg-gray-100 rounded-lg disabled:opacity-50"><ChevronLeft size={20}/></button>
+                                                <span className="text-xs font-bold text-slate-500">Page {storePage} of {totalStorePages}</span>
+                                                <button onClick={() => setStorePage(p => Math.min(totalStorePages, p + 1))} disabled={storePage === totalStorePages} className="p-2 hover:bg-gray-100 rounded-lg disabled:opacity-50"><ChevronRight size={20}/></button>
+                                            </div>
+                                        )}
+                                    </>
                                 )}
 
                                 {/* WARRANTY UI */}
@@ -593,8 +711,33 @@ const OrdersManagement = () => {
                             </div>
                             
                             <div className="p-4 sm:p-6 border-t border-gray-100 bg-gray-50 shrink-0 mb-16 lg:mb-0">
-                                <div className="flex justify-between text-slate-500 mb-2 text-sm"><span>Subtotal</span><span>{formatCurrency(cart.reduce((a,b)=>a+b.total,0))}</span></div>
-                                <div className="flex justify-between text-2xl font-black text-slate-900 mb-6"><span>Total</span><span>{formatCurrency(cart.reduce((a,b)=>a+b.total,0))}</span></div>
+                                {/* Subtotal Display */}
+                                <div className="flex justify-between text-slate-500 mb-2 text-sm">
+                                    <span>Subtotal</span>
+                                    <span>{formatCurrency(cart.reduce((a,b)=>a+b.total,0))}</span>
+                                </div>
+
+                                {/* DISCOUNT INPUT */}
+                                <div className="flex justify-between items-center text-slate-500 mb-4 text-sm">
+                                    <span className="text-red-500 font-bold">Discount</span>
+                                    <div className="relative">
+                                        <span className="absolute left-2 top-1.5 text-gray-400 font-bold">₦</span>
+                                        <input
+                                            type="number"
+                                            className="w-24 pl-6 pr-2 py-1 border rounded text-right text-sm outline-none focus:border-purple-500 font-bold text-red-600 bg-red-50 focus:bg-white transition"
+                                            value={discount}
+                                            onChange={(e) => setDiscount(Math.max(0, Number(e.target.value)))}
+                                            placeholder="0"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Final Total */}
+                                <div className="flex justify-between text-2xl font-black text-slate-900 mb-6 border-t border-dashed border-gray-200 pt-4">
+                                    <span>Total</span>
+                                    <span>{formatCurrency(Math.max(0, cart.reduce((a,b)=>a+b.total,0) - discount))}</span>
+                                </div>
+
                                 <button onClick={handleCheckout} disabled={isSubmitting || cart.length === 0} className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold shadow-lg hover:bg-black transition disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2 active:scale-95">
                                     Create Ticket <ArrowRight size={18}/>
                                 </button>

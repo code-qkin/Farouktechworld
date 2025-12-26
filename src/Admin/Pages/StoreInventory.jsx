@@ -2,24 +2,45 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Package, Plus, Search, Edit2, Trash2, Smartphone, 
     ArrowLeft, ArrowUpCircle, Save, X, 
-    AlertTriangle, DollarSign, CheckCircle, ClipboardEdit, Loader2,
-    Download, Filter, ChevronDown
+    AlertTriangle, CheckCircle, ClipboardEdit, Loader2,
+    Download, Filter, ChevronDown, Layers, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AdminContext';
 import { db } from '../../firebaseConfig'; 
 import { 
-    collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, increment, serverTimestamp 
+    collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, increment, serverTimestamp, writeBatch 
 } from 'firebase/firestore';
 import { Toast, ConfirmModal } from '../Components/Feedback';
 import * as XLSX from 'xlsx';
+import InventorySeeder from '../Components/InventorySeeder';
 
 const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
+
+// --- HELPER: Model List for Range Generation ---
+const ALL_MODELS = [
+    'iPhone 6', 'iPhone 6 Plus', 'iPhone 6s', 'iPhone 6s Plus', 
+    'iPhone 7', 'iPhone 7 Plus', 'iPhone 8', 'iPhone 8 Plus', 
+    'iPhone X', 'iPhone XR', 'iPhone XS', 'iPhone XS Max',
+    'iPhone 11', 'iPhone 11 Pro', 'iPhone 11 Pro Max',
+    'iPhone 12', 'iPhone 12 Mini', 'iPhone 12 Pro', 'iPhone 12 Pro Max',
+    'iPhone 13', 'iPhone 13 Mini', 'iPhone 13 Pro', 'iPhone 13 Pro Max',
+    'iPhone 14', 'iPhone 14 Plus', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
+    'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max',
+    'iPhone 16', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
+    'iPhone 17', 'iPhone 17 Plus', 'iPhone 17 Pro', 'iPhone 17 Pro Max'
+];
+
+const getModelRange = (start, end) => {
+    const sIdx = ALL_MODELS.indexOf(start);
+    const eIdx = ALL_MODELS.indexOf(end);
+    if (sIdx === -1 || eIdx === -1 || sIdx > eIdx) return [];
+    return ALL_MODELS.slice(sIdx, eIdx + 1);
+};
 
 // --- HELPER: Crash-Proof Number Parsers ---
 const safeParseFloat = (val) => {
     if (!val) return 0;
-    // Remove everything that isn't a number or a dot (e.g. removes commas, ₦, spaces)
     const clean = String(val).replace(/[^0-9.]/g, ''); 
     const num = parseFloat(clean);
     return isNaN(num) ? 0 : num;
@@ -27,29 +48,19 @@ const safeParseFloat = (val) => {
 
 const safeParseInt = (val) => {
     if (!val) return 0;
-    const clean = String(val).replace(/[^0-9]/g, '');
+    const clean = String(val).replace(/[^0-9]/g, ''); 
     const num = parseInt(clean, 10);
     return isNaN(num) ? 0 : num;
 };
 
-// --- SUB-COMPONENT: Stock Health Bar ---
 const StockHealth = ({ stock }) => {
     let color = 'bg-green-500';
     let width = '100%';
     let label = 'In Stock';
 
-    if (stock === 0) {
-        color = 'bg-red-500';
-        width = '5%';
-        label = 'Out of Stock';
-    } else if (stock < 5) {
-        color = 'bg-orange-500';
-        width = '30%';
-        label = 'Low Stock';
-    } else if (stock < 20) {
-        color = 'bg-blue-500';
-        width = '60%';
-    }
+    if (stock === 0) { color = 'bg-red-500'; width = '5%'; label = 'Out of Stock'; } 
+    else if (stock < 5) { color = 'bg-orange-500'; width = '30%'; label = 'Low Stock'; } 
+    else if (stock < 20) { color = 'bg-blue-500'; width = '60%'; }
 
     return (
         <div className="w-full max-w-[120px]">
@@ -69,14 +80,19 @@ const StoreInventory = () => {
     const navigate = useNavigate();
     
     // State
-    const [viewMode, setViewMode] = useState('list'); // 'list' or 'create'
+    const [viewMode, setViewMode] = useState('list'); 
     const [products, setProducts] = useState([]); 
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
     
+    // Filters
     const [searchTerm, setSearchTerm] = useState('');
     const [filterCategory, setFilterCategory] = useState('All');
     const [filterStock, setFilterStock] = useState('All'); 
+
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 50;
 
     // Modals
     const [restockItem, setRestockItem] = useState(null); 
@@ -84,9 +100,12 @@ const StoreInventory = () => {
     const [editingItem, setEditingItem] = useState(null); 
 
     // Forms
-    const [newProduct, setNewProduct] = useState({ name: '', category: '', type: '', model: '', price: '', stock: 0 });
+    const [isBulkMode, setIsBulkMode] = useState(false); 
+    const [newProduct, setNewProduct] = useState({ 
+        name: '', category: '', type: '', model: '', price: '', stock: 0,
+        rangeStart: 'iPhone X', rangeEnd: 'iPhone 14 Pro Max' 
+    });
 
-    // Feedback
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
@@ -116,7 +135,26 @@ const StoreInventory = () => {
         return { totalItems, lowStock, outOfStock, totalValue };
     }, [products]);
 
-    // 3. ACTIONS
+    // 3. FILTERING & PAGINATION
+    const filteredProducts = useMemo(() => {
+        return products.filter(product => {
+            const term = searchTerm.toLowerCase();
+            const matchesSearch = product.name.toLowerCase().includes(term) || product.model?.toLowerCase().includes(term);
+            const matchesCategory = filterCategory === 'All' || product.category === filterCategory;
+            const matchesStock = filterStock === 'All' || (filterStock === 'Low' && product.stock < 5 && product.stock > 0) || (filterStock === 'Out' && product.stock === 0);
+            return matchesSearch && matchesCategory && matchesStock;
+        });
+    }, [products, searchTerm, filterCategory, filterStock]);
+
+    // Reset to page 1 when filters change
+    useEffect(() => setCurrentPage(1), [searchTerm, filterCategory, filterStock]);
+
+    const indexOfLastItem = currentPage * itemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+    const currentProducts = filteredProducts.slice(indexOfFirstItem, indexOfLastItem);
+    const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+
+    // 4. ACTIONS
     const handleExport = () => {
         const data = products.map(p => ({
             "Product": p.name, "Category": p.category, "Model": p.model,
@@ -134,28 +172,52 @@ const StoreInventory = () => {
         
         setActionLoading(true);
         try {
-            // 🔥 CRITICAL FIX: Safe Parsing prevents "NaN" errors
             const safePrice = safeParseFloat(newProduct.price);
             const safeStock = safeParseInt(newProduct.stock);
 
-            await addDoc(collection(db, "Inventory"), {
-                name: newProduct.name.trim(),
-                category: newProduct.category.trim(),
-                model: newProduct.model ? newProduct.model.trim() : "",
-                type: newProduct.type ? newProduct.type.trim() : "",
-                price: safePrice,
-                stock: safeStock,
-                lastUpdated: serverTimestamp()
-            });
+            if (isBulkMode) {
+                // BULK ADD
+                const models = getModelRange(newProduct.rangeStart, newProduct.rangeEnd);
+                if (models.length === 0) throw new Error("Invalid Range Selected");
 
-            setNewProduct({ name: '', category: '', type: '', model: '', price: '', stock: 0 });
-            setToast({ message: "Product Added Successfully", type: "success" });
+                const batch = writeBatch(db);
+                models.forEach(model => {
+                    const fullName = `${newProduct.name} - ${model}`;
+                    const safeId = fullName.replace(/[^a-zA-Z0-9]/g, '_'); 
+                    const docRef = doc(db, "Inventory", safeId);
+                    
+                    batch.set(docRef, {
+                        name: fullName,
+                        category: newProduct.category.trim(),
+                        model: model,
+                        price: safePrice,
+                        stock: safeStock,
+                        lastUpdated: serverTimestamp()
+                    }, { merge: true });
+                });
+
+                await batch.commit();
+                setToast({ message: `Successfully added ${models.length} items!`, type: "success" });
+
+            } else {
+                // SINGLE ADD
+                await addDoc(collection(db, "Inventory"), {
+                    name: newProduct.name.trim(),
+                    category: newProduct.category.trim(),
+                    model: newProduct.model ? newProduct.model.trim() : "",
+                    price: safePrice,
+                    stock: safeStock,
+                    lastUpdated: serverTimestamp()
+                });
+                setToast({ message: "Product Added Successfully", type: "success" });
+            }
+
+            setNewProduct(prev => ({ ...prev, name: '', model: '', price: '', stock: 0 }));
             setViewMode('list');
+
         } catch (e) { 
             console.error("ADD ERROR:", e);
-            let msg = "Failed to add product.";
-            if(e.code === 'permission-denied') msg = "Permission Denied. Check Rules.";
-            setToast({ message: msg, type: "error" }); 
+            setToast({ message: e.message || "Failed to add.", type: "error" }); 
         }
         setActionLoading(false);
     };
@@ -208,15 +270,6 @@ const StoreInventory = () => {
         });
     };
 
-    // Filter Logic
-    const filteredProducts = products.filter(product => {
-        const term = searchTerm.toLowerCase();
-        const matchesSearch = product.name.toLowerCase().includes(term) || product.model?.toLowerCase().includes(term);
-        const matchesCategory = filterCategory === 'All' || product.category === filterCategory;
-        const matchesStock = filterStock === 'All' || (filterStock === 'Low' && product.stock < 5 && product.stock > 0) || (filterStock === 'Out' && product.stock === 0);
-        return matchesSearch && matchesCategory && matchesStock;
-    });
-
     if (role !== 'admin') return <Navigate to="/admin/dashboard" replace />;
 
     return (
@@ -225,7 +278,7 @@ const StoreInventory = () => {
             <ConfirmModal isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmText={confirmConfig.confirmText} confirmColor={confirmConfig.confirmColor} onCancel={() => setConfirmConfig({...confirmConfig, isOpen: false})} onConfirm={confirmConfig.action} />
 
             {/* --- HEADER --- */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
                 <div className="flex items-center gap-4">
                     <button onClick={() => navigate('/admin/dashboard')} className="bg-white p-2.5 rounded-xl shadow-sm border border-gray-200 hover:bg-gray-100 text-slate-600 transition"><ArrowLeft size={20}/></button>
                     <div>
@@ -233,18 +286,26 @@ const StoreInventory = () => {
                         <p className="text-sm font-medium text-slate-500">Manage stock levels & pricing</p>
                     </div>
                 </div>
-                <div className="flex gap-3">
-                    <button onClick={handleExport} className="flex items-center gap-2 bg-white border border-gray-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition text-sm shadow-sm"><Download size={16} /> Export</button>
-                    <button onClick={() => setViewMode(viewMode === 'list' ? 'create' : 'list')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold shadow-md transition text-sm ${viewMode === 'list' ? 'bg-purple-900 text-white hover:bg-purple-800' : 'bg-white text-slate-700 hover:bg-gray-50 border border-gray-200'}`}>
-                        {viewMode === 'list' ? <><Plus size={18}/> Add Product</> : <><ArrowLeft size={18}/> Back to List</>}
-                    </button>
+                
+                <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto items-start sm:items-center">
+                    {/* <div className="flex-1 xl:flex-none w-full sm:w-auto">
+                        <InventorySeeder />
+                    </div> */}
+                    <div className="flex gap-3 w-full sm:w-auto">
+                        <button onClick={handleExport} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white border border-gray-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition text-sm shadow-sm"><Download size={16} /> Export</button>
+                        <button onClick={() => setViewMode(viewMode === 'list' ? 'create' : 'list')} className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold shadow-md transition text-sm ${viewMode === 'list' ? 'bg-purple-900 text-white hover:bg-purple-800' : 'bg-white text-slate-700 hover:bg-gray-50 border border-gray-200'}`}>
+                            {viewMode === 'list' ? <><Plus size={18}/> Add Product</> : <><ArrowLeft size={18}/> Back to List</>}
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            {/* --- STATS BAR --- */}
+            {/* --- STATS BAR  --- */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between h-28">
-                    <div className="flex justify-between"><span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Value</span><div className="bg-green-50 p-1.5 rounded-lg text-green-600"><DollarSign size={16}/></div></div>
+                    <div className="flex justify-between"><span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Value</span>
+                        <div className="bg-green-50 px-2.5 py-1 rounded-lg text-green-600 font-black font-mono text-lg flex items-center justify-center">₦</div>
+                    </div>
                     <span className="text-2xl font-black text-slate-900">{formatCurrency(stats.totalValue)}</span>
                 </div>
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between h-28">
@@ -265,7 +326,7 @@ const StoreInventory = () => {
             {viewMode === 'list' && (
                 <div className="space-y-6 animate-in fade-in">
                     
-                    {/* Control Bar */}
+                    {/* Controls */}
                     <div className="bg-white p-2 rounded-2xl shadow-sm border border-gray-200 flex flex-col lg:flex-row gap-2">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-3.5 text-gray-400" size={18}/>
@@ -293,8 +354,8 @@ const StoreInventory = () => {
                         </div>
                     </div>
 
-                    {/* Data Grid */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    {/* Table */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse">
                                 <thead>
@@ -307,7 +368,7 @@ const StoreInventory = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
-                                    {filteredProducts.map((p) => (
+                                    {currentProducts.map((p) => (
                                         <tr key={p.id} className="hover:bg-purple-50/30 transition group">
                                             <td className="px-6 py-4">
                                                 <div className="font-bold text-slate-900">{p.name}</div>
@@ -322,7 +383,7 @@ const StoreInventory = () => {
                                             <td className="px-6 py-4 text-right font-mono font-bold text-slate-800">{formatCurrency(p.price)}</td>
                                             <td className="px-6 py-4"><StockHealth stock={p.stock}/></td>
                                             <td className="px-6 py-4 text-right">
-                                                <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <div className="flex items-center justify-end gap-2">
                                                     <button onClick={() => setRestockItem(p)} className="p-2 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 hover:scale-105 transition shadow-sm" title="Add Stock"><ArrowUpCircle size={16}/></button>
                                                     <button onClick={() => setEditingItem(p)} className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 hover:scale-105 transition shadow-sm" title="Edit"><Edit2 size={16}/></button>
                                                     <button onClick={() => handleDelete(p)} className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 hover:scale-105 transition shadow-sm" title="Delete"><Trash2 size={16}/></button>
@@ -336,35 +397,93 @@ const StoreInventory = () => {
                                 </tbody>
                             </table>
                         </div>
+
+                        {/* PAGINATION FOOTER */}
+                        {filteredProducts.length > 0 && (
+                            <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-between">
+                                <span className="text-sm text-gray-500 hidden sm:block">
+                                    Showing <span className="font-bold">{indexOfFirstItem + 1}</span> to <span className="font-bold">{Math.min(indexOfLastItem, filteredProducts.length)}</span> of <span className="font-bold">{filteredProducts.length}</span> results
+                                </span>
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
+                                        disabled={currentPage === 1}
+                                        className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:hover:bg-transparent transition"
+                                    >
+                                        <ChevronLeft size={18}/>
+                                    </button>
+                                    
+                                    <span className="text-xs font-bold bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
+                                        Page {currentPage} of {totalPages}
+                                    </span>
+
+                                    <button 
+                                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
+                                        disabled={currentPage === totalPages}
+                                        className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:hover:bg-transparent transition"
+                                    >
+                                        <ChevronRight size={18}/>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
 
-            {/* --- VIEW: CREATE PRODUCT FORM --- */}
+            {/* --- VIEW: CREATE PRODUCT FORM (SMART BULK) --- */}
             {viewMode === 'create' && (
                 <div className="max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4">
                     <div className="bg-white p-8 rounded-2xl shadow-xl border border-gray-200">
-                        <h2 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2"><Package className="text-purple-600"/> Product Details</h2>
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-black text-slate-900 flex items-center gap-2"><Package className="text-purple-600"/> Add Product</h2>
+                            <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
+                                <button onClick={() => setIsBulkMode(false)} className={`px-4 py-1.5 text-xs font-bold rounded-md transition ${!isBulkMode ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}>Single</button>
+                                <button onClick={() => setIsBulkMode(true)} className={`px-4 py-1.5 text-xs font-bold rounded-md transition ${isBulkMode ? 'bg-purple-600 shadow text-white' : 'text-slate-500'}`}>Bulk Range</button>
+                            </div>
+                        </div>
                         
                         <form onSubmit={handleCreateProduct} className="space-y-6">
                             <div className="grid grid-cols-2 gap-6">
                                 <div className="col-span-2">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Item Name</label>
-                                    <input className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-bold text-slate-900 bg-gray-50 focus:bg-white transition" placeholder="e.g. iPhone 13 Pro Screen (OLED)" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">{isBulkMode ? "Base Product Name" : "Item Name"}</label>
+                                    <input className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-bold text-slate-900 bg-gray-50 focus:bg-white transition" placeholder={isBulkMode ? "e.g. JCID Battery Tag" : "e.g. iPhone 13 Screen"} value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
+                                    {isBulkMode && <p className="text-xs text-purple-600 mt-2 font-medium">✨ Will generate: "{newProduct.name} - iPhone X", etc.</p>}
                                 </div>
-                                <div>
+                                
+                                <div className={isBulkMode ? "col-span-2" : ""}>
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Category</label>
-                                    <input list="catList" className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-purple-500" placeholder="Select..." value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} required />
+                                    {/* 🔥 Category Input allows selection OR typing */}
+                                    <input list="catList" className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-purple-500" placeholder="Select or Type New..." value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} required />
                                     <datalist id="catList">{dynamicCategories.map(c => <option key={c} value={c}/>)}</datalist>
                                 </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Model</label>
-                                    <input className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-purple-500" placeholder="e.g. A2638" value={newProduct.model} onChange={e => setNewProduct({...newProduct, model: e.target.value})} />
-                                </div>
+
+                                {isBulkMode ? (
+                                    <>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Start Model</label>
+                                            <select className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-purple-500 bg-white" value={newProduct.rangeStart} onChange={e => setNewProduct({...newProduct, rangeStart: e.target.value})}>
+                                                {ALL_MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">End Model</label>
+                                            <select className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-purple-500 bg-white" value={newProduct.rangeEnd} onChange={e => setNewProduct({...newProduct, rangeEnd: e.target.value})}>
+                                                {ALL_MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+                                            </select>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Model</label>
+                                        <input className="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-purple-500" placeholder="e.g. A2638" value={newProduct.model} onChange={e => setNewProduct({...newProduct, model: e.target.value})} />
+                                    </div>
+                                )}
+
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Selling Price</label>
                                     <div className="relative">
-                                        <DollarSign className="absolute left-3 top-3.5 text-gray-400" size={16}/>
+                                        <span className="absolute left-3 top-3.5 text-gray-400 font-bold text-lg">₦</span>
                                         <input type="text" className="w-full pl-10 p-3 border border-gray-200 rounded-xl outline-none focus:border-purple-500 font-mono font-bold" placeholder="0.00" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required />
                                     </div>
                                 </div>
@@ -374,7 +493,7 @@ const StoreInventory = () => {
                                 </div>
                             </div>
                             <button type="submit" disabled={actionLoading} className="w-full bg-purple-900 text-white font-bold py-4 rounded-xl hover:bg-purple-800 shadow-lg transition flex justify-center items-center gap-2 mt-4">
-                                {actionLoading ? <Loader2 className="animate-spin"/> : <><Save size={20}/> Save to Inventory</>}
+                                {actionLoading ? <Loader2 className="animate-spin"/> : isBulkMode ? <><Layers size={20}/> Generate Bulk Items</> : <><Save size={20}/> Save to Inventory</>}
                             </button>
                         </form>
                     </div>
@@ -413,7 +532,10 @@ const StoreInventory = () => {
                         <form onSubmit={handleUpdateProduct} className="space-y-4">
                             <div><label className="text-xs font-bold text-slate-400 uppercase">Name</label><input className="w-full p-3 border rounded-xl font-bold text-slate-800 bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-500" value={editingItem.name} onChange={e => setEditingItem({...editingItem, name: e.target.value})}/></div>
                             <div className="grid grid-cols-2 gap-4">
-                                <div><label className="text-xs font-bold text-slate-400 uppercase">Category</label><input className="w-full p-3 border rounded-xl outline-none" value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}/></div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Category</label>
+                                    <input className="w-full p-3 border rounded-xl outline-none" value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}/>
+                                </div>
                                 <div><label className="text-xs font-bold text-slate-400 uppercase">Model</label><input className="w-full p-3 border rounded-xl outline-none" value={editingItem.model} onChange={e => setEditingItem({...editingItem, model: e.target.value})}/></div>
                             </div>
                             <div className="grid grid-cols-2 gap-4">

@@ -1,21 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
-    DollarSign, ClipboardList, Users, Wrench, LogOut, ArrowRight, 
-    Package, Calendar, TrendingUp, AlertTriangle, 
-    CheckCircle, ShoppingCart, Activity, Wallet
+    Banknote, Users, Wrench, LogOut, ArrowRight, 
+    Package, TrendingUp, AlertTriangle, 
+    ShoppingCart, Activity, Wallet, Smartphone, Settings,
+    XCircle, AlertCircle, CheckCircle, ChevronRight, ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../../AdminContext';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../../../firebaseConfig'; 
 import { useNavigate } from 'react-router-dom';
-import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore'; 
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'; 
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(amount);
 };
 
-// --- Helper Components ---
+// --- COMPONENTS ---
+
+// 🔥 NEW PREMIUM CARD STYLE CONSTANT
+// This combines a very light slate border with a diffused, soft shadow for a modern look.
+const CARD_STYLE = "bg-white rounded-2xl border border-slate-100 shadow-[0_4px_12px_-4px_rgba(64,78,99,0.08)] transition-all duration-300 hover:shadow-[0_8px_20px_-4px_rgba(64,78,99,0.12)] overflow-hidden";
 
 const StatusBadge = ({ status }) => {
     const styles = {
@@ -33,30 +38,34 @@ const StatusBadge = ({ status }) => {
     );
 };
 
-const MetricCard = ({ title, value, icon: Icon, isAlert, onClick, subtext, color }) => (
+const MetricCard = ({ title, value, icon: Icon, color, subtext, onClick, isAlert }) => (
     <div 
-        onClick={onClick}
-        className={`bg-white p-6 rounded-lg border transition-all duration-200 cursor-pointer group
-        ${isAlert 
-            ? 'border-l-4 border-l-orange-500 border-y-gray-200 border-r-gray-200 hover:bg-orange-50' 
-            : 'border-gray-200 hover:border-purple-300 hover:shadow-md'}`}
+        onClick={onClick} 
+        // Applied new beautiful card style here, with specific hover tints based on type
+        className={`${CARD_STYLE} p-6 cursor-pointer group relative
+        ${isAlert ? 'hover:border-red-200/60' : 
+          color === 'green' ? 'hover:border-green-200/60' : 
+          color === 'purple' ? 'hover:border-purple-200/60' : 
+          'hover:border-blue-200/60'}`}
     >
-        <div className="flex justify-between items-start mb-4">
-            <div className={`p-3 rounded-lg ${
-                isAlert ? 'bg-orange-100 text-orange-600' : 
-                color === 'red' ? 'bg-red-50 text-red-600' :
-                color === 'green' ? 'bg-green-50 text-green-600' :
-                color === 'purple' ? 'bg-purple-50 text-purple-600' :
-                'bg-gray-50 text-gray-600 group-hover:text-purple-600 group-hover:bg-purple-50 transition'
-            }`}>
-                <Icon size={20} />
-            </div>
-            {isAlert && <span className="bg-orange-100 text-orange-700 text-[10px] font-bold px-2 py-1 rounded-full animate-pulse">ACTION REQUIRED</span>}
+        <div className={`absolute top-0 right-0 p-3 opacity-[0.08] transform translate-x-2 -translate-y-2 group-hover:scale-110 transition duration-500 ${color === 'red' ? 'text-red-600' : color === 'green' ? 'text-green-600' : color === 'purple' ? 'text-purple-600' : 'text-blue-600'}`}>
+            <Icon size={100} />
         </div>
-        <div>
-            <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">{title}</p>
-            <h3 className={`text-2xl font-bold mt-1 ${isAlert ? 'text-orange-700' : color === 'red' ? 'text-red-600' : 'text-gray-900'}`}>{value}</h3>
-            <p className="text-xs text-gray-400 mt-1">{subtext}</p>
+        <div className="flex items-center gap-4 mb-3 relative z-10">
+            <div className={`p-3 rounded-xl shadow-sm ${
+                color === 'green' ? 'bg-green-50 text-green-600' :
+                color === 'red' ? 'bg-red-50 text-red-600' :
+                color === 'blue' ? 'bg-blue-50 text-blue-600' :
+                'bg-purple-50 text-purple-600'
+            }`}>
+                <Icon size={24} />
+            </div>
+            {isAlert && <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-red-50 text-red-600 border border-red-100 animate-pulse">Action Required</span>}
+        </div>
+        <div className="relative z-10">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{title}</p>
+            <h3 className={`text-3xl font-black mt-1 ${isAlert ? 'text-red-700' : 'text-slate-900'}`}>{value}</h3>
+            <p className="text-sm font-medium text-slate-500 mt-1">{subtext}</p>
         </div>
     </div>
 );
@@ -67,17 +76,15 @@ const Dashboard = () => {
     
     // State
     const [stats, setStats] = useState({
-        grossRevenue: 0,
-        netRevenue: 0,
-        totalRefunds: 0,
-        activeOrders: 0,
-        pendingOrders: 0,
-        completedOrders: 0,
-        inventoryCount: 0,
-        workerCount: 0
+        netRevenue: 0, activeOrders: 0, 
+        inventoryCount: 0
     });
     const [recentOrders, setRecentOrders] = useState([]);
-    const [lowStockItems, setLowStockItems] = useState([]);
+    
+    // Smart Inventory Lists
+    const [inventoryData, setInventoryData] = useState({ critical: [], low: [], highValue: [] });
+    const [alertTab, setAlertTab] = useState('critical'); 
+
     const [chartData, setChartData] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -85,50 +92,28 @@ const Dashboard = () => {
 
     // 1. FETCH DATA
     useEffect(() => {
-        // A. Orders Data
+        // A. Orders
         const qOrders = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
         const unsubOrders = onSnapshot(qOrders, (snapshot) => {
-            let gross = 0;
-            let net = 0;
-            let refunds = 0;
-            let active = 0;
-            let pending = 0;
-            let completed = 0;
+            let net = 0; let active = 0;
             const recent = [];
             const salesMap = {}; 
 
             snapshot.docs.forEach((doc) => {
                 const data = doc.data();
-                
-                // --- FINANCIALS CALCULATION ---
                 const paid = Number(data.amountPaid || 0);
-                const refunded = Number(data.refundedAmount || 0);
-
-                // Gross = What we collected + what we had to give back (Total volume)
-                // Net = What we actually have now (amountPaid)
                 net += paid;
-                refunds += refunded;
-                gross += (paid + refunded); 
                 
-                // Status Counts
-                if (data.status === 'In Progress') active++;
-                if (data.status === 'Pending') pending++;
-                if (data.status === 'Completed' || data.status === 'Collected') completed++;
+                if (data.status === 'In Progress' || data.status === 'Pending') active++;
                 
-                // Recent List
-                if (recent.length < 8) {
+                if (recent.length < 5) {
                     recent.push({
-                        id: data.ticketId,
-                        docId: doc.id, 
-                        device: data.items && data.items[0] ? (data.items[0].deviceModel || data.items[0].name) : 'Unknown Device',
-                        status: data.status,
-                        customer: data.customer?.name || 'Guest',
-                        cost: data.totalCost,
-                        date: data.createdAt?.toDate ? data.createdAt.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Now'
+                        id: data.ticketId, docId: doc.id, 
+                        device: data.items?.[0]?.deviceModel || 'Unknown Device',
+                        status: data.status, customer: data.customer?.name || 'Guest', cost: data.totalCost
                     });
                 }
 
-                // Chart Data (Use Net Revenue)
                 if (data.createdAt && paid > 0) {
                     const date = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
                     const key = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
@@ -137,235 +122,221 @@ const Dashboard = () => {
             });
 
             const sortedChart = Object.keys(salesMap).map(key => ({ name: key, sales: salesMap[key] })).slice(-7);
-            
-            setStats(prev => ({ 
-                ...prev, 
-                grossRevenue: gross,
-                netRevenue: net,
-                totalRefunds: refunds,
-                activeOrders: active, 
-                pendingOrders: pending,
-                completedOrders: completed
-            }));
+            setStats(prev => ({ ...prev, netRevenue: net, activeOrders: active }));
             setRecentOrders(recent);
             setChartData(sortedChart.length > 0 ? sortedChart : [{name: 'Today', sales: 0}]);
             setLoading(false);
         });
 
-        // B. Inventory Data
+        // B. Smart Inventory Logic
         const unsubInventory = onSnapshot(collection(db, "Inventory"), (snap) => {
-            const lowStock = [];
-            snap.docs.forEach(doc => {
-                const item = doc.data();
-                if (item.stock < 3) lowStock.push({ id: doc.id, ...item });
-            });
-            setStats(prev => ({ ...prev, inventoryCount: snap.size }));
-            setLowStockItems(lowStock.slice(0, 3));
+            const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            
+            const critical = items.filter(i => i.stock === 0);
+            const low = items.filter(i => i.stock > 0 && i.stock <= 5);
+            const highValue = items.filter(i => i.stock <= 3 && i.price > 50000).sort((a,b) => b.price - a.price);
+
+            setInventoryData({ critical, low, highValue });
+            setStats(prev => ({ ...prev, inventoryCount: items.length }));
         });
 
         return () => { unsubOrders(); unsubInventory(); };
     }, []);
 
-    const handleLogout = async () => {
-        await signOut(auth);
-        navigate('/admin/login');
-    };
+    const handleLogout = async () => { await signOut(auth); navigate('/admin/login'); };
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500">Loading System...</div>;
+    const currentAlerts = useMemo(() => {
+        if (alertTab === 'critical') return inventoryData.critical;
+        if (alertTab === 'low') return inventoryData.low;
+        return inventoryData.highValue;
+    }, [alertTab, inventoryData]);
+
+    if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500">Loading Dashboard...</div>;
+
+    const totalAlerts = inventoryData.critical.length + inventoryData.low.length;
 
     return (
-        <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
-            
-            {/* --- TOP BAR --- */}
-            <header className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
+        <div className="min-h-screen bg-[#fafafa] font-sans text-gray-900">
+            {/* Header */}
+            <header className="bg-white border-b border-slate-100 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]">
                 <div>
-                    <h1 className="text-xl font-bold flex items-center gap-2">
-                        <Activity className="text-purple-700"/> Admin Console
-                    </h1>
-                    <p className="text-xs text-gray-500 hidden sm:block">Overview for {new Date().toDateString()}</p>
+                    <h1 className="text-xl font-black flex items-center gap-2 text-slate-800"><Activity className="text-purple-600"/> Admin Console</h1>
+                    <p className="text-xs font-medium text-slate-400 hidden sm:block">Overview for {new Date().toDateString()}</p>
                 </div>
                 <div className="flex items-center gap-4">
-                    <div className="text-right hidden sm:block">
-                        <p className="text-sm font-bold text-gray-800">{welcomeName}</p>
-                        <p className="text-xs text-gray-500">Administrator</p>
-                    </div>
-                    <div className="h-8 w-px bg-gray-200 mx-2"></div>
-                    <button onClick={handleLogout} className="text-gray-500 hover:text-red-600 transition p-2 rounded-full hover:bg-gray-100">
-                        <LogOut size={20} />
-                    </button>
+                    <div className="text-right hidden sm:block"><p className="text-sm font-bold text-slate-700">{welcomeName}</p><p className="text-xs font-medium text-slate-400">Administrator</p></div>
+                    <div className="h-8 w-px bg-slate-100 mx-2"></div>
+                    <button onClick={handleLogout} className="text-slate-400 hover:text-red-600 transition p-2 rounded-xl hover:bg-slate-50"><LogOut size={20} /></button>
                 </div>
             </header>
 
             <main className="p-6 max-w-[1600px] mx-auto">
-
-                {/* --- 1. KEY METRICS GRID --- */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                    
-                    {/* NET REVENUE (Cash in Hand) */}
+                
+                {/* 1. TOP METRICS (3 COLUMNS) */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <MetricCard 
                         title="Net Revenue" 
                         value={formatCurrency(stats.netRevenue)} 
                         icon={Wallet} 
-                        color="green"
-                        subtext="Actual Cash In Hand"
+                        color="green" 
+                        subtext="Total Cash In Hand"
                         onClick={() => navigate('/admin/performance')}
                     />
-
-                    {/* GROSS SALES (Always Visible) */}
                     <MetricCard 
-                        title="Gross Sales" 
-                        value={formatCurrency(stats.grossRevenue)} 
-                        icon={DollarSign} 
-                        color="purple"
-                        subtext="Total Volume (Before Refunds)"
-                        onClick={() => navigate('/admin/performance')}
-                    />
-                    
-                    <MetricCard 
-                        title="Active Work" 
-                        value={stats.activeOrders + stats.pendingOrders} 
+                        title="Active Jobs" 
+                        value={stats.activeOrders} 
                         icon={Wrench} 
-                        subtext={`${stats.activeOrders} In Progress / ${stats.pendingOrders} Pending`}
+                        color="purple" 
+                        subtext="Repairs In Progress"
                         onClick={() => navigate('/admin/orders')}
                     />
-
-                    {lowStockItems.length > 0 ? (
+                    {totalAlerts > 0 ? (
                         <MetricCard 
                             title="Inventory Alert" 
-                            value={lowStockItems.length} 
+                            value={totalAlerts} 
                             icon={AlertTriangle} 
+                            color="red" 
                             isAlert={true}
-                            subtext="Items below stock limit"
-                            onClick={() => navigate('/admin/store')}
+                            subtext="Items Low or Out of Stock"
+                            onClick={() => navigate('/admin/store')} 
                         />
                     ) : (
                         <MetricCard 
                             title="Inventory Count" 
                             value={stats.inventoryCount} 
                             icon={Package} 
-                            subtext="Total Stock in store"
-                            onClick={() => navigate('/admin/store')}
+                            color="blue" 
+                            subtext="Total Items in Stock"
+                            onClick={() => navigate('/admin/store')} 
                         />
                     )}
                 </div>
 
-                {/* --- 2. MAIN DASHBOARD SPLIT --- */}
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                     
-                    {/* LEFT: ANALYTICS & ALERTS */}
+                    {/* LEFT COLUMN: INTELLIGENCE & CHARTS */}
                     <div className="xl:col-span-2 space-y-8">
                         
-                        {/* CHART SECTION */}
-                        <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                        {/* REVENUE CHART - Applied new CARD_STYLE */}
+                        <div className={`${CARD_STYLE} p-6`}>
                             <div className="flex justify-between items-center mb-6">
-                                <div>
-                                    <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
-                                        <TrendingUp size={18} className="text-purple-600"/> Revenue Trend
-                                    </h3>
-                                    <p className="text-xs text-gray-500">Financial performance over the last 7 entries</p>
-                                </div>
-                                <button onClick={() => navigate('/admin/performance')} className="text-xs font-bold text-purple-700 bg-purple-50 px-3 py-1.5 rounded hover:bg-purple-100 transition">
-                                    Full Report
-                                </button>
+                                <div><h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><TrendingUp size={18} className="text-purple-600"/> Revenue Trend</h3><p className="text-xs font-medium text-slate-400">7 Day Performance</p></div>
+                                <button onClick={() => navigate('/admin/performance')} className="text-xs font-bold text-purple-700 bg-purple-50 px-4 py-2 rounded-xl hover:bg-purple-100 transition shadow-sm">View Report</button>
                             </div>
-                            <div className="h-[300px] w-full">
+                            <div className="h-[250px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <AreaChart data={chartData}>
-                                        <defs>
-                                            <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#7e22ce" stopOpacity={0.1}/>
-                                                <stop offset="95%" stopColor="#7e22ce" stopOpacity={0}/>
-                                            </linearGradient>
-                                        </defs>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6"/>
-                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize:11, fill:'#9ca3af'}} dy={10}/>
-                                        <YAxis axisLine={false} tickLine={false} tick={{fontSize:11, fill:'#9ca3af'}} tickFormatter={(val)=>`₦${val/1000}k`}/>
-                                        <Tooltip 
-                                            contentStyle={{borderRadius:'8px', border:'1px solid #e5e7eb', boxShadow:'0 4px 6px -1px rgba(0, 0, 0, 0.1)'}}
-                                            formatter={(value) => [formatCurrency(value), "Revenue"]}
-                                        />
-                                        <Area type="monotone" dataKey="sales" stroke="#7e22ce" strokeWidth={2} fillOpacity={1} fill="url(#colorRev)" />
+                                        <defs><linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#7e22ce" stopOpacity={0.1}/><stop offset="95%" stopColor="#7e22ce" stopOpacity={0}/></linearGradient></defs>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize:11, fontWeight: 600, fill:'#94a3b8'}} dy={10}/>
+                                        <YAxis axisLine={false} tickLine={false} tick={{fontSize:11, fontWeight: 600, fill:'#94a3b8'}} tickFormatter={(val)=>`₦${val/1000}k`}/>
+                                        <Tooltip cursor={{stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4'}} contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgba(0, 0, 0, 0.1)', padding:'12px'}} formatter={(value) => [<span className="font-bold text-slate-800">{formatCurrency(value)}</span>, <span className="text-xs text-slate-400">Revenue</span>]} labelStyle={{color:'#64748b', fontSize:'12px', fontWeight:'bold', marginBottom:'4px'}}/>
+                                        <Area type="monotone" dataKey="sales" stroke="#7e22ce" strokeWidth={3} fillOpacity={1} fill="url(#colorRev)" />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </div>
                         </div>
 
-                        {/* LOW STOCK TABLE (If Any) */}
-                        {lowStockItems.length > 0 && (
-                            <div className="bg-white border border-orange-200 rounded-lg overflow-hidden shadow-sm">
-                                <div className="bg-orange-50 px-6 py-3 border-b border-orange-100 flex justify-between items-center">
-                                    <h3 className="text-sm font-bold text-orange-800 flex items-center gap-2">
-                                        <AlertTriangle size={16}/> Low Stock Watchlist
+                        {/* SMART INVENTORY INTELLIGENCE WIDGET - Applied new CARD_STYLE */}
+                        <div className={CARD_STYLE}>
+                            {/* Widget Header with subtle gradient */}
+                            <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-slate-50/50 to-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                <div>
+                                    <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
+                                        <ShieldAlert size={18} className="text-orange-500"/> Inventory
                                     </h3>
-                                    <button onClick={() => navigate('/admin/store')} className="text-xs font-bold text-orange-700 hover:underline">Restock Now</button>
+                                    <p className="text-xs font-medium text-slate-400">Real-time stock monitoring</p>
                                 </div>
-                                <div className="divide-y divide-gray-100">
-                                    {lowStockItems.map(item => (
-                                        <div key={item.id} className="px-6 py-3 flex justify-between items-center hover:bg-orange-50/30 transition">
-                                            <span className="text-sm font-medium text-gray-700">{item.name}</span>
-                                            <span className="text-xs font-bold bg-white border border-orange-200 text-orange-600 px-2 py-1 rounded">
-                                                {item.stock} Remaining
-                                            </span>
-                                        </div>
-                                    ))}
+                                {/* Tabs */}
+                                <div className="flex bg-white p-1.5 rounded-xl border border-slate-100 shadow-sm">
+                                    <button onClick={()=>setAlertTab('critical')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${alertTab === 'critical' ? 'bg-red-50 text-red-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Critical ({inventoryData.critical.length})</button>
+                                    <button onClick={()=>setAlertTab('low')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${alertTab === 'low' ? 'bg-orange-50 text-orange-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Low ({inventoryData.low.length})</button>
+                                    <button onClick={()=>setAlertTab('highValue')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${alertTab === 'highValue' ? 'bg-purple-50 text-purple-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>High Value</button>
                                 </div>
                             </div>
-                        )}
-                    </div>
 
-                    {/* RIGHT: RECENT ACTIVITY & QUICK LINKS */}
-                    <div className="space-y-8">
-                        
-                        {/* ACTIVITY FEED */}
-                        <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm h-[480px] flex flex-col">
-                            <h3 className="font-bold text-gray-800 text-lg mb-4 flex items-center gap-2">
-                                <ShoppingCart size={18} className="text-blue-600"/> Recent Activity
-                            </h3>
-                            <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-                                {recentOrders.length === 0 ? (
-                                    <div className="text-center text-gray-400 py-10 text-sm">No activity today.</div>
+                            {/* Widget Content */}
+                            <div className="divide-y divide-slate-50 max-h-[300px] overflow-y-auto custom-scrollbar bg-white">
+                                {currentAlerts.length === 0 ? (
+                                    <div className="p-8 text-center text-slate-400 flex flex-col items-center">
+                                        <CheckCircle size={32} className="text-green-400 mb-2 opacity-50"/>
+                                        <p className="text-sm font-bold">No items in this category.</p>
+                                    </div>
                                 ) : (
-                                    recentOrders.map(order => (
-                                        <div 
-                                            key={order.id} 
-                                            onClick={() => navigate(`/admin/orders/${order.ticketId}`)}
-                                            className="group flex flex-col gap-2 p-3 rounded-lg hover:bg-gray-50 cursor-pointer border border-transparent hover:border-gray-100 transition"
-                                        >
-                                            <div className="flex justify-between items-start">
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-bold text-gray-900 truncate">{order.customer}</p>
-                                                    <p className="text-xs text-gray-500 truncate">{order.device}</p>
+                                    currentAlerts.map(item => (
+                                        <div key={item.id} className="px-5 py-3 flex justify-between items-center hover:bg-slate-50/80 transition group">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`p-2 rounded-xl shadow-sm ${alertTab === 'critical' ? 'bg-red-100 text-red-600' : alertTab === 'highValue' ? 'bg-purple-100 text-purple-600' : 'bg-orange-100 text-orange-600'}`}>
+                                                    {alertTab === 'critical' ? <XCircle size={16}/> : <AlertCircle size={16}/>}
                                                 </div>
-                                                <p className="text-sm font-bold text-purple-700">{formatCurrency(order.cost)}</p>
+                                                <div>
+                                                    <p className="text-xs font-bold text-slate-800">{item.name}</p>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        {item.price > 50000 && <span className="text-[9px] font-black bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-100">HIGH VALUE</span>}
+                                                        <span className="text-[10px] font-medium text-slate-400">{item.category}</span>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            
-                                            <div className="flex justify-between items-center">
-                                                <span className="font-mono text-[10px] text-gray-400">{order.id}</span>
-                                                <StatusBadge status={order.status} />
+                                            <div className="flex items-center gap-4">
+                                                <div className="text-right">
+                                                    <span className={`block text-xs font-black ${alertTab === 'critical' ? 'text-red-600' : 'text-slate-700'}`}>
+                                                        {item.stock} Left
+                                                    </span>
+                                                    <div className="w-16 h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden ml-auto shadow-inner">
+                                                        <div className={`h-full rounded-full ${item.stock === 0 ? 'bg-red-500 w-0' : 'bg-gradient-to-r from-orange-400 to-orange-500'}`} style={{ width: `${(item.stock / 5) * 100}%` }}></div>
+                                                    </div>
+                                                </div>
+                                                <button onClick={() => navigate('/admin/store')} className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition hover:bg-blue-100 shadow-sm">Restock</button>
                                             </div>
                                         </div>
                                     ))
                                 )}
                             </div>
-                            <button onClick={() => navigate('/admin/orders')} className="mt-4 w-full py-2.5 text-sm font-bold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition flex items-center justify-center gap-2">
-                                View All Activity <ArrowRight size={14}/>
+                            <button onClick={() => navigate('/admin/store')} className="w-full py-3 bg-slate-50/50 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition border-t border-slate-100">
+                                Manage Full Inventory
                             </button>
                         </div>
+                    </div>
 
-                        {/* QUICK LINKS */}
-                        <div className="grid grid-cols-2 gap-4">
-                            <button onClick={() => navigate('/admin/users')} className="p-4 bg-white border border-gray-200 rounded-lg text-left hover:border-purple-300 hover:shadow-md transition group">
-                                <Users className="text-purple-600 mb-2 group-hover:scale-110 transition-transform" size={24}/>
-                                <p className="text-xs font-bold text-gray-500 uppercase">Manage</p>
-                                <p className="font-bold text-gray-900">Users</p>
-                            </button>
-                            <button onClick={() => navigate('/admin/payroll')} className="p-4 bg-white border border-gray-200 rounded-lg text-left hover:border-green-300 hover:shadow-md transition group">
-                                <DollarSign className="text-green-600 mb-2 group-hover:scale-110 transition-transform" size={24}/>
-                                <p className="text-xs font-bold text-gray-500 uppercase">Process</p>
-                                <p className="font-bold text-gray-900">Payroll</p>
-                            </button>
+                    {/* RIGHT COLUMN: RECENT & HR */}
+                    <div className="space-y-8">
+                        {/* Recent Activity - Applied new CARD_STYLE */}
+                        <div className={`${CARD_STYLE} p-6 h-[420px] flex flex-col`}>
+                            <h3 className="font-bold text-slate-800 text-lg mb-4 flex items-center gap-2"><ShoppingCart size={18} className="text-blue-600"/> Recent Activity</h3>
+                            <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                                {recentOrders.length === 0 ? <div className="text-center text-slate-400 py-10 text-sm font-medium">No activity today.</div> : 
+                                    recentOrders.map(order => (
+                                        <div key={order.id} onClick={() => navigate(`/admin/orders/${order.ticketId}`)} className="group flex flex-col gap-2 p-3 rounded-xl bg-slate-50/50 hover:bg-white cursor-pointer border border-slate-100 hover:border-blue-100 hover:shadow-sm transition">
+                                            <div className="flex justify-between items-start">
+                                                <div className="flex-1 min-w-0"><p className="text-sm font-bold text-slate-900 truncate">{order.customer}</p><p className="text-xs font-medium text-slate-500 truncate">{order.device}</p></div>
+                                                <p className="text-sm font-bold text-purple-700">{formatCurrency(order.cost)}</p>
+                                            </div>
+                                            <div className="flex justify-between items-center"><span className="font-mono text-[10px] text-slate-400">{order.id}</span><StatusBadge status={order.status} /></div>
+                                        </div>
+                                    ))
+                                }
+                            </div>
+                            <button onClick={() => navigate('/admin/orders')} className="mt-4 w-full py-2.5 text-sm font-bold text-slate-600 bg-slate-50 rounded-xl hover:bg-slate-100 transition flex items-center justify-center gap-2 shadow-sm">View All Activity <ArrowRight size={14}/></button>
                         </div>
 
+                        {/* HR Console - Applied new CARD_STYLE */}
+                        <div className={CARD_STYLE}>
+                            <div className="bg-slate-900 px-5 py-4 border-b border-slate-800 flex items-center justify-between"><h3 className="font-bold text-white text-sm uppercase tracking-wide flex items-center gap-2"><Settings size={16} className="text-slate-400"/> HR & Admin</h3></div>
+                            <div className="divide-y divide-slate-50 bg-white">
+                                <button onClick={() => navigate('/admin/payroll')} className="w-full p-4 flex items-center justify-between hover:bg-green-50/50 transition group">
+                                    <div className="flex items-center gap-4"><div className="p-2 bg-green-100 text-green-700 rounded-xl group-hover:scale-110 transition shadow-sm"><Banknote size={20}/></div><div className="text-left"><p className="font-bold text-slate-900 text-sm">Payroll System</p><p className="text-xs font-medium text-slate-500">Salaries & Commissions</p></div></div>
+                                    <ChevronRight size={16} className="text-slate-300 group-hover:text-green-600 transition"/>
+                                </button>
+                                <button onClick={() => navigate('/admin/users')} className="w-full p-4 flex items-center justify-between hover:bg-purple-50/50 transition group">
+                                    <div className="flex items-center gap-4"><div className="p-2 bg-purple-100 text-purple-700 rounded-xl group-hover:scale-110 transition shadow-sm"><Users size={20}/></div><div className="text-left"><p className="font-bold text-slate-900 text-sm">Staff Management</p><p className="text-xs font-medium text-slate-500">Roles & Access</p></div></div>
+                                    <ChevronRight size={16} className="text-slate-300 group-hover:text-purple-600 transition"/>
+                                </button>
+                                <button onClick={() => navigate('/admin/pricing')} className="w-full p-4 flex items-center justify-between hover:bg-blue-50/50 transition group">
+                                    <div className="flex items-center gap-4"><div className="p-2 bg-blue-100 text-blue-700 rounded-xl group-hover:scale-110 transition shadow-sm"><Smartphone size={20}/></div><div className="text-left"><p className="font-bold text-slate-900 text-sm">Service Pricing</p><p className="text-xs font-medium text-slate-500">Update Repair Costs</p></div></div>
+                                    <ChevronRight size={16} className="text-slate-300 group-hover:text-blue-600 transition"/>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </main>
