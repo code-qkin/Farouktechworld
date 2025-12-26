@@ -13,7 +13,6 @@ import {
 } from 'firebase/firestore';
 import { Toast, ConfirmModal } from '../Components/Feedback';
 import * as XLSX from 'xlsx';
-import InventorySeeder from '../Components/InventorySeeder';
 
 const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
 
@@ -146,7 +145,6 @@ const StoreInventory = () => {
         });
     }, [products, searchTerm, filterCategory, filterStock]);
 
-    // Reset to page 1 when filters change
     useEffect(() => setCurrentPage(1), [searchTerm, filterCategory, filterStock]);
 
     const indexOfLastItem = currentPage * itemsPerPage;
@@ -176,7 +174,7 @@ const StoreInventory = () => {
             const safeStock = safeParseInt(newProduct.stock);
 
             if (isBulkMode) {
-                // BULK ADD
+                // BULK ADD: Generate individual items
                 const models = getModelRange(newProduct.rangeStart, newProduct.rangeEnd);
                 if (models.length === 0) throw new Error("Invalid Range Selected");
 
@@ -288,9 +286,6 @@ const StoreInventory = () => {
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto items-start sm:items-center">
-                    {/* <div className="flex-1 xl:flex-none w-full sm:w-auto">
-                        <InventorySeeder />
-                    </div> */}
                     <div className="flex gap-3 w-full sm:w-auto">
                         <button onClick={handleExport} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white border border-gray-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition text-sm shadow-sm"><Download size={16} /> Export</button>
                         <button onClick={() => setViewMode(viewMode === 'list' ? 'create' : 'list')} className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold shadow-md transition text-sm ${viewMode === 'list' ? 'bg-purple-900 text-white hover:bg-purple-800' : 'bg-white text-slate-700 hover:bg-gray-50 border border-gray-200'}`}>
@@ -437,9 +432,10 @@ const StoreInventory = () => {
                     <div className="bg-white p-8 rounded-2xl shadow-xl border border-gray-200">
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-xl font-black text-slate-900 flex items-center gap-2"><Package className="text-purple-600"/> Add Product</h2>
-                            <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
-                                <button onClick={() => setIsBulkMode(false)} className={`px-4 py-1.5 text-xs font-bold rounded-md transition ${!isBulkMode ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}>Single</button>
-                                <button onClick={() => setIsBulkMode(true)} className={`px-4 py-1.5 text-xs font-bold rounded-md transition ${isBulkMode ? 'bg-purple-600 shadow text-white' : 'text-slate-500'}`}>Bulk Range</button>
+                            {/* 🔥 REPLACED BUTTONS WITH TABS */}
+                            <div className="flex bg-gray-100 p-1 rounded-lg">
+                                <button onClick={() => setIsBulkMode(false)} className={`px-4 py-1.5 text-xs font-bold rounded-md transition ${!isBulkMode ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}>Single Item</button>
+                                <button onClick={() => setIsBulkMode(true)} className={`px-4 py-1.5 text-xs font-bold rounded-md transition ${isBulkMode ? 'bg-white shadow text-purple-700' : 'text-slate-500'}`}>Bulk Range</button>
                             </div>
                         </div>
                         

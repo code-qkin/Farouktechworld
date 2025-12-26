@@ -2,15 +2,39 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Search, Save, DollarSign, Filter, ChevronDown, 
     ArrowLeft, Smartphone, Loader2, ChevronLeft, ChevronRight, 
-    Plus, X, Wrench, ArrowRightCircle 
+    Plus, X, Wrench, Layers, Trash2 
 } from 'lucide-react';
 import { db } from '../../firebaseConfig';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { 
+    collection, query, orderBy, onSnapshot, doc, updateDoc, 
+    addDoc, serverTimestamp, writeBatch, deleteDoc 
+} from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AdminContext';
-import { Toast } from '../Components/Feedback';
+import { Toast, ConfirmModal } from '../Components/Feedback';
 
 const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
+
+// --- MODEL LIST FOR RANGE GENERATION ---
+const ALL_MODELS = [
+    'iPhone 6', 'iPhone 6 Plus', 'iPhone 6s', 'iPhone 6s Plus', 
+    'iPhone 7', 'iPhone 7 Plus', 'iPhone 8', 'iPhone 8 Plus', 
+    'iPhone X', 'iPhone XR', 'iPhone XS', 'iPhone XS Max',
+    'iPhone 11', 'iPhone 11 Pro', 'iPhone 11 Pro Max',
+    'iPhone 12', 'iPhone 12 Mini', 'iPhone 12 Pro', 'iPhone 12 Pro Max',
+    'iPhone 13', 'iPhone 13 Mini', 'iPhone 13 Pro', 'iPhone 13 Pro Max',
+    'iPhone 14', 'iPhone 14 Plus', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
+    'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max',
+    'iPhone 16', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
+    'iPhone 17', 'iPhone 17 Plus', 'iPhone 17 Pro', 'iPhone 17 Pro Max'
+];
+
+const getModelRange = (start, end) => {
+    const sIdx = ALL_MODELS.indexOf(start);
+    const eIdx = ALL_MODELS.indexOf(end);
+    if (sIdx === -1 || eIdx === -1 || sIdx > eIdx) return [];
+    return ALL_MODELS.slice(sIdx, eIdx + 1);
+};
 
 const ServicePrices = () => {
     const { role } = useAuth();
@@ -33,14 +57,19 @@ const ServicePrices = () => {
     const [editPrice, setEditPrice] = useState('');
     const [saving, setSaving] = useState(false);
     const [toast, setToast] = useState({ message: '', type: '' });
+    
+    // --- Confirm Modal State ---
+    const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
     // --- Add Service Modal State ---
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isAdding, setIsAdding] = useState(false);
+    const [activeTab, setActiveTab] = useState('single'); // 'single' or 'bulk'
     const [newServiceData, setNewServiceData] = useState({
-        startModel: '',
-        endModel: '',
-        service: '', // Now flexible
+        model: '',
+        startModel: 'iPhone X',
+        endModel: 'iPhone 14 Pro Max',
+        service: '',
         price: ''
     });
 
@@ -60,10 +89,8 @@ const ServicePrices = () => {
 
     const filteredList = useMemo(() => {
         return services.filter(item => {
-            // Guard against missing fields
             const model = item.model || '';
             const service = item.service || '';
-            
             const matchSearch = model.toLowerCase().includes(searchTerm.toLowerCase()) || 
                                 service.toLowerCase().includes(searchTerm.toLowerCase());
             const matchFilter = filterService === 'All' || service === filterService;
@@ -83,10 +110,10 @@ const ServicePrices = () => {
 
     // 4. Actions: Inline Edit
     const handleSave = async (id) => {
-        if (!editPrice) return;
+        if (editPrice === '') return; 
         setSaving(true);
         try {
-            const priceNum = parseFloat(editPrice.replace(/[^0-9.]/g, ''));
+            const priceNum = parseFloat(editPrice.replace(/[^0-9.]/g, '')) || 0;
             await updateDoc(doc(db, "Services", id), { price: priceNum });
             setToast({ message: "Price Updated!", type: 'success' });
             setEditingId(null);
@@ -98,45 +125,84 @@ const ServicePrices = () => {
 
     const startEdit = (item) => {
         setEditingId(item.id);
-        setEditPrice(item.price?.toString() || '');
+        setEditPrice(item.price?.toString() || '0');
     };
 
     // 5. Actions: Add New Service
     const handleAddService = async (e) => {
         e.preventDefault();
         
-        // Validation
-        if (!newServiceData.startModel || !newServiceData.service || !newServiceData.price) {
-            alert("Please fill in Start Model, Service Type, and Price");
+        if (!newServiceData.service) {
+            alert("Please fill in Service Type");
             return;
         }
 
         setIsAdding(true);
         try {
-            // Logic: If End Model exists, create a range string (e.g., "iPhone 6 - 8")
-            // Otherwise just use Start Model (e.g., "iPhone X")
-            const finalModelString = newServiceData.endModel 
-                ? `${newServiceData.startModel} - ${newServiceData.endModel}`
-                : newServiceData.startModel;
+            const price = newServiceData.price ? Number(newServiceData.price) : 0;
 
-            await addDoc(collection(db, "Services"), {
-                model: finalModelString,
-                service: newServiceData.service, // Can be custom or from list
-                price: Number(newServiceData.price),
-                active: true,
-                createdAt: serverTimestamp()
-            });
+            if (activeTab === 'bulk') {
+                const models = getModelRange(newServiceData.startModel, newServiceData.endModel);
+                if (models.length === 0) throw new Error("Invalid Model Range selected.");
 
-            setToast({ message: "New Service Added!", type: 'success' });
+                const batch = writeBatch(db);
+                models.forEach(model => {
+                    const docId = `${newServiceData.service}_${model}`.replace(/[^a-zA-Z0-9]/g, '_');
+                    const docRef = doc(db, "Services", docId);
+                    
+                    batch.set(docRef, {
+                        model: model,
+                        service: newServiceData.service,
+                        price: price,
+                        active: true,
+                        createdAt: serverTimestamp()
+                    }, { merge: true });
+                });
+
+                await batch.commit();
+                setToast({ message: `Generated ${models.length} service entries!`, type: 'success' });
+
+            } else {
+                if (!newServiceData.model) throw new Error("Please enter a model name.");
+                await addDoc(collection(db, "Services"), {
+                    model: newServiceData.model,
+                    service: newServiceData.service,
+                    price: price,
+                    active: true,
+                    createdAt: serverTimestamp()
+                });
+                setToast({ message: "Service Added!", type: 'success' });
+            }
+
             setIsAddModalOpen(false);
-            // Reset Form
-            setNewServiceData({ startModel: '', endModel: '', service: '', price: '' }); 
+            setNewServiceData(prev => ({ ...prev, model: '', price: '' }));
         } catch (error) {
             console.error("Error adding service:", error);
-            setToast({ message: "Failed to add service", type: 'error' });
+            setToast({ message: error.message || "Failed to add service", type: 'error' });
         } finally {
             setIsAdding(false);
         }
+    };
+
+    // 6. Actions: Delete Service
+    const handleDelete = (item) => {
+        setConfirmConfig({
+            isOpen: true,
+            title: "Delete Service?",
+            message: `Permanently delete ${item.service} for ${item.model}?`,
+            confirmText: "Delete",
+            confirmColor: "bg-red-600",
+            action: async () => {
+                try {
+                    await deleteDoc(doc(db, "Services", item.id));
+                    setToast({ message: "Service Deleted", type: "success" });
+                } catch (error) {
+                    console.error("Error deleting service:", error);
+                    setToast({ message: "Failed to delete service", type: "error" });
+                }
+                setConfirmConfig({ ...confirmConfig, isOpen: false });
+            }
+        });
     };
 
     const handleNewServiceChange = (e) => {
@@ -148,6 +214,7 @@ const ServicePrices = () => {
     return (
         <div className="min-h-screen bg-gray-50 p-4 sm:p-8 relative">
             <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: '' })} />
+            <ConfirmModal isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmText={confirmConfig.confirmText} confirmColor={confirmConfig.confirmColor} onCancel={() => setConfirmConfig({...confirmConfig, isOpen: false})} onConfirm={confirmConfig.action} />
             
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
@@ -206,7 +273,7 @@ const ServicePrices = () => {
                                         <th className="px-6 py-4">Service</th>
                                         <th className="px-6 py-4">Model</th>
                                         <th className="px-6 py-4 text-right">Price (₦)</th>
-                                        <th className="px-6 py-4 text-right w-24">Action</th>
+                                        <th className="px-6 py-4 text-right w-28">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
@@ -232,15 +299,20 @@ const ServicePrices = () => {
                                                 )}
                                             </td>
                                             <td className="px-6 py-3 text-right">
-                                                {editingId === item.id ? (
-                                                    <button onClick={() => handleSave(item.id)} disabled={saving} className="text-green-600 hover:text-green-700 bg-green-50 p-2 rounded-lg transition">
-                                                        {saving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>}
+                                                <div className="flex items-center justify-end gap-2">
+                                                    {editingId === item.id ? (
+                                                        <button onClick={() => handleSave(item.id)} disabled={saving} className="text-green-600 hover:text-green-700 bg-green-50 p-2 rounded-lg transition">
+                                                            {saving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>}
+                                                        </button>
+                                                    ) : (
+                                                        <button onClick={() => startEdit(item)} className="text-slate-400 hover:text-blue-600 p-2 hover:bg-blue-50 rounded-lg transition">
+                                                            <DollarSign size={16}/>
+                                                        </button>
+                                                    )}
+                                                    <button onClick={() => handleDelete(item)} className="text-slate-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition">
+                                                        <Trash2 size={16}/>
                                                     </button>
-                                                ) : (
-                                                    <button onClick={() => startEdit(item)} className="text-slate-400 hover:text-blue-600 p-2 hover:bg-blue-50 rounded-lg transition">
-                                                        ₦
-                                                    </button>
-                                                )}
+                                                </div>
                                             </td>
                                         </tr>
                                     )) : (
@@ -281,7 +353,7 @@ const ServicePrices = () => {
                 )}
             </div>
 
-            {/* --- ADD SERVICE MODAL (Updated) --- */}
+            {/* --- ADD SERVICE MODAL --- */}
             {isAddModalOpen && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -298,7 +370,7 @@ const ServicePrices = () => {
 
                         <form onSubmit={handleAddService} className="p-6 space-y-4">
                             
-                            {/* UPDATED: Service Type with Datalist (Allows custom entry) */}
+                            {/* Service Type with Datalist */}
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Service Type</label>
                                 <div className="relative">
@@ -326,46 +398,63 @@ const ServicePrices = () => {
                                 </div>
                             </div>
 
-                            {/* UPDATED: Start & End Model Inputs */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Start Model</label>
-                                    <input 
-                                        type="text" 
-                                        name="startModel"
-                                        placeholder="e.g. iPhone 6"
-                                        value={newServiceData.startModel}
-                                        onChange={handleNewServiceChange}
-                                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium"
-                                        required 
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">End Model (Opt)</label>
-                                    <input 
-                                        type="text" 
-                                        name="endModel"
-                                        placeholder="e.g. iPhone 8"
-                                        value={newServiceData.endModel}
-                                        onChange={handleNewServiceChange}
-                                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium"
-                                    />
-                                </div>
+                            {/* TABS: SINGLE vs BULK */}
+                            <div className="flex p-1 bg-gray-100 rounded-lg">
+                                <button type="button" onClick={() => setActiveTab('single')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition ${activeTab === 'single' ? 'bg-white text-slate-800 shadow' : 'text-gray-500'}`}>Single Model</button>
+                                <button type="button" onClick={() => setActiveTab('bulk')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition ${activeTab === 'bulk' ? 'bg-white text-purple-700 shadow' : 'text-gray-500'}`}>Bulk Range</button>
                             </div>
+
+                            {/* CONDITIONAL MODEL INPUTS */}
+                            {activeTab === 'single' ? (
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Device Model</label>
+                                    <input 
+                                        type="text" 
+                                        name="model"
+                                        placeholder="e.g. iPhone 13 Pro Max"
+                                        value={newServiceData.model}
+                                        onChange={handleNewServiceChange}
+                                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium"
+                                    />
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Start Model</label>
+                                        <select 
+                                            name="startModel"
+                                            value={newServiceData.startModel}
+                                            onChange={handleNewServiceChange}
+                                            className="w-full px-3 py-2.5 border border-gray-200 bg-white rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium"
+                                        >
+                                            {ALL_MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">End Model</label>
+                                        <select 
+                                            name="endModel"
+                                            value={newServiceData.endModel}
+                                            onChange={handleNewServiceChange}
+                                            className="w-full px-3 py-2.5 border border-gray-200 bg-white rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium"
+                                        >
+                                            {ALL_MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+                            )}
                             
-                            {/* Visual Preview of Result */}
-                            {newServiceData.startModel && (
+                            {/* Preview for Bulk */}
+                            {activeTab === 'bulk' && (
                                 <div className="text-xs text-center text-gray-500 bg-gray-50 p-2 rounded border border-gray-100 flex items-center justify-center gap-2">
-                                    Preview: <span className="font-bold text-gray-800">
-                                        {newServiceData.startModel} 
-                                        {newServiceData.endModel ? ` - ${newServiceData.endModel}` : ''}
-                                    </span>
+                                    <Layers size={14} className="text-purple-500"/> 
+                                    Will generate entries for {getModelRange(newServiceData.startModel, newServiceData.endModel).length} models.
                                 </div>
                             )}
 
-                            {/* Price */}
+                            {/* Price - OPTIONAL */}
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Price (₦)</label>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Price (₦) - Optional</label>
                                 <div className="relative">
                                     <div className="absolute left-3 top-2.5 text-gray-500 font-bold">₦</div>
                                     <input 
@@ -375,7 +464,6 @@ const ServicePrices = () => {
                                         value={newServiceData.price}
                                         onChange={handleNewServiceChange}
                                         className="w-full pl-8 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium"
-                                        required 
                                         min="0"
                                     />
                                 </div>
