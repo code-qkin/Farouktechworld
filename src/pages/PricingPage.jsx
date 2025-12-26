@@ -50,7 +50,6 @@ const PricingPage = () => {
 
     return (
         <div className="bg-slate-50 min-h-screen font-sans text-slate-900">
-            <NavBar />
             
             {/* Header */}
             <div className="bg-slate-900 text-white pt-32 pb-16 px-6 text-center">
