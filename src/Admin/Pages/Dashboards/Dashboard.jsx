@@ -3,7 +3,8 @@ import {
     Banknote, Users, Wrench, LogOut, ArrowRight, 
     Package, TrendingUp, AlertTriangle, 
     ShoppingCart, Activity, Wallet, Smartphone, Settings,
-    XCircle, AlertCircle, CheckCircle, ChevronRight, ShieldAlert, TrendingDown
+    XCircle, AlertCircle, CheckCircle, ChevronRight, ShieldAlert,
+    TrendingDown
 } from 'lucide-react';
 import { useAuth } from '../../AdminContext';
 import { signOut } from 'firebase/auth';
@@ -38,7 +39,7 @@ const MetricCard = ({ title, value, icon: Icon, color, subtext, onClick, isAlert
     <div 
         onClick={onClick} 
         className={`${CARD_STYLE} p-6 cursor-pointer group relative
-        ${isAlert ? 'hover:border-red-200/60' : 
+        ${isAlert ? 'hover:border-red-200/60 ring-1 ring-red-50' : 
           color === 'green' ? 'hover:border-green-200/60' : 
           color === 'purple' ? 'hover:border-purple-200/60' : 
           'hover:border-blue-200/60'}`}
@@ -69,7 +70,7 @@ const Dashboard = () => {
     const { role } = useAuth();
     const navigate = useNavigate();
     
-    // State
+    // --- STATE ---
     const [stats, setStats] = useState({
         netRevenue: 0, activeOrders: 0, 
         inventoryCount: 0
@@ -212,6 +213,7 @@ const Dashboard = () => {
                         subtext="Total Cash In Hand"
                         onClick={() => navigate('/admin/performance')}
                     />
+                    
                     <MetricCard 
                         title="Active Jobs" 
                         value={stats.activeOrders} 
@@ -220,6 +222,8 @@ const Dashboard = () => {
                         subtext="Repairs In Progress"
                         onClick={() => navigate('/admin/orders')}
                     />
+
+                    {/* Inventory Card (Restored Logic) */}
                     {totalAlerts > 0 ? (
                         <MetricCard 
                             title="Inventory Alert" 
@@ -241,7 +245,7 @@ const Dashboard = () => {
                         />
                     )}
 
-                    {/* 🔥 NEW QUICK ACCESS CARD (Combined User, Payroll, Service) */}
+                    {/* QUICK ACCESS CARD */}
                     <div className={`${CARD_STYLE} p-5 flex flex-col justify-between h-full bg-slate-900 border-slate-900 group hover:shadow-xl`}>
                         <div className="flex justify-between items-center mb-2">
                             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Quick Actions</span>

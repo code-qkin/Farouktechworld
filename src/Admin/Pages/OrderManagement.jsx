@@ -5,7 +5,7 @@ import {
     ShoppingBag, MinusCircle, Download, 
     ArrowLeft, ShoppingCart, Menu, UserPlus,
     Filter, Calendar, ChevronDown, CheckCircle, AlertCircle, Wrench, ArrowRight,
-    RotateCcw, ChevronLeft, ChevronRight, Plus, Minus
+    RotateCcw, ChevronLeft, ChevronRight, Plus, Minus, AlertTriangle
 } from 'lucide-react';
 import { useAuth } from '../AdminContext.jsx'; 
 import { db } from '../../firebaseConfig.js';
@@ -206,7 +206,7 @@ const OrdersManagement = () => {
         });
     };
 
-    // --- 4. POS LOGIC (Condensed for brevity, same as previous) ---
+    // --- 4. POS LOGIC ---
     const uniqueServices = useMemo(() => [...new Set(dbServices.map(p => p.service))].sort(), [dbServices]);
     const uniqueModels = useMemo(() => [...new Set(dbServices.map(p => p.model))].sort(), [dbServices]);
 
@@ -230,7 +230,20 @@ const OrdersManagement = () => {
     
     const addDeviceToCart = () => {
         if (!repairInput.deviceModel) return setToast({message: "Select Device Model.", type: "error"});
-        setCart([...cart, { type: 'repair', id: `rep-${Date.now()}`, deviceModel: repairInput.deviceModel, imei: repairInput.imei, passcode: repairInput.passcode, condition: repairInput.condition, services: currentDeviceServices, qty: 1, total: currentDeviceServices.reduce((sum, s) => sum + s.cost, 0) }]);
+        
+        // 🔥 ADDED: CONDITION FIELD
+        setCart([...cart, { 
+            type: 'repair', 
+            id: `rep-${Date.now()}`, 
+            deviceModel: repairInput.deviceModel, 
+            imei: repairInput.imei, 
+            passcode: repairInput.passcode, 
+            condition: repairInput.condition, 
+            services: currentDeviceServices, 
+            qty: 1, 
+            total: currentDeviceServices.reduce((sum, s) => sum + s.cost, 0) 
+        }]);
+        
         setRepairInput({ deviceModel: '', imei: '', passcode: '', condition: '' });
         setCurrentDeviceServices([]);
         if (window.innerWidth < 1024) setMobilePosTab('cart');
@@ -460,7 +473,6 @@ const OrdersManagement = () => {
                                     <td className="px-6 py-4 text-right font-mono font-bold text-slate-800">{formatCurrency(order.totalCost)}</td>
                                     <td className="px-6 py-4 text-center"><PaymentBadge status={order.paymentStatus} /></td>
                                     <td className="px-6 py-4 text-center"><StatusBadge status={order.status} /></td>
-                                    {/* 🔥 DELETE BUTTON COLUMN */}
                                     <td className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}>
                                         <button 
                                             onClick={() => handleDeleteOrder(order)}
@@ -492,11 +504,10 @@ const OrdersManagement = () => {
             </div>
 
             {/* --- 4. RESPONSIVE POS MODAL --- */}
-            {/* ... (POS Modal code remains identical to previous, included in full response if needed but shortened here for brevity as focus is on Delete) */}
             {showPOS && (
                 <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-0 sm:p-4 backdrop-blur-sm">
-                    {/* ... POS Content ... */}
                     <div className="bg-white w-full max-w-[1400px] h-[100dvh] sm:h-[90vh] sm:rounded-2xl shadow-2xl flex flex-col lg:flex-row overflow-hidden relative">
+                        
                         {/* LEFT: INPUTS */}
                         <div className={`w-full lg:w-[65%] flex flex-col bg-gray-50 h-full ${mobilePosTab === 'cart' ? 'hidden lg:flex' : 'flex'}`}>
                             {/* Toolbar */}
@@ -549,6 +560,17 @@ const OrdersManagement = () => {
                                             <input placeholder="Passcode" className="p-3 border rounded-lg text-sm bg-yellow-50 focus:bg-white" value={repairInput.passcode} onChange={e=>setRepairInput({...repairInput, passcode:e.target.value})}/>
                                         </div>
                                         
+                                        {/* 🔥 ADDED: CONDITION INPUT */}
+                                        <div className="relative">
+                                            <AlertTriangle size={18} className="absolute left-3 top-3 text-slate-400"/>
+                                            <input 
+                                                placeholder="Device Condition (e.g. Cracked back, scratches, water damage)" 
+                                                className="w-full pl-10 p-3 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none" 
+                                                value={repairInput.condition} 
+                                                onChange={e=>setRepairInput({...repairInput, condition:e.target.value})}
+                                            />
+                                        </div>
+                                        
                                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4">
                                             <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Add Services</label>
                                             <div className="flex flex-col md:flex-row gap-3 mb-3">
@@ -579,33 +601,22 @@ const OrdersManagement = () => {
                                     </div>
                                 )}
 
-                                {/* STORE GRID WITH SEARCH, FILTER & PAGINATION */}
+                                {/* STORE GRID */}
                                 {activeTab === 'store' && (
                                     <>
-                                        {/* SEARCH & CATEGORY BAR */}
                                         <div className="flex flex-col sm:flex-row gap-3 mb-6">
                                             <div className="relative flex-1">
                                                 <Search className="absolute left-3 top-3 text-gray-400" size={18}/>
-                                                <input 
-                                                    className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                                                    placeholder="Search item..."
-                                                    value={storeSearch}
-                                                    onChange={e => setStoreSearch(e.target.value)}
-                                                />
+                                                <input className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 outline-none focus:ring-2 focus:ring-purple-500 text-sm" placeholder="Search item..." value={storeSearch} onChange={e => setStoreSearch(e.target.value)} />
                                             </div>
                                             <div className="relative min-w-[150px]">
-                                                <select 
-                                                    className="w-full p-2.5 bg-white border border-gray-200 rounded-lg outline-none text-sm font-bold text-slate-700 appearance-none"
-                                                    value={storeCategory}
-                                                    onChange={e => setStoreCategory(e.target.value)}
-                                                >
+                                                <select className="w-full p-2.5 bg-white border border-gray-200 rounded-lg outline-none text-sm font-bold text-slate-700 appearance-none" value={storeCategory} onChange={e => setStoreCategory(e.target.value)}>
                                                     {storeCategories.map(c => <option key={c} value={c}>{c}</option>)}
                                                 </select>
                                                 <Filter className="absolute right-3 top-3 text-gray-400 pointer-events-none" size={16}/>
                                             </div>
                                         </div>
 
-                                        {/* ITEMS GRID */}
                                         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 mb-6">
                                             {currentStoreItems.map(p => (
                                                 <button key={p.id} onClick={() => handleGridAddToCart(p)} disabled={p.stock < 1} className="p-3 sm:p-4 bg-white border border-gray-200 rounded-xl text-left h-32 flex flex-col justify-between hover:border-purple-500 hover:shadow-md transition group disabled:opacity-50 disabled:bg-gray-100">
@@ -693,6 +704,10 @@ const OrdersManagement = () => {
                                         <div key={item.id} className="group bg-white border border-gray-200 rounded-xl p-3 sm:p-4 shadow-sm relative">
                                             <button onClick={() => removeFromCart(item.id)} className="absolute top-3 right-3 text-slate-300 hover:text-red-500 transition bg-gray-50 p-1.5 rounded-full"><Trash2 size={16}/></button>
                                             <div className="font-bold text-slate-800 pr-8 text-sm sm:text-base">{item.name || item.deviceModel}</div>
+                                            
+                                            {/* 🔥 DISPLAY CONDITION IN CART */}
+                                            {item.condition && <div className="text-xs text-orange-600 font-medium mt-1">Condition: {item.condition}</div>}
+                                            
                                             {item.type === 'repair' && <div className="text-xs text-slate-500 mt-1">{item.services.map(s => s.service).join(', ')}</div>}
                                             
                                             <div className="flex justify-between items-end mt-4">

@@ -30,6 +30,7 @@ import PricingPage from './pages/PricingPage';
 import TrackingPage from './pages/TrackingPage';
 // import SiteGuard from './components/SiteGuard';
 import ServicePrices from './Admin/Pages/ServicePrices';
+import IssueReports from "./Admin/Pages/IssueReports";
 
 
 const router = createBrowserRouter(

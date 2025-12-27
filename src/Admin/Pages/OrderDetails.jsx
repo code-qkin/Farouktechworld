@@ -3,11 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
     ArrowLeft, Printer, DollarSign, 
     CheckCircle, Wrench, Ban, PlusCircle, 
-    X, RotateCcw, RefreshCw, Lock, Smartphone, Edit2, Trash2
+    X, RotateCcw, RefreshCw, Lock, Smartphone, Edit2, Trash2, AlertTriangle, Package
 } from 'lucide-react';
 import { 
     collection, query, where, getDocs, doc, 
-    updateDoc, runTransaction, addDoc, serverTimestamp, Timestamp, onSnapshot, deleteDoc
+    updateDoc, runTransaction, addDoc, serverTimestamp, Timestamp, onSnapshot, deleteDoc, arrayRemove, increment 
 } from 'firebase/firestore'; 
 import { db } from '../../firebaseConfig.js';
 import { useAuth } from '../AdminContext';
@@ -29,12 +29,9 @@ const OrderDetails = () => {
     const [showReceipt, setShowReceipt] = useState(false);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [paymentInput, setPaymentInput] = useState('');
-    
-    // Discount UI
     const [showDiscountModal, setShowDiscountModal] = useState(false);
     const [discountInput, setDiscountInput] = useState('');
     
-    // Feedback
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
     const [promptConfig, setPromptConfig] = useState({ isOpen: false, title: '', message: '', max: 1, action: null });
@@ -89,28 +86,23 @@ const OrderDetails = () => {
 
     // --- HANDLERS ---
     
-    // 🔥 UPDATED: Automatically set Service AND Order status to 'In Progress'
     const handleServiceAssign = async (i, s, newWorker) => {
         setIsUpdating(true);
         try {
             const newItems = JSON.parse(JSON.stringify(order.items));
             newItems[i].services[s].worker = newWorker;
             
-            let newOrderStatus = order.status; // Default to current status
+            let newOrderStatus = order.status; 
 
             if (newWorker === 'Unassigned') {
                 newItems[i].services[s].status = 'Pending';
             } else {
-                // 1. Update Service Status
                 newItems[i].services[s].status = 'In Progress';
-                
-                // 2. Update Order Status (Only if currently Pending)
                 if (order.status === 'Pending') {
                     newOrderStatus = 'In Progress';
                 }
             }
             
-            // Update both fields in Firestore
             await updateDoc(doc(db, "Orders", order.id), { 
                 items: newItems,
                 status: newOrderStatus
@@ -374,6 +366,41 @@ const OrderDetails = () => {
         setIsUpdating(false);
     };
 
+    // 🔥 NEW: Handle Removing a Part (Restoring Stock)
+    const handleRemovePart = (partItem) => {
+        setConfirmConfig({
+            isOpen: true,
+            title: "Remove Part?",
+            message: `Remove "${partItem.name}" and restore stock?`,
+            confirmText: "Remove & Restore",
+            confirmColor: "bg-red-600",
+            action: async () => {
+                setIsUpdating(true);
+                try {
+                    await runTransaction(db, async (t) => {
+                        if (partItem.partId) {
+                            const partRef = doc(db, "Inventory", partItem.partId);
+                            const partDoc = await t.get(partRef);
+                            if (partDoc.exists()) {
+                                t.update(partRef, { stock: increment(1) });
+                            }
+                        }
+                        t.update(doc(db, "Orders", order.id), {
+                            items: arrayRemove(partItem)
+                        });
+                    });
+                    setToast({ message: "Part Removed", type: "success" });
+                } catch (e) {
+                    console.error(e);
+                    setToast({ message: "Failed to remove part", type: "error" });
+                } finally {
+                    setIsUpdating(false);
+                    setConfirmConfig({ ...confirmConfig, isOpen: false });
+                }
+            }
+        });
+    };
+
     const formatCurrency = (amount) => {
         const num = Number(amount);
         return isNaN(num) ? '₦0.00' : `₦${num.toLocaleString()}`;
@@ -381,6 +408,9 @@ const OrderDetails = () => {
     
     const formatDate = (date) => (!date ? '' : new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }));
     const isReturn = order?.orderType === 'return';
+
+    // Filter parts used
+    const partsUsed = order?.items?.filter(i => i.type === 'part_usage') || [];
 
     if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-4 border-purple-900"></div></div>;
     if (!order) return null;
@@ -446,10 +476,18 @@ const OrderDetails = () => {
                                                                 <button onClick={() => handleWarrantyReturn(item)} className="bg-orange-100 text-orange-700 text-[10px] px-2 py-1 rounded ml-auto flex items-center gap-1"><RefreshCw size={12}/> Warranty</button>
                                                             )}
                                                         </div>
+
                                                         {item.type === 'repair' && (
-                                                            <div className="flex gap-4 text-xs mt-1 text-gray-500">
+                                                            <div className="flex flex-wrap gap-3 text-xs mt-1 text-gray-500">
                                                                 {item.imei && <span className="flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded"><Smartphone size={10}/> IMEI: {item.imei}</span>}
                                                                 {item.passcode && <span className="flex items-center gap-1 bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded border border-yellow-100 font-bold"><Lock size={10}/> Pass: {item.passcode}</span>}
+                                                                
+                                                                {/* 🔥 ADDED: DISPLAY CONDITION */}
+                                                                {item.condition && (
+                                                                    <span className="flex items-center gap-1 bg-orange-50 text-orange-700 px-2 py-0.5 rounded border border-orange-100 font-medium">
+                                                                        <AlertTriangle size={10}/> Cond: {item.condition}
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>
@@ -485,6 +523,34 @@ const OrderDetails = () => {
                             </table>
                         </div>
                     </div>
+
+                    {/* 🔥 PARTS USED SECTION (New) */}
+                    {partsUsed.length > 0 && (
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                             <div className="bg-yellow-50 px-6 py-3 border-b border-yellow-100 flex items-center gap-2">
+                                <Package size={18} className="text-yellow-700"/>
+                                <h3 className="font-bold text-yellow-900 text-sm uppercase">Parts & Materials Used</h3>
+                            </div>
+                            <div className="divide-y divide-gray-50">
+                                {partsUsed.map((part, idx) => (
+                                    <div key={idx} className="px-6 py-3 flex justify-between items-center hover:bg-gray-50">
+                                        <div>
+                                            <span className="text-sm font-bold text-slate-700">{part.name.replace('Used: ', '')}</span>
+                                            <div className="text-xs text-slate-400">By {part.worker || 'Unknown'} • {part.usedAt ? new Date(part.usedAt).toLocaleString() : ''}</div>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleRemovePart(part)}
+                                            className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-full transition"
+                                            title="Remove Part & Restore Stock"
+                                            disabled={isUpdating}
+                                        >
+                                            <Trash2 size={16}/>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* RIGHT COLUMN */}

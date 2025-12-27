@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Wrench, CheckCircle, Clock, BoxSelect, LogOut, 
-    Search, X, Box, User, 
-    Briefcase, Calendar, TrendingUp, Layers, ArrowRight, Undo2, Lock, Package
+    Search, X, Box, Briefcase, Layers, Undo2, Lock, Package, AlertTriangle
 } from 'lucide-react';
 import { useAuth } from '../../AdminContext.jsx';
 import { db, auth } from '../../../firebaseConfig.js';
@@ -14,7 +13,7 @@ import {
 } from 'firebase/firestore';
 import { Toast, ConfirmModal } from '../../Components/Feedback.jsx'; 
 import { 
-    BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, CartesianGrid 
+    BarChart, Bar, ResponsiveContainer 
 } from 'recharts';
 
 // --- UTILS ---
@@ -137,7 +136,7 @@ const WorkerDashboard = ({ user: propUser }) => {
       return { myActive, poolCount, myCompleted, chartData };
   }, [orders, user]);
 
-  // --- ACTIONS (With Toast & ConfirmModal) ---
+  // --- ACTIONS ---
   
   const claimService = (order, itemIndex, serviceIndex) => {
       setConfirmConfig({
@@ -378,12 +377,19 @@ const WorkerDashboard = ({ user: propUser }) => {
                         <div className="p-4 flex-1 space-y-4">
                             {order.visibleItems.map((item, idx) => (
                                 <div key={idx} className="relative">
-                                    <div className="flex items-center gap-2 mb-2">
+                                    <div className="flex flex-wrap items-center gap-2 mb-2">
                                         <div className="bg-slate-800 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase truncate max-w-[200px]">{item.name || item.deviceModel}</div>
                                         {item.passcode && (
                                             <div className="flex items-center gap-1 bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-100">
                                                 <Lock size={10} className="text-yellow-600"/>
                                                 <span className="font-mono text-[10px] font-bold text-slate-800">{item.passcode}</span>
+                                            </div>
+                                        )}
+                                        {/* Condition Display */}
+                                        {item.condition && (
+                                            <div className="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                                <AlertTriangle size={10} className="text-orange-500"/>
+                                                <span className="text-[10px] font-medium text-gray-600 truncate max-w-[150px]">{item.condition}</span>
                                             </div>
                                         )}
                                     </div>
@@ -455,7 +461,7 @@ const WorkerDashboard = ({ user: propUser }) => {
           )}
       </div>
 
-      {/* MOBILE FRIENDLY PART MODAL */}
+      {/* PART MODAL */}
       {showPartModal && (
           <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
               <div className="bg-white p-5 rounded-2xl shadow-2xl w-full max-w-sm animate-in zoom-in-95 flex flex-col max-h-[80vh]">
