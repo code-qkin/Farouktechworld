@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
     ArrowLeft, Printer, DollarSign, 
     CheckCircle, Wrench, Ban, PlusCircle, 
-    X, RotateCcw, RefreshCw, Lock, Smartphone, Edit2, Trash2, AlertTriangle, Package
+    X, RotateCcw, RefreshCw, Lock, Smartphone, Edit2, Trash2, AlertTriangle, Package, Save
 } from 'lucide-react';
 import { 
     collection, query, where, getDocs, doc, 
@@ -32,6 +32,9 @@ const OrderDetails = () => {
     const [showDiscountModal, setShowDiscountModal] = useState(false);
     const [discountInput, setDiscountInput] = useState('');
     
+    // Condition Editing State
+    const [editingCondition, setEditingCondition] = useState({ index: -1, value: '' });
+
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
     const [promptConfig, setPromptConfig] = useState({ isOpen: false, title: '', message: '', max: 1, action: null });
@@ -366,7 +369,6 @@ const OrderDetails = () => {
         setIsUpdating(false);
     };
 
-    // 🔥 NEW: Handle Removing a Part (Restoring Stock)
     const handleRemovePart = (partItem) => {
         setConfirmConfig({
             isOpen: true,
@@ -399,6 +401,24 @@ const OrderDetails = () => {
                 }
             }
         });
+    };
+
+    // 🔥 NEW: SAVE EDITED CONDITION
+    const handleSaveCondition = async (itemIndex) => {
+        setIsUpdating(true);
+        try {
+            const newItems = JSON.parse(JSON.stringify(order.items));
+            newItems[itemIndex].condition = editingCondition.value;
+            
+            await updateDoc(doc(db, "Orders", order.id), { items: newItems });
+            setToast({ message: "Condition updated", type: "success" });
+            setEditingCondition({ index: -1, value: '' }); // Close editor
+        } catch(e) {
+            console.error(e);
+            setToast({ message: "Update failed", type: "error" });
+        } finally {
+            setIsUpdating(false);
+        }
     };
 
     const formatCurrency = (amount) => {
@@ -478,16 +498,45 @@ const OrderDetails = () => {
                                                         </div>
 
                                                         {item.type === 'repair' && (
-                                                            <div className="flex flex-wrap gap-3 text-xs mt-1 text-gray-500">
+                                                            <div className="flex flex-wrap gap-3 text-xs mt-1 text-gray-500 items-center">
                                                                 {item.imei && <span className="flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded"><Smartphone size={10}/> IMEI: {item.imei}</span>}
                                                                 {item.passcode && <span className="flex items-center gap-1 bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded border border-yellow-100 font-bold"><Lock size={10}/> Pass: {item.passcode}</span>}
                                                                 
-                                                                {/* 🔥 ADDED: DISPLAY CONDITION */}
-                                                                {item.condition && (
-                                                                    <span className="flex items-center gap-1 bg-orange-50 text-orange-700 px-2 py-0.5 rounded border border-orange-100 font-medium">
-                                                                        <AlertTriangle size={10}/> Cond: {item.condition}
-                                                                    </span>
-                                                                )}
+                                                                {/* 🔥 CONDITION DISPLAY & EDITING */}
+                                                                <div className="flex items-center gap-2 group">
+                                                                    {editingCondition.index === i ? (
+                                                                        <div className="flex items-center gap-1 animate-in fade-in">
+                                                                            <input 
+                                                                                className="border border-purple-300 rounded px-2 py-0.5 text-xs focus:ring-1 focus:ring-purple-500 outline-none w-32"
+                                                                                value={editingCondition.value}
+                                                                                onChange={(e) => setEditingCondition({ ...editingCondition, value: e.target.value })}
+                                                                                placeholder="Condition..."
+                                                                                autoFocus
+                                                                            />
+                                                                            <button onClick={() => handleSaveCondition(i)} className="text-green-600 hover:bg-green-50 p-1 rounded"><CheckCircle size={14}/></button>
+                                                                            <button onClick={() => setEditingCondition({ index: -1, value: '' })} className="text-red-500 hover:bg-red-50 p-1 rounded"><X size={14}/></button>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <>
+                                                                            {item.condition ? (
+                                                                                <span className="flex items-center gap-1 bg-orange-50 text-orange-700 px-2 py-0.5 rounded border border-orange-100 font-medium">
+                                                                                    <AlertTriangle size={10}/> Cond: {item.condition}
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-xs text-gray-300 italic flex items-center gap-1"><AlertTriangle size={10}/> No condition notes</span>
+                                                                            )}
+                                                                            {!isReturn && order.status !== 'Void' && (
+                                                                                <button 
+                                                                                    onClick={() => setEditingCondition({ index: i, value: item.condition || '' })}
+                                                                                    className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-purple-600 transition p-1"
+                                                                                    title="Edit Condition"
+                                                                                >
+                                                                                    <Edit2 size={12}/>
+                                                                                </button>
+                                                                            )}
+                                                                        </>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         )}
                                                     </div>
@@ -524,7 +573,7 @@ const OrderDetails = () => {
                         </div>
                     </div>
 
-                    {/* 🔥 PARTS USED SECTION (New) */}
+                    {/* 🔥 PARTS USED SECTION */}
                     {partsUsed.length > 0 && (
                         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                              <div className="bg-yellow-50 px-6 py-3 border-b border-yellow-100 flex items-center gap-2">
