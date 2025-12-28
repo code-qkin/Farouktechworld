@@ -2,51 +2,52 @@ import { PhoneCall, ClipboardCheck, Wrench } from 'lucide-react';
 
 const steps = [
   {
-    title: "Contact Us",
-    description: "Reach out via phone, email, or our online form to discuss your tech repair needs.",
-    icon: <PhoneCall className="w-8 h-8 text-purple-600" />,
-    step: 1,
+    title: "1. Book or Walk In",
+    desc: "Schedule online or visit our Ibadan center.",
+    icon: <PhoneCall className="w-6 h-6" />,
   },
   {
-    title: "Get a Quote",
-    description: "Receive a transparent and competitive quote for the repair services you need.",
-    icon: <ClipboardCheck className="w-8 h-8 text-purple-600" />,
-    step: 2,
+    title: "2. Free Diagnosis",
+    desc: "We inspect your device and give a quote.",
+    icon: <ClipboardCheck className="w-6 h-6" />,
   },
   {
-    title: "Fast Repair",
-    description: "Our skilled technicians will promptly repair your device with high-quality parts and care.",
-    icon: <Wrench className="w-8 h-8 text-purple-600" />,
-    step: 3,
+    title: "3. Fast Repair",
+    desc: "Most repairs are done in under 60 minutes.",
+    icon: <Wrench className="w-6 h-6" />,
   },
 ];
 
 const HowWeWork = () => {
   return (
-    <section className="bg-gradient-to-br from-purple-100 to-gray-100 text-purple-900 py-16 px-10  transition-all duration-500">
-      <div className="mx-auto">
-        <h2 className="text-4xl font-extrabold text-center mb-12">How We Work</h2>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {steps.map((step) => (
-            <div
-              key={step.step}
-              className="bg-white text-purple-800 rounded-xl shadow-lg p-6 text-center hover:scale-105 transition-transform duration-300"
-            >
-              <div className="flex justify-center mb-4">
-                <div className="bg-purple-100 p-4 rounded-full shadow-md">
-                  {step.icon}
-                </div>
-              </div>
-              <h3 className="text-xl font-bold mb-2">{step.title}</h3>
-              <p className="text-gray-700">{step.description}</p>
-              <div className="mt-4">
-                <span className="inline-block bg-purple-600 text-white rounded-full px-3 py-1 text-sm font-semibold">
-                  Step {step.step}
-                </span>
-              </div>
+    <section className="py-20 bg-white border-y border-slate-100">
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+            
+            {/* Left Text */}
+            <div>
+                <span className="text-purple-600 font-bold tracking-wider uppercase text-sm">Our Process</span>
+                <h2 className="text-3xl md:text-4xl font-black text-slate-900 mt-2 mb-6">Simple, Transparent, & Fast.</h2>
+                <p className="text-lg text-slate-600 mb-8">
+                    We know how important your device is. That’s why we’ve streamlined our repair process to get it back in your hands as quickly as possible.
+                </p>
             </div>
-          ))}
+
+            {/* Right Steps */}
+            <div className="space-y-6">
+                {steps.map((step, idx) => (
+                    <div key={idx} className="flex items-center gap-6 p-6 rounded-xl bg-slate-50 border border-slate-100 hover:border-purple-200 transition">
+                        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm text-purple-600 shrink-0">
+                            {step.icon}
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-900">{step.title}</h3>
+                            <p className="text-slate-500">{step.desc}</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
         </div>
       </div>
     </section>

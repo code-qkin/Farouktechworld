@@ -1,63 +1,29 @@
-
 const Stats = () => {
     const stats = [
-        { number: '98%',
-         label: 'Success Rate', 
-         discussion: 'Our high success rate reflects our commitment to quality repairs and customer satisfaction.' 
-        },
-        { number: '4.5/5',
-         label: 'Customer Rating', 
-         discussion: 'Our customers consistently rate us highly for our professionalism, expertise, and service quality.' 
-        },
-        { number: '1500+', 
-          label: 'Devices Repaired', 
-          discussion: 'We have successfully repaired over 1500 devices, showcasing our extensive experience in tech repairs.' 
-        },
-        { number: '500+', 
-          label: 'Happy Clients', 
-          discussion: 'We take pride in our extensive client base across Nigeria, reflecting our commitment to quality service and customer satisfaction. ' 
-        },
-        { number: '10+', 
-          label: 'Years in Business', 
-          discussion: 'With over a decade of experience, we bring unparalleled expertise and know-how to every repair job, ensuring high quality and your satisfaction.'
-        },
-        { number: '10', 
-          label: 'Expert Technicians', 
-          discussion: 'With their combined expertise, we deliver superior service and technical proficiency with every repair job.' 
-        },
-        { number: '24/7', 
-          label: 'Customer Support', 
-          discussion: 'Our dedicated support team is available around the clock to assist you with any inquiries or issues you may have.' 
-        },
-        
-        { number: '99%',
-          label: 'On-Time Repairs',
-          discussion: 'We pride ourselves on our punctuality, ensuring that 99% of our repairs are completed within the promised timeframe.'
-        },
+        { number: '10+', label: 'Years Experience' },
+        { number: '3k+', label: 'Devices Fixed' },
+        { number: '99%', label: 'Success Rate' },
+        { number: '24/7', label: 'Support' },
     ];
-    return (
-        <section>
-            <section className="py-16 bg-purple-800">
-                <div className="mx-auto  px-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 text-white lg:grid-cols-4 gap-8 text-center">
-                        {stats.map((stat, index) => (
-                            <div key={index} className="p-6">
-                                <h3 className="text-3xl md:text-4xl font-bold text-white mb-2">
-                                    {stat.number}
-                                </h3>
-                                <p className="text-lg font-medium">
-                                    {stat.label}
-                                </p>
-                                <p className="mt-2 text-sm">
-                                    {stat.discussion}
-                                </p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-        </section>
-    )
-}
 
-export default Stats
+    return (
+        <section className="bg-purple-900 text-white py-12 relative z-20 -mt-2">
+            <div className="max-w-7xl mx-auto px-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center divide-x divide-purple-800/50">
+                    {stats.map((stat, index) => (
+                        <div key={index} className="p-4">
+                            <h3 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-purple-200 mb-2">
+                                {stat.number}
+                            </h3>
+                            <p className="text-sm md:text-base font-medium text-purple-200 uppercase tracking-widest">
+                                {stat.label}
+                            </p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </section>
+    );
+};
+
+export default Stats;
