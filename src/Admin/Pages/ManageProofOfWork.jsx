@@ -15,19 +15,17 @@ const ManageProofOfWork = () => {
     const [loading, setLoading] = useState(true);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
-    
-    // Edit State
     const [editingId, setEditingId] = useState(null);
     
-    // Form State
+    // Form State (Removed Thumbnail)
     const [formData, setFormData] = useState({
         title: '',
         category: 'screen',
-        type: 'image', // image or video
+        type: 'image',
         before: '',
         after: '',
-        videoUrl: '',
-        thumbnail: '',
+        videoUrl: '',       
+        videoBeforeUrl: '', 
         desc: '',
         duration: ''
     });
@@ -35,7 +33,6 @@ const ManageProofOfWork = () => {
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
-    // 1. Fetch Projects
     useEffect(() => {
         const q = query(collection(db, "ProofOfWork"), orderBy("createdAt", "desc"));
         const unsub = onSnapshot(q, (snap) => {
@@ -45,9 +42,13 @@ const ManageProofOfWork = () => {
         return () => unsub();
     }, []);
 
-    // 2. Handlers
     const resetForm = () => {
-        setFormData({ title: '', category: 'screen', type: 'image', before: '', after: '', videoUrl: '', thumbnail: '', desc: '', duration: '' });
+        setFormData({ 
+            title: '', category: 'screen', type: 'image', 
+            before: '', after: '', 
+            videoUrl: '', videoBeforeUrl: '', 
+            desc: '', duration: '' 
+        });
         setEditingId(null);
         setIsFormOpen(false);
     };
@@ -60,7 +61,7 @@ const ManageProofOfWork = () => {
             before: project.before || '',
             after: project.after || '',
             videoUrl: project.videoUrl || '',
-            thumbnail: project.thumbnail || '',
+            videoBeforeUrl: project.videoBeforeUrl || '', 
             desc: project.desc || '',
             duration: project.duration || ''
         });
@@ -76,19 +77,17 @@ const ManageProofOfWork = () => {
         setSubmitting(true);
         try {
             if (editingId) {
-                // UPDATE Existing
                 await updateDoc(doc(db, "ProofOfWork", editingId), {
                     ...formData,
                     updatedAt: serverTimestamp()
                 });
-                setToast({ message: "Project Updated Successfully", type: "success" });
+                setToast({ message: "Project Updated!", type: "success" });
             } else {
-                // CREATE New
                 await addDoc(collection(db, "ProofOfWork"), {
                     ...formData,
                     createdAt: serverTimestamp()
                 });
-                setToast({ message: "Project Added Successfully", type: "success" });
+                setToast({ message: "Project Added!", type: "success" });
             }
             resetForm();
         } catch (err) {
@@ -119,122 +118,107 @@ const ManageProofOfWork = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 p-6 sm:p-10">
+        <div className="min-h-screen bg-gray-50 p-4 md:p-10">
             <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: '' })} />
             <ConfirmModal isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmText={confirmConfig.confirmText} confirmColor={confirmConfig.confirmColor} onCancel={() => setConfirmConfig({...confirmConfig, isOpen: false})} onConfirm={confirmConfig.action} />
 
-            <div className="flex justify-between items-center mb-8">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                 <div>
-                    <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+                    <h1 className="text-xl md:text-2xl font-black text-slate-900 flex items-center gap-2">
                         <ImageIcon className="text-purple-600"/> Portfolio Manager
                     </h1>
                     <p className="text-sm text-slate-500">Manage 'Before & After' showcase.</p>
                 </div>
-                <div className="flex gap-3">
-                    <button onClick={() => navigate('/admin/dashboard')} className="px-4 py-2 border rounded-lg hover:bg-white transition text-sm font-bold">Dashboard</button>
-                    <button onClick={() => { resetForm(); setIsFormOpen(true); }} className="px-4 py-2 bg-purple-900 text-white rounded-lg hover:bg-purple-800 transition text-sm font-bold flex items-center gap-2 shadow-lg">
-                        <Plus size={18}/> Add Project
+                <div className="flex gap-3 w-full md:w-auto">
+                    <button onClick={() => navigate('/admin/dashboard')} className="flex-1 md:flex-none px-4 py-2 border rounded-lg hover:bg-white transition text-sm font-bold text-center">Dashboard</button>
+                    <button onClick={() => { resetForm(); setIsFormOpen(true); }} className="flex-1 md:flex-none px-4 py-2 bg-purple-900 text-white rounded-lg hover:bg-purple-800 transition text-sm font-bold flex items-center justify-center gap-2 shadow-lg">
+                        <Plus size={18}/> <span className="hidden md:inline">Add Project</span><span className="md:hidden">Add</span>
                     </button>
                 </div>
             </div>
 
-            {/* FORM SECTION */}
+            {/* FORM */}
             {isFormOpen && (
-                <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-200 mb-8 animate-in fade-in slide-in-from-top-4">
+                <div className="bg-white p-4 md:p-6 rounded-2xl shadow-xl border border-gray-200 mb-8 animate-in fade-in slide-in-from-top-4">
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
                             {editingId ? <Edit2 size={20} className="text-blue-600"/> : <Plus size={20} className="text-green-600"/>}
-                            {editingId ? 'Edit Project' : 'New Project Entry'}
+                            {editingId ? 'Edit Project' : 'New Project'}
                         </h3>
                         <button onClick={resetForm}><X className="text-slate-400 hover:text-slate-600"/></button>
                     </div>
                     
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            
-                            {/* Left Column */}
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Title</label>
-                                    <input className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500" placeholder="e.g. iPhone 13 Pro Max Screen" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+                                    <input className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm md:text-base" placeholder="e.g. iPhone 13 Pro Max Screen" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Category</label>
-                                        <select className="w-full p-3 border rounded-xl outline-none bg-white" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
+                                        <select className="w-full p-3 border rounded-xl outline-none bg-white text-sm md:text-base" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
                                             <option value="screen">Screen</option>
                                             <option value="battery">Battery</option>
                                             <option value="housing">Housing</option>
-                                            <option value="water-damage">Water Damage</option>
+                                            <option value="water-damage">Water</option>
                                             <option value="charging">Charging</option>
                                             <option value="software">Software</option>
                                             <option value="camera">Camera</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Media Type</label>
-                                        <select className="w-full p-3 border rounded-xl outline-none bg-white" value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})}>
-                                            <option value="image">Before/After Images</option>
-                                            <option value="video">Video Showcase</option>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Type</label>
+                                        <select className="w-full p-3 border rounded-xl outline-none bg-white text-sm md:text-base" value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})}>
+                                            <option value="image">Image</option>
+                                            <option value="video">Video</option>
                                         </select>
                                     </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Description</label>
-                                    <textarea className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500" rows="3" placeholder="Brief details about the fix..." value={formData.desc} onChange={e => setFormData({...formData, desc: e.target.value})}></textarea>
+                                    <textarea className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm md:text-base" rows="3" placeholder="Brief details about the fix..." value={formData.desc} onChange={e => setFormData({...formData, desc: e.target.value})}></textarea>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Duration</label>
-                                    <input className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500" placeholder="e.g. 45 Mins" value={formData.duration} onChange={e => setFormData({...formData, duration: e.target.value})} />
+                                    <input className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm md:text-base" placeholder="e.g. 45 Mins" value={formData.duration} onChange={e => setFormData({...formData, duration: e.target.value})} />
                                 </div>
                             </div>
 
-                            {/* Right Column (URLs) */}
                             <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
                                 {formData.type === 'image' ? (
                                     <>
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Before Image URL</label>
-                                            <div className="flex gap-2">
-                                                <LinkIcon size={18} className="text-slate-400 mt-3"/>
-                                                <input className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm" placeholder="https://..." value={formData.before} onChange={e => setFormData({...formData, before: e.target.value})} />
-                                            </div>
+                                            <input className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm" placeholder="https://..." value={formData.before} onChange={e => setFormData({...formData, before: e.target.value})} />
                                         </div>
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">After Image URL</label>
-                                            <div className="flex gap-2">
-                                                <LinkIcon size={18} className="text-slate-400 mt-3"/>
-                                                <input className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm" placeholder="https://..." value={formData.after} onChange={e => setFormData({...formData, after: e.target.value})} />
-                                            </div>
+                                            <input className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm" placeholder="https://..." value={formData.after} onChange={e => setFormData({...formData, after: e.target.value})} />
                                         </div>
                                     </>
                                 ) : (
                                     <>
                                         <div>
-                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Video URL</label>
-                                            <div className="flex gap-2">
-                                                <Film size={18} className="text-slate-400 mt-3"/>
-                                                <input className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm" placeholder="https://..." value={formData.videoUrl} onChange={e => setFormData({...formData, videoUrl: e.target.value})} />
-                                            </div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Main / After Video URL</label>
+                                            <input className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm" placeholder="https://..." value={formData.videoUrl} onChange={e => setFormData({...formData, videoUrl: e.target.value})} />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Thumbnail URL</label>
-                                            <div className="flex gap-2">
-                                                <ImageIcon size={18} className="text-slate-400 mt-3"/>
-                                                <input className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm" placeholder="https://..." value={formData.thumbnail} onChange={e => setFormData({...formData, thumbnail: e.target.value})} />
-                                            </div>
+                                            <label className="block text-xs font-bold text-purple-600 uppercase mb-1">Before Video URL (Optional)</label>
+                                            <input className="w-full p-3 border-2 border-dashed border-purple-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm bg-purple-50/50" placeholder="https://... (Optional)" value={formData.videoBeforeUrl} onChange={e => setFormData({...formData, videoBeforeUrl: e.target.value})} />
                                         </div>
                                     </>
                                 )}
-                                <div className="mt-4 p-3 bg-blue-50 text-blue-700 text-xs rounded-lg">
-                                    <strong>Tip:</strong> Paste direct URLs from Unsplash, Google Drive, or your hosting.
+                                <div className="mt-4 p-3 bg-blue-50 text-blue-700 text-xs rounded-lg leading-relaxed">
+                                    <strong>Tip:</strong> Paste direct URLs. Videos will auto-generate their own preview.
                                 </div>
                             </div>
                         </div>
 
-                        <div className="flex justify-end gap-3 pt-4 border-t">
-                            <button type="button" onClick={resetForm} className="px-6 py-3 font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition">Cancel</button>
-                            <button type="submit" disabled={submitting} className={`px-6 py-3 text-white font-bold rounded-xl shadow-lg flex items-center gap-2 ${editingId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-purple-900 hover:bg-purple-800'}`}>
+                        <div className="flex flex-col-reverse md:flex-row justify-end gap-3 pt-4 border-t">
+                            <button type="button" onClick={resetForm} className="w-full md:w-auto px-6 py-3 font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition">Cancel</button>
+                            <button type="submit" disabled={submitting} className={`w-full md:w-auto px-6 py-3 text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 ${editingId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-purple-900 hover:bg-purple-800'}`}>
                                 {submitting ? <Loader2 className="animate-spin"/> : <Save size={18}/>} 
                                 {editingId ? 'Update Project' : 'Save Project'}
                             </button>
@@ -249,27 +233,30 @@ const ManageProofOfWork = () => {
                     {projects.map(p => (
                         <div key={p.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden group hover:shadow-md transition-all">
                             <div className="h-48 bg-slate-100 relative">
-                                <img src={p.type === 'video' ? p.thumbnail : p.after} alt={p.title} className="w-full h-full object-cover"/>
+                                {p.type === 'video' ? (
+                                    <video src={p.videoUrl} className="w-full h-full object-cover pointer-events-none" muted />
+                                ) : (
+                                    <img src={p.after} alt={p.title} className="w-full h-full object-cover"/>
+                                )}
                                 
                                 {/* Edit/Delete Overlay */}
-                                <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition duration-300">
+                                <div className="absolute top-2 right-2 flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition duration-300">
                                     <button 
                                         onClick={() => handleEdit(p)} 
                                         className="bg-white text-blue-600 p-2 rounded-full shadow-lg hover:bg-blue-50 hover:text-blue-700 transition"
-                                        title="Edit"
                                     >
                                         <Edit2 size={16}/>
                                     </button>
                                     <button 
                                         onClick={() => handleDelete(p.id)} 
                                         className="bg-white text-red-600 p-2 rounded-full shadow-lg hover:bg-red-50 hover:text-red-700 transition"
-                                        title="Delete"
                                     >
                                         <Trash2 size={16}/>
                                     </button>
                                 </div>
                                 
                                 <span className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded uppercase font-bold">{p.category}</span>
+                                {p.videoBeforeUrl && <span className="absolute bottom-2 right-2 bg-purple-600 text-white text-[10px] px-2 py-1 rounded uppercase font-bold">Dual Video</span>}
                             </div>
                             <div className="p-4">
                                 <h3 className="font-bold text-slate-800 truncate">{p.title}</h3>

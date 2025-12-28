@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import Hero from '../components/Hero.jsx';
+import AboutUs from '../components/AboutUs.jsx';
 import Stats from '../components/Stats.jsx';
 import WhyChooseUs from '../components/WhyChooseUs.jsx'; 
 import Services from '../components/Services.jsx';
@@ -29,6 +30,7 @@ const Homepage = () => {
   return (
     <div className="font-sans antialiased text-slate-800 bg-slate-50">
       <Hero />
+      <AboutUs />
       <Stats />
       <WhyChooseUs /> 
       <Services />
