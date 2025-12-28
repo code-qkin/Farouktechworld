@@ -321,7 +321,7 @@ const ProofOfWorkPage = () => {
                 )}
             </div>
 
-            <div className="mb-20"><Stats /></div>
+            <div className=""><Stats /></div>
             <Modal project={viewProject} onClose={() => setViewProject(null)} />
         </div>
     );
