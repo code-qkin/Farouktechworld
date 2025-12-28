@@ -1,373 +1,238 @@
-import { useState } from 'react';
-import { ChevronDown, ChevronUp, Clock, X, Phone, Quote, LogOut } from 'lucide-react';
-import Proofofwork from '../assets/images/hero.png';
-import { Link } from "react-router-dom";
+import React, { useState, useMemo, useEffect } from 'react';
+import { Play, Camera, Wrench, ChevronRight, X, Clock, CheckCircle, ChevronLeft, Loader2 } from 'lucide-react';
 import Stats from '../components/Stats';
+import { Link } from 'react-router-dom';
+import { db } from '../firebaseConfig';
+import { collection, query, orderBy, getDocs } from 'firebase/firestore';
+
+const ProjectCard = ({ project, onClick }) => {
+    return (
+        <div 
+            onClick={() => onClick(project)}
+            className="group bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+        >
+            {/* Media Area */}
+            <div className="relative h-64 overflow-hidden bg-slate-100">
+                {project.type === 'video' ? (
+                    <>
+                        <video 
+                            src={project.videoUrl} 
+                            className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition" 
+                            muted 
+                            loop 
+                            playsInline
+                            onMouseOver={event => event.target.play()} 
+                            onMouseOut={event => event.target.pause()} 
+                            poster={project.thumbnail}
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="bg-white/20 backdrop-blur-md p-4 rounded-full shadow-lg">
+                                <Play size={24} className="text-white fill-current"/>
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <div className="relative w-full h-full">
+                        {/* After Image (Default) */}
+                        <img src={project.after} alt={project.title} className="w-full h-full object-cover absolute inset-0 z-10" />
+                        
+                        {/* Interactive Overlay Hint */}
+                        <div className="absolute top-3 right-3 z-20 bg-black/50 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Camera size={12}/> View Before
+                        </div>
+                    </div>
+                )}
+                
+                {/* Category Badge */}
+                <div className="absolute top-3 left-3 z-20">
+                    <span className="bg-purple-600 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm">
+                        {project.category}
+                    </span>
+                </div>
+            </div>
+
+            {/* Content Area */}
+            <div className="p-6">
+                <h3 className="font-bold text-slate-900 text-lg mb-2 line-clamp-1">{project.title}</h3>
+                <p className="text-slate-500 text-sm line-clamp-2 mb-4">{project.desc}</p>
+                <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+                    <span className="text-xs font-bold text-slate-400 flex items-center gap-1">
+                        <Clock size={14}/> {project.duration}
+                    </span>
+                    <span className="text-purple-600 text-xs font-bold flex items-center gap-1 group-hover:gap-2 transition-all">
+                        See Details <ChevronRight size={14}/>
+                    </span>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const Modal = ({ project, onClose }) => {
+    if (!project) return null;
+    
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl relative flex flex-col md:flex-row max-h-[90vh]">
+                <button onClick={onClose} className="absolute top-4 right-4 z-50 bg-white/10 hover:bg-white/20 p-2 rounded-full text-white backdrop-blur-md transition">
+                    <X size={24}/>
+                </button>
+
+                <div className="w-full md:w-2/3 bg-black flex items-center justify-center relative group">
+                    {project.type === 'video' ? (
+                        <video src={project.videoUrl} className="w-full h-full object-contain" controls autoPlay />
+                    ) : (
+                        <div className="relative w-full h-full">
+                            <div className="absolute top-6 left-6 z-20 bg-black/60 text-white px-4 py-2 rounded-lg font-bold text-sm backdrop-blur-md pointer-events-none">
+                                HOVER TO SEE "BEFORE"
+                            </div>
+                            <img src={project.before} alt="Before" className="absolute inset-0 w-full h-full object-contain" />
+                            <img src={project.after} alt="After" className="absolute inset-0 w-full h-full object-contain transition-opacity duration-500 hover:opacity-0" />
+                        </div>
+                    )}
+                </div>
+
+                <div className="w-full md:w-1/3 bg-white p-8 overflow-y-auto">
+                    <div className="mb-6">
+                        <span className="text-xs font-bold text-purple-600 bg-purple-50 px-3 py-1 rounded-full uppercase tracking-wider">
+                            {project.category} repair
+                        </span>
+                    </div>
+                    <h2 className="text-3xl font-black text-slate-900 mb-4 leading-tight">{project.title}</h2>
+                    <p className="text-slate-600 leading-relaxed mb-8">{project.desc}</p>
+
+                    <div className="space-y-4 mb-8">
+                        <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                            <div className="bg-white p-2 rounded-lg text-purple-600 shadow-sm"><Clock size={20}/></div>
+                            <div>
+                                <p className="text-xs text-slate-400 font-bold uppercase">Turnaround Time</p>
+                                <p className="text-slate-900 font-bold">{project.duration}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                            <div className="bg-white p-2 rounded-lg text-green-600 shadow-sm"><CheckCircle size={20}/></div>
+                            <div>
+                                <p className="text-xs text-slate-400 font-bold uppercase">Warranty</p>
+                                <p className="text-slate-900 font-bold">30 Days Guarantee</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <Link to="/#contact" className="block w-full bg-slate-900 text-white text-center py-4 rounded-xl font-bold hover:bg-purple-700 transition shadow-lg hover:shadow-purple-500/20">
+                        Book This Repair
+                    </Link>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const ProofOfWorkPage = () => {
-    const [selectedCategory, setSelectedCategory] = useState('all');
-    const [selectedComparison, setSelectedComparison] = useState(null);
-    const [visibleCount, setVisibleCount] = useState(6);
+    const [projects, setProjects] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [selectedCategory, setSelectedCategory] = useState('All');
+    const [viewProject, setViewProject] = useState(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 6;
 
-    const repairCases = [
-        {
-            id: 1,
-            before: '/images/repairs/iphone-before-1.jpg',
-            after: '/images/repairs/iphone-after-1.jpg',
-            device: 'iPhone 13 Pro',
-            issue: 'Shattered Screen Replacement',
-            time: '30 minutes',
-            category: 'screen'
-        },
-        {
-            id: 2,
-            before: '/images/repairs/samsung-before-1.jpg',
-            after: '/images/repairs/samsung-after-1.jpg',
-            device: 'Samsung Galaxy S21',
-            issue: 'Water Damage Repair',
-            time: '2 hours',
-            category: 'water-damage'
-        },
-        {
-            id: 3,
-            before: '/images/repairs/iphone-before-2.jpg',
-            after: '/images/repairs/iphone-after-2.jpg',
-            device: 'iPhone 12',
-            issue: 'Back Glass Replacement',
-            time: '45 minutes',
-            category: 'housing'
-        },
-        {
-            id: 4,
-            before: '/images/repairs/ipad-before.jpg',
-            after: '/images/repairs/ipad-after.jpg',
-            device: 'iPad Air',
-            issue: 'LCD Screen Replacement',
-            time: '1 hour',
-            category: 'screen'
-        },
-        {
-            id: 5,
-            before: '/images/repairs/charging-port-before.jpg',
-            after: '/images/repairs/charging-port-after.jpg',
-            device: 'Google Pixel 6',
-            issue: 'Charging Port Replacement',
-            time: '25 minutes',
-            category: 'charging'
-        },
-        {
-            id: 6,
-            before: '/images/repairs/battery-before.jpg',
-            after: '/images/repairs/battery-after.jpg',
-            device: 'iPhone 11',
-            issue: 'Battery Replacement',
-            time: '20 minutes',
-            category: 'battery'
-        },
-        {
-            id: 7,
-            before: '/images/repairs/iphone-before-3.jpg',
-            after: '/images/repairs/iphone-after-3.jpg',
-            device: 'iPhone 14 Pro',
-            issue: 'Camera Repair',
-            time: '40 minutes',
-            category: 'camera'
-        },
-        {
-            id: 8,
-            before: '/images/repairs/samsung-before-2.jpg',
-            after: '/images/repairs/samsung-after-2.jpg',
-            device: 'Samsung Galaxy S23',
-            issue: 'Screen & Battery',
-            time: '1 hour',
-            category: 'screen'
-        },
-        {
-            id: 9,
-            before: '/images/repairs/iphone-before-4.jpg',
-            after: '/images/repairs/iphone-after-4.jpg',
-            device: 'iPhone 15',
-            issue: 'Water Damage',
-            time: '2.5 hours',
-            category: 'water-damage'
-        },
-        {
-            id: 10,
-            before: '/images/repairs/ipad-before-2.jpg',
-            after: '/images/repairs/ipad-after-2.jpg',
-            device: 'iPad Pro',
-            issue: 'Screen Replacement',
-            time: '1.5 hours',
-            category: 'screen'
-        },
-        {
-            id: 11,
-            before: '/images/repairs/pixel-before.jpg',
-            after: '/images/repairs/pixel-after.jpg',
-            device: 'Google Pixel 7',
-            issue: 'Back Glass',
-            time: '35 minutes',
-            category: 'housing'
-        },
-        {
-            id: 12,
-            before: '/images/repairs/iphone-before-5.jpg',
-            after: '/images/repairs/iphone-after-5.jpg',
-            device: 'iPhone 13',
-            issue: 'Battery & Charging',
-            time: '45 minutes',
-            category: 'battery'
-        }
-    ];
+    useEffect(() => {
+        const fetchProjects = async () => {
+            try {
+                const q = query(collection(db, "ProofOfWork"), orderBy("createdAt", "desc"));
+                const snap = await getDocs(q);
+                setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            } catch (error) {
+                console.error("Failed to load portfolio:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchProjects();
+    }, []);
 
-    const categories = [
-        { id: 'all', name: 'All Repairs', count: repairCases.length },
-        { id: 'screen', name: 'Screen Repairs', count: repairCases.filter(item => item.category === 'screen').length },
-        { id: 'battery', name: 'Battery', count: repairCases.filter(item => item.category === 'battery').length },
-        { id: 'water-damage', name: 'Water Damage', count: repairCases.filter(item => item.category === 'water-damage').length },
-        { id: 'housing', name: 'Housing', count: repairCases.filter(item => item.category === 'housing').length },
-        { id: 'charging', name: 'Charging', count: repairCases.filter(item => item.category === 'charging').length },
-        { id: 'camera', name: 'Camera', count: repairCases.filter(item => item.category === 'camera').length }
-    ];
+    const categories = useMemo(() => ['All', ...new Set(projects.map(p => p.category))], [projects]);
 
-    const filteredCases = selectedCategory === 'all'
-        ? repairCases
-        : repairCases.filter(item => item.category === selectedCategory);
+    const filteredProjects = useMemo(() => {
+        if (selectedCategory === 'All') return projects;
+        return projects.filter(p => p.category === selectedCategory);
+    }, [selectedCategory, projects]);
 
-    const visibleCases = filteredCases.slice(0, visibleCount);
-    const hasMore = visibleCount < filteredCases.length;
-    const showLess = visibleCount > 6;
+    const totalPages = Math.ceil(filteredProjects.length / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const currentProjects = filteredProjects.slice(startIndex, startIndex + itemsPerPage);
 
-    const handleViewMore = () => {
-        if (hasMore) {
-            setVisibleCount(prev => prev + 6);
-        } else if (showLess) {
-            setVisibleCount(6);
-        }
+    const handleCategoryChange = (cat) => {
+        setSelectedCategory(cat);
+        setCurrentPage(1);
+    };
+
+    const goToPage = (pageNumber) => {
+        if (pageNumber < 1 || pageNumber > totalPages) return;
+        setCurrentPage(pageNumber);
+        const grid = document.getElementById('gallery-start');
+        if (grid) grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Hero Section */}
-            <section className="relative">
-                <img src={Proofofwork} className="absolute inset-0 w-full h-full object-cover" />
-                <div className="relative z-10 h-screen bg-black bg-opacity-60 flex items-center justify-center">
-                    <div className="container mx-auto px-4 text-center relative z-10">
-                        <h1 className="text-5xl md:text-6xl text-purple-400 font-bold mb-6">
-                            Proof Of Work
-                        </h1>
-                        <h1 className="text-5xl md:text-6xl text-purple-400 font-bold mb-6">
-                            Before & After Repairs
-                        </h1>
-                        <p className="text-xl md:text-2xl text-purple-400 opacity-90 max-w-2xl mx-auto">
-                            See the transformation from broken to brand new
-                        </p>
-                    </div>
-                </div>
-            </section>
+        <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
+            <div className="bg-purple-900 text-white pt-32 pb-20 px-6 text-center">
+                <h1 className="text-4xl md:text-6xl font-black mb-6 tracking-tight">
+                    Proof of <span className="text-purple-300">Work</span>
+                </h1>
+                <p className="text-purple-100 max-w-2xl mx-auto text-lg leading-relaxed">
+                    We don't just tell you we're good; we show you. Browse our gallery of impossible fixes, intricate microsoldering, and stunning restorations.
+                </p>
+            </div>
 
-            {/* Statistics */}
-            <Stats />
-
-            {/* Category Filter */}
-            <section className="py-12 bg-gray-50">
-                <div className="container mx-auto px-4">
-                    <div className="flex flex-wrap justify-center gap-4">
-                        {categories.map((category) => (
-                            <button
-                                key={category.id}
-                                onClick={() => {
-                                    setSelectedCategory(category.id);
-                                    setVisibleCount(6);
-                                }}
-                                className={`px-6 py-3 rounded-full font-semibold transition-all duration-300 ${selectedCategory === category.id
-                                    ? 'bg-purple-600 text-white shadow-lg'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                    }`}
-                            >
-                                {category.name}
-                                <span className={`ml-2 text-sm px-2 py-1  rounded-full ${selectedCategory === category.id
-                                    ? 'bg-white text-purple-600' 
-                                    : 'bg-gray-200'
-                                    }`}>
-                                    {category.count}
-                                </span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* Before & After Gallery */}
-            <section className="py-16 bg-gray-50">
-                <div className="px-10">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
-                        {visibleCases.map((caseItem) => (
-                            <div
-                                key={caseItem.id}
-                                className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer"
-                                onClick={() => setSelectedComparison(caseItem)}
-                            >
-                                {/* Before & After Images */}
-                                <div className="grid grid-cols-2 gap-0">
-                                    <div className="relative group">
-                                        <div className="absolute top-0 left-0 w-full bg-purple-800 text-white py-1 text-center text-sm font-semibold z-10">
-                                            BEFORE
-                                        </div>
-                                        <img
-                                            src={caseItem.before}
-                                            alt={`${caseItem.device} before repair`}
-                                            className="w-full h-64 object-cover group-hover:opacity-90 transition-opacity duration-300"
-                                        />
-                                    </div>
-                                    <div className="relative group">
-                                        <div className="absolute top-0 left-0 w-full bg-purple-800 text-white py-1 text-center text-sm font-semibold z-10">
-                                            AFTER
-                                        </div>
-                                        <img
-                                            src={caseItem.after}
-                                            alt={`${caseItem.device} after repair`}
-                                            className="w-full h-64 object-cover group-hover:opacity-90 transition-opacity duration-300"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Repair Details */}
-                                <div className="p-6">
-                                    <h3 className="text-xl font-bold text-gray-900 mb-2">
-                                        {caseItem.device}
-                                    </h3>
-                                    <p className="text-gray-600 mb-3">
-                                        {caseItem.issue}
-                                    </p>
-                                    <div className="flex items-center justify-between">
-                                        <span className="bg-gray-300 text-gray-600 px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1">
-                                            {categories.find(cat => cat.id === caseItem.category)?.name}
-                                        </span>
-                                        <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm font-medium">
-                                            
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Empty State */}
-                    {filteredCases.length === 0 && (
-                        <div className="text-center py-16">
-                            <div className="text-6xl mb-4">🔧</div>
-                            <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                                No repairs found
-                            </h3>
-                            <p className="text-gray-600">
-                                Try selecting a different category
-                            </p>
-                        </div>
-                    )}
-
-                    {/* View More/Less Button */}
-                    {(hasMore || showLess) && filteredCases.length > 0 && (
-                        <div className="text-center mt-12">
-                            <button
-                                onClick={handleViewMore}
-                                className="bg-purple-800 text-white px-8 py-3 rounded-full font-semibold hover:bg-purple-700 transition-colors duration-300 flex items-center gap-2 mx-auto"
-                            >
-                                {hasMore ? (
-                                    <>
-                                        View More <ChevronDown size={20} />
-                                    </>
-                                ) : (
-                                    <>
-                                        Show Less <ChevronUp size={20} />
-                                    </>
-                                )}
-                            </button>
-                            <p className="text-gray-600 mt-2">
-                                Showing {visibleCases.length} of {filteredCases.length} repairs
-                            </p>
-                        </div>
-                    )}
-                </div>
-            </section>
-
-            {/* Comparison Modal */}
-            {selectedComparison && (
-                <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
-                        <div className="relative">
-                            <button
-                                onClick={() => setSelectedComparison(null)}
-                                className="absolute top-12 text-white right-4 bg-purple-900 rounded-full p-2 shadow-lg hover:bg-purple-400 z-10"
-                            >
-                                <X size={24} />
-                            </button>
-
-                            {/* Before & After Comparison */}
-                            <div className="grid grid-cols-2 gap-0">
-                                <div className="relative">
-                                    <div className="absolute top-0 left-0 w-full bg-purple-800 text-white py-2 text-center font-bold text-lg z-10">
-                                        BEFORE REPAIR
-                                    </div>
-                                    <img
-                                        src={selectedComparison.before}
-                                        alt={`${selectedComparison.device} before repair`}
-                                        className="w-full h-96 object-cover"
-                                    />
-                                </div>
-                                <div className="relative">
-                                    <div className="absolute top-0 left-0 w-full bg-purple-800 text-white py-2 text-center font-bold text-lg z-10">
-                                        AFTER REPAIR
-                                    </div>
-                                    <img
-                                        src={selectedComparison.after}
-                                        alt={`${selectedComparison.device} after repair`}
-                                        className="w-full h-96 object-cover"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Modal Details */}
-                        <div className="p-6">
-                            <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                                {selectedComparison.device}
-                            </h3>
-                            <p className="text-gray-600 text-lg mb-4">
-                                {selectedComparison.issue}
-                            </p>
-                            <div className="flex items-center justify-between">
-                                <span className="bg-gray-300 text-gray-600 px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-2">
-                                    Category: {categories.find(cat => cat.id === selectedComparison.category)?.name}
-                                </span>
-                                <span className="bg-gray-100 text-gray-700 px-4 py-2 rounded-full text-sm font-medium">
-                                    
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* CTA Section */}
-            <section className="py-20 bg-gradient-to-br from-purple-100 to-gray-100 text-purple-800">
-                <div className="container mx-auto px-4 text-center">
-                    <h2 className="text-3xl md:text-4xl font-bold mb-6">
-                        Ready to Fix Your Device?
-                    </h2>
-                    <p className="text-xl opacity-90 mb-8 max-w-2xl mx-auto">
-                        See your device in our next before & after transformation
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                        <button className="bg-purple-800 text-white flex gap-4 items-center px-8 py-4 rounded-full font-bold text-lg hover:bg-purple-700 transition-colors duration-300 shadow-lg">                         
-                                Contact Us <Phone size={20} />                            
+            <div className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm overflow-x-auto no-scrollbar">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 flex justify-center gap-2 py-4 min-w-max">
+                    {categories.map(cat => (
+                        <button key={cat} onClick={() => handleCategoryChange(cat)} className={`px-6 py-2 rounded-full text-sm font-bold transition-all uppercase tracking-wide ${selectedCategory === cat ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}>
+                            {cat}
                         </button>
-                        <button className="border-2 flex gap-4 items-center border-purple-800 text-purple-800 px-8 py-4 rounded-full font-bold text-lg  hover:text-purple-600 transition-all duration-300">
-                            Get a Free Quote <Quote size={20} />
-                        </button>
-                    </div>
+                    ))}
                 </div>
-            </section>
+            </div>
+
+            <div id="gallery-start" className="max-w-7xl mx-auto px-6 py-16">
+                {loading ? (
+                    <div className="flex justify-center py-20"><Loader2 className="animate-spin w-10 h-10 text-purple-600"/></div>
+                ) : currentProjects.length === 0 ? (
+                    <div className="text-center py-20">
+                        <Wrench className="w-16 h-16 text-slate-200 mx-auto mb-4"/>
+                        <h3 className="text-xl font-bold text-slate-400">No projects found in this category.</h3>
+                    </div>
+                ) : (
+                    <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                            {currentProjects.map(p => (
+                                <ProjectCard key={p.id} project={p} onClick={setViewProject} />
+                            ))}
+                        </div>
+
+                        {totalPages > 1 && (
+                            <div className="flex justify-center items-center gap-4 mt-16">
+                                <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 1} className="p-3 rounded-full border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm text-slate-600">
+                                    <ChevronLeft size={20} />
+                                </button>
+                                <div className="flex gap-2">
+                                    {[...Array(totalPages)].map((_, i) => (
+                                        <button key={i} onClick={() => goToPage(i + 1)} className={`w-10 h-10 rounded-full font-bold text-sm transition ${currentPage === i + 1 ? 'bg-purple-600 text-white shadow-md transform scale-110' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                                            {i + 1}
+                                        </button>
+                                    ))}
+                                </div>
+                                <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage === totalPages} className="p-3 rounded-full border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm text-slate-600">
+                                    <ChevronRight size={20} />
+                                </button>
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+
+            <div className="mb-20"><Stats /></div>
+            <Modal project={viewProject} onClose={() => setViewProject(null)} />
         </div>
     );
 };

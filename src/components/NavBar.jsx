@@ -41,6 +41,7 @@ const NavBar = () => {
         { name: "About Us", path: "#about", type: "scroll" },
         { name: "Services", path: "#services", type: "scroll" },
         { name: "Pricing", path: "/pricing", type: "route" },
+        { name: "Proof of work", path: "/proof-of-work", type: "route" },
         { name: "Track Order", path: "/track-order", type: "route" },
     ];
 
@@ -48,17 +49,17 @@ const NavBar = () => {
         <nav 
             className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ${
                 scrolled 
-                ? "bg-white/95 backdrop-blur-md shadow-md py-3" 
-                : "bg-white py-5 shadow-sm"
+                ? "bg-purple-900/95 backdrop-blur-md shadow-lg py-3" 
+                : "bg-purple-900 py-5 shadow-md"
             }`}
         >
             <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
                 
                 {/* Logo Area */}
                 <Link to="/" className="flex items-center gap-2 group" onClick={() => window.scrollTo(0, 0)}>
-                    <img src={Logo} alt="FaroukTechWorld" className="h-10 w-auto object-contain" />
-                    <span className="font-black text-xl text-slate-900 tracking-tight group-hover:text-purple-700 transition">
-                        FaroukTech<span className="text-purple-700 group-hover:text-slate-900 transition">World</span>
+                    {/* Using brightness-0 invert filter to make logo white if it's dark */}
+                    <span className="font-black text-xl text-white tracking-tight group-hover:text-purple-200 transition">
+                        FaroukTech<span className="text-purple-300 group-hover:text-white transition">World</span>
                     </span>
                 </Link>
 
@@ -69,7 +70,7 @@ const NavBar = () => {
                             <button 
                                 key={link.name}
                                 onClick={() => handleScrollLink(link.path)}
-                                className="text-sm font-bold text-slate-600 hover:text-purple-700 transition uppercase tracking-wide"
+                                className="text-sm font-bold text-purple-100 hover:text-white transition uppercase tracking-wide hover:scale-105 transform"
                             >
                                 {link.name}
                             </button>
@@ -78,8 +79,8 @@ const NavBar = () => {
                                 key={link.name}
                                 to={link.path}
                                 className={({ isActive }) => 
-                                    `text-sm font-bold uppercase tracking-wide transition ${
-                                        isActive ? "text-purple-700" : "text-slate-600 hover:text-purple-700"
+                                    `text-sm font-bold uppercase tracking-wide transition hover:scale-105 transform ${
+                                        isActive ? "text-white border-b-2 border-white" : "text-purple-100 hover:text-white"
                                     }`
                                 }
                             >
@@ -88,10 +89,10 @@ const NavBar = () => {
                         )
                     ))}
                     
-                    {/* CTA Button */}
+                    {/* CTA Button (White on Purple) */}
                     <Link 
                         to="/pricing" 
-                        className="bg-purple-900 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-purple-700 transition shadow-lg hover:shadow-purple-200 transform hover:-translate-y-0.5"
+                        className="bg-white text-purple-900 px-6 py-2.5 rounded-full font-bold text-sm hover:bg-purple-100 transition shadow-lg hover:shadow-purple-500/20 transform hover:-translate-y-0.5"
                     >
                         Get a Quote
                     </Link>
@@ -99,7 +100,7 @@ const NavBar = () => {
 
                 {/* Mobile Toggle */}
                 <button 
-                    className="md:hidden text-slate-800 focus:outline-none p-2 rounded-lg hover:bg-gray-100"
+                    className="md:hidden text-white focus:outline-none p-2 rounded-lg hover:bg-purple-800"
                     onClick={() => setIsOpen(!isOpen)}
                 >
                     {isOpen ? <X size={28} /> : <Menu size={28} />}
@@ -108,13 +109,13 @@ const NavBar = () => {
 
             {/* Mobile Menu Dropdown */}
             {isOpen && (
-                <div className="md:hidden absolute top-full left-0 w-full bg-white border-t border-gray-100 shadow-xl flex flex-col p-6 space-y-4 animate-in slide-in-from-top-5">
+                <div className="md:hidden absolute top-full left-0 w-full bg-purple-900 border-t border-purple-800 shadow-xl flex flex-col p-6 space-y-4 animate-in slide-in-from-top-5">
                     {navLinks.map((link) => (
                         link.type === 'scroll' ? (
                             <button 
                                 key={link.name}
                                 onClick={() => handleScrollLink(link.path)}
-                                className="text-left text-lg font-bold text-slate-700 hover:text-purple-700 py-3 border-b border-gray-50 last:border-0"
+                                className="text-left text-lg font-bold text-purple-100 hover:text-white py-3 border-b border-purple-800 last:border-0"
                             >
                                 {link.name}
                             </button>
@@ -124,8 +125,8 @@ const NavBar = () => {
                                 to={link.path}
                                 onClick={() => setIsOpen(false)}
                                 className={({ isActive }) => 
-                                    `text-lg font-bold py-3 border-b border-gray-50 flex items-center justify-between ${
-                                        isActive ? "text-purple-700 pl-2 border-l-4 border-purple-700 bg-purple-50/50" : "text-slate-700"
+                                    `text-lg font-bold py-3 border-b border-purple-800 flex items-center justify-between ${
+                                        isActive ? "text-white pl-2 border-l-4 border-white bg-purple-800/50" : "text-purple-100"
                                     }`
                                 }
                             >
@@ -136,7 +137,7 @@ const NavBar = () => {
                     <Link 
                         to="/pricing"
                         onClick={() => setIsOpen(false)}
-                        className="bg-purple-900 text-white text-center py-4 rounded-xl font-bold text-lg shadow-md mt-4 active:scale-95 transition"
+                        className="bg-white text-purple-900 text-center py-4 rounded-xl font-bold text-lg shadow-md mt-4 active:scale-95 transition hover:bg-purple-50"
                     >
                         Get a Quote Now
                     </Link>

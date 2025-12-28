@@ -1,17 +1,18 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import Hero from '../components/Hero.jsx';
-import AboutUs from '../components/AboutUs.jsx';
+import Stats from '../components/Stats.jsx';
+import WhyChooseUs from '../components/WhyChooseUs.jsx'; 
 import Services from '../components/Services.jsx';
 import HowWeWork from '../components/HowWeWork.jsx';
-import Stats from '../components/Stats.jsx';
+// import Testimonials from '../components/Testimonals.jsx';
+import FAQ from '../components/FAQ.jsx'; 
 import Contact from '../components/Contact.jsx';
-// import Testimonials from '../components/Testimonals.jsx'; // Uncommented for a full feel
+
 
 const Homepage = () => {
   const location = useLocation();
 
-  // Handle smooth scroll for anchor links
   useEffect(() => {
     if (location.hash) {
       const target = document.querySelector(location.hash);
@@ -20,6 +21,8 @@ const Homepage = () => {
           target.scrollIntoView({ behavior: "smooth", block: "start" });
         }, 100);
       }
+    } else {
+      window.scrollTo(0, 0);
     }
   }, [location]);
 
@@ -27,10 +30,11 @@ const Homepage = () => {
     <div className="font-sans antialiased text-slate-800 bg-slate-50">
       <Hero />
       <Stats />
-      <AboutUs />
+      <WhyChooseUs /> 
       <Services />
       <HowWeWork />
-      {/* <Testimonials />  -- Optional: Enable if you have content */}
+      {/* <Testimonials /> */}
+      <FAQ /> 
       <Contact />
     </div>
   );

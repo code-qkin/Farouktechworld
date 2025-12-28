@@ -26,11 +26,12 @@ import HomePage from './pages/Homepage';
 import MainLayout from './layout/MainLayout';
 import NotFoundPage from './components/NotFoundPage';
 import PricingPage from './pages/PricingPage';
-// import ProofOfWorkPage from './pages/ProofOfWorkPage';
+import ProofOfWorkPage from './pages/ProofOfWorkPage';
 import TrackingPage from './pages/TrackingPage';
 // import SiteGuard from './components/SiteGuard';
 import ServicePrices from './Admin/Pages/ServicePrices';
-import IssueReports from "./Admin/Pages/IssueReports";
+// import IssueReports from "./Admin/Pages/IssueReports";
+import ManageProofOfWork from "./Admin/Pages/ManageProofOfWork";
 
 
 const router = createBrowserRouter(
@@ -40,7 +41,7 @@ const router = createBrowserRouter(
      
       <Route index element={<HomePage />} />
       <Route path="pricing" element={<PricingPage />} />
-      {/* <Route path="proof-of-work" element={<ProofOfWorkPage />} /> */}
+      <Route path="proof-of-work" element={<ProofOfWorkPage />} />
       <Route path="track-order" element={<TrackingPage />} />
 
      
@@ -59,6 +60,7 @@ const router = createBrowserRouter(
           <Route path="job-history" element={<JobHistory />} />
           <Route path="payroll" element={<PayrollPage />} />
           <Route path="pricing" element={<ServicePrices />} />
+          <Route path="manage-proof-of-work" element={<ManageProofOfWork />} />
           {/* <Route path="settings" element={<Settings/>} /> */}
         </Route>
       </Route>

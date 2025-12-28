@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-    Banknote, Users, Wrench, LogOut, ArrowRight, 
-    Package, TrendingUp, AlertTriangle, 
+import {
+    Banknote, Users, Wrench, LogOut, ArrowRight,
+    Package, TrendingUp, AlertTriangle,
     ShoppingCart, Activity, Wallet, Smartphone, Settings,
     XCircle, AlertCircle, CheckCircle, ChevronRight, ShieldAlert,
-    TrendingDown
+    TrendingDown, Image as ImageIcon
 } from 'lucide-react';
 import { useAuth } from '../../AdminContext';
 import { signOut } from 'firebase/auth';
-import { auth, db } from '../../../firebaseConfig'; 
+import { auth, db } from '../../../firebaseConfig';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'; 
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const formatCurrency = (amount) => {
@@ -36,24 +36,23 @@ const StatusBadge = ({ status }) => {
 };
 
 const MetricCard = ({ title, value, icon: Icon, color, subtext, onClick, isAlert }) => (
-    <div 
-        onClick={onClick} 
+    <div
+        onClick={onClick}
         className={`${CARD_STYLE} p-6 cursor-pointer group relative
-        ${isAlert ? 'hover:border-red-200/60 ring-1 ring-red-50' : 
-          color === 'green' ? 'hover:border-green-200/60' : 
-          color === 'purple' ? 'hover:border-purple-200/60' : 
-          'hover:border-blue-200/60'}`}
+        ${isAlert ? 'hover:border-red-200/60 ring-1 ring-red-50' :
+                color === 'green' ? 'hover:border-green-200/60' :
+                    color === 'purple' ? 'hover:border-purple-200/60' :
+                        'hover:border-blue-200/60'}`}
     >
         <div className={`absolute top-0 right-0 p-3 opacity-[0.08] transform translate-x-2 -translate-y-2 group-hover:scale-110 transition duration-500 ${color === 'red' ? 'text-red-600' : color === 'green' ? 'text-green-600' : color === 'purple' ? 'text-purple-600' : 'text-blue-600'}`}>
             <Icon size={100} />
         </div>
         <div className="flex items-center gap-4 mb-3 relative z-10">
-            <div className={`p-3 rounded-xl shadow-sm ${
-                color === 'green' ? 'bg-green-50 text-green-600' :
-                color === 'red' ? 'bg-red-50 text-red-600' :
-                color === 'blue' ? 'bg-blue-50 text-blue-600' :
-                'bg-purple-50 text-purple-600'
-            }`}>
+            <div className={`p-3 rounded-xl shadow-sm ${color === 'green' ? 'bg-green-50 text-green-600' :
+                    color === 'red' ? 'bg-red-50 text-red-600' :
+                        color === 'blue' ? 'bg-blue-50 text-blue-600' :
+                            'bg-purple-50 text-purple-600'
+                }`}>
                 <Icon size={24} />
             </div>
             {isAlert && <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-red-50 text-red-600 border border-red-100 animate-pulse">Action Required</span>}
@@ -69,18 +68,18 @@ const MetricCard = ({ title, value, icon: Icon, color, subtext, onClick, isAlert
 const Dashboard = () => {
     const { role } = useAuth();
     const navigate = useNavigate();
-    
+
     // --- STATE ---
     const [stats, setStats] = useState({
-        netRevenue: 0, activeOrders: 0, 
+        netRevenue: 0, activeOrders: 0,
         inventoryCount: 0
     });
     const [recentOrders, setRecentOrders] = useState([]);
-    
+
     // Inventory State
     const [inventoryData, setInventoryData] = useState({ critical: [], low: [], highValue: [], all: [] });
-    const [alertTab, setAlertTab] = useState('critical'); 
-    
+    const [alertTab, setAlertTab] = useState('critical');
+
     // Intelligence State
     const [intelligence, setIntelligence] = useState({
         topRepairs: [], lowRepairs: [], topProducts: [], lowProducts: []
@@ -97,8 +96,8 @@ const Dashboard = () => {
         const unsubOrders = onSnapshot(qOrders, (snapshot) => {
             let net = 0; let active = 0;
             const recent = [];
-            const salesMap = {}; 
-            
+            const salesMap = {};
+
             const repairCounts = {};
             const productCounts = {};
 
@@ -106,12 +105,12 @@ const Dashboard = () => {
                 const data = doc.data();
                 const paid = Number(data.amountPaid || 0);
                 net += paid;
-                
+
                 if (data.status === 'In Progress' || data.status === 'Pending') active++;
-                
+
                 if (recent.length < 5) {
                     recent.push({
-                        id: data.ticketId, docId: doc.id, 
+                        id: data.ticketId, docId: doc.id,
                         device: data.items?.[0]?.deviceModel || 'Unknown Device',
                         status: data.status, customer: data.customer?.name || 'Guest', cost: data.totalCost
                     });
@@ -140,11 +139,11 @@ const Dashboard = () => {
             });
 
             // Process Rankings
-            const sortedRepairs = Object.entries(repairCounts).sort((a,b) => b[1] - a[1]);
+            const sortedRepairs = Object.entries(repairCounts).sort((a, b) => b[1] - a[1]);
             const topRepairs = sortedRepairs.slice(0, 5);
             const lowRepairs = sortedRepairs.length > 5 ? sortedRepairs.slice(5).slice(-5).reverse() : [];
 
-            const sortedProducts = Object.entries(productCounts).sort((a,b) => b[1] - a[1]);
+            const sortedProducts = Object.entries(productCounts).sort((a, b) => b[1] - a[1]);
             const topProducts = sortedProducts.slice(0, 5);
 
             setIntelligence(prev => ({ ...prev, topRepairs, lowRepairs, topProducts }));
@@ -152,22 +151,22 @@ const Dashboard = () => {
             const sortedChart = Object.keys(salesMap).map(key => ({ name: key, sales: salesMap[key] })).slice(-7);
             setStats(prev => ({ ...prev, netRevenue: net, activeOrders: active }));
             setRecentOrders(recent);
-            setChartData(sortedChart.length > 0 ? sortedChart : [{name: 'Today', sales: 0}]);
+            setChartData(sortedChart.length > 0 ? sortedChart : [{ name: 'Today', sales: 0 }]);
             setLoading(false);
         });
 
         // 2. FETCH INVENTORY & CROSS-REFERENCE
         const unsubInventory = onSnapshot(collection(db, "Inventory"), (snap) => {
-            const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
-            
+            const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
             const critical = items.filter(i => i.stock === 0);
             const low = items.filter(i => i.stock > 0 && i.stock <= 5);
-            const highValue = items.filter(i => i.stock <= 3 && i.price > 50000).sort((a,b) => b.price - a.price);
+            const highValue = items.filter(i => i.stock <= 3 && i.price > 50000).sort((a, b) => b.price - a.price);
 
             setInventoryData({ critical, low, highValue, all: items });
             setStats(prev => ({ ...prev, inventoryCount: items.length }));
 
-            const potentialSlowMovers = items.filter(i => i.stock > 10).sort((a,b) => b.stock - a.stock).slice(0, 5);
+            const potentialSlowMovers = items.filter(i => i.stock > 10).sort((a, b) => b.stock - a.stock).slice(0, 5);
             setIntelligence(prev => ({ ...prev, lowProducts: potentialSlowMovers }));
         });
 
@@ -191,7 +190,7 @@ const Dashboard = () => {
             {/* Header */}
             <header className="bg-white border-b border-slate-100 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]">
                 <div>
-                    <h1 className="text-xl font-black flex items-center gap-2 text-slate-800"><Activity className="text-purple-600"/> Admin Console</h1>
+                    <h1 className="text-xl font-black flex items-center gap-2 text-slate-800"><Activity className="text-purple-600" /> Admin Console</h1>
                     <p className="text-xs font-medium text-slate-400 hidden sm:block">Overview for {new Date().toDateString()}</p>
                 </div>
                 <div className="flex items-center gap-4">
@@ -202,46 +201,54 @@ const Dashboard = () => {
             </header>
 
             <main className="p-6 max-w-[1600px] mx-auto space-y-8">
-                
+
                 {/* 1. TOP METRICS & QUICK ACCESS (4 COLUMNS) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-                    <MetricCard 
-                        title="Net Revenue" 
-                        value={formatCurrency(stats.netRevenue)} 
-                        icon={Wallet} 
-                        color="green" 
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
+                    <MetricCard
+                        title="Net Revenue"
+                        value={formatCurrency(stats.netRevenue)}
+                        icon={Wallet}
+                        color="green"
                         subtext="Total Cash In Hand"
                         onClick={() => navigate('/admin/performance')}
                     />
-                    
-                    <MetricCard 
-                        title="Active Jobs" 
-                        value={stats.activeOrders} 
-                        icon={Wrench} 
-                        color="purple" 
+
+                    <MetricCard
+                        title="Active Jobs"
+                        value={stats.activeOrders}
+                        icon={Wrench}
+                        color="purple"
                         subtext="Repairs In Progress"
                         onClick={() => navigate('/admin/orders')}
+                    />
+                    <MetricCard
+                        title="Portfolio"
+                        value="Manage"
+                        icon={ImageIcon} // Import Image from lucide-react
+                        color="blue"
+                        subtext="Proof of Work Gallery"
+                        onClick={() => navigate('/admin/manage-proof-of-work')}
                     />
 
                     {/* Inventory Card (Restored Logic) */}
                     {totalAlerts > 0 ? (
-                        <MetricCard 
-                            title="Inventory Alert" 
-                            value={totalAlerts} 
-                            icon={AlertTriangle} 
-                            color="red" 
+                        <MetricCard
+                            title="Inventory Alert"
+                            value={totalAlerts}
+                            icon={AlertTriangle}
+                            color="red"
                             isAlert={true}
                             subtext="Items Low or Out of Stock"
-                            onClick={() => navigate('/admin/store')} 
+                            onClick={() => navigate('/admin/store')}
                         />
                     ) : (
-                        <MetricCard 
-                            title="Inventory Count" 
-                            value={stats.inventoryCount} 
-                            icon={Package} 
-                            color="blue" 
+                        <MetricCard
+                            title="Inventory Count"
+                            value={stats.inventoryCount}
+                            icon={Package}
+                            color="blue"
                             subtext="Total Items in Stock"
-                            onClick={() => navigate('/admin/store')} 
+                            onClick={() => navigate('/admin/store')}
                         />
                     )}
 
@@ -249,17 +256,17 @@ const Dashboard = () => {
                     <div className={`${CARD_STYLE} p-5 flex flex-col justify-between h-full bg-slate-900 border-slate-900 group hover:shadow-xl`}>
                         <div className="flex justify-between items-center mb-2">
                             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Quick Actions</span>
-                            <Settings size={18} className="text-slate-500 group-hover:text-white transition-colors duration-500"/>
+                            <Settings size={18} className="text-slate-500 group-hover:text-white transition-colors duration-500" />
                         </div>
                         <div className="grid grid-cols-3 gap-3 h-full items-center">
                             <button onClick={() => navigate('/admin/users')} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-slate-800 rounded-xl hover:bg-purple-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-purple-500 hover:shadow-lg hover:-translate-y-1">
-                                <Users size={22}/> <span className="text-[10px] font-bold">Staff</span>
+                                <Users size={22} /> <span className="text-[10px] font-bold">Staff</span>
                             </button>
                             <button onClick={() => navigate('/admin/payroll')} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-slate-800 rounded-xl hover:bg-green-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-green-500 hover:shadow-lg hover:-translate-y-1">
-                                <Banknote size={22}/> <span className="text-[10px] font-bold">Payroll</span>
+                                <Banknote size={22} /> <span className="text-[10px] font-bold">Payroll</span>
                             </button>
                             <button onClick={() => navigate('/admin/pricing')} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-slate-800 rounded-xl hover:bg-blue-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-blue-500 hover:shadow-lg hover:-translate-y-1">
-                                <Smartphone size={22}/> <span className="text-[10px] font-bold">Services</span>
+                                <Smartphone size={22} /> <span className="text-[10px] font-bold">Services</span>
                             </button>
                         </div>
                     </div>
@@ -270,11 +277,11 @@ const Dashboard = () => {
                     {/* Top Repairs */}
                     <div className={`${CARD_STYLE} p-5`}>
                         <div className="flex items-center gap-2 mb-4 border-b border-gray-50 pb-3">
-                            <TrendingUp className="text-green-500" size={20}/>
+                            <TrendingUp className="text-green-500" size={20} />
                             <h3 className="font-bold text-slate-700">Top Repairs</h3>
                         </div>
                         <ul className="space-y-3">
-                            {intelligence.topRepairs?.length === 0 ? <p className="text-xs text-slate-400 italic">No data yet.</p> : 
+                            {intelligence.topRepairs?.length === 0 ? <p className="text-xs text-slate-400 italic">No data yet.</p> :
                                 intelligence.topRepairs?.map(([name, count], i) => (
                                     <li key={i} className="flex justify-between text-sm">
                                         <span className="text-slate-600 truncate max-w-[150px]">{name}</span>
@@ -288,11 +295,11 @@ const Dashboard = () => {
                     {/* Top Products */}
                     <div className={`${CARD_STYLE} p-5`}>
                         <div className="flex items-center gap-2 mb-4 border-b border-gray-50 pb-3">
-                            <Package className="text-blue-500" size={20}/>
+                            <Package className="text-blue-500" size={20} />
                             <h3 className="font-bold text-slate-700">Top Sellers</h3>
                         </div>
                         <ul className="space-y-3">
-                            {intelligence.topProducts?.length === 0 ? <p className="text-xs text-slate-400 italic">No sales data.</p> : 
+                            {intelligence.topProducts?.length === 0 ? <p className="text-xs text-slate-400 italic">No sales data.</p> :
                                 intelligence.topProducts?.map(([name, count], i) => (
                                     <li key={i} className="flex justify-between text-sm">
                                         <span className="text-slate-600 truncate max-w-[150px]">{name}</span>
@@ -306,11 +313,11 @@ const Dashboard = () => {
                     {/* Rare Repairs */}
                     <div className={`${CARD_STYLE} p-5`}>
                         <div className="flex items-center gap-2 mb-4 border-b border-gray-50 pb-3">
-                            <TrendingDown className="text-orange-500" size={20}/>
+                            <TrendingDown className="text-orange-500" size={20} />
                             <h3 className="font-bold text-slate-700">Rare Repairs</h3>
                         </div>
                         <ul className="space-y-3">
-                            {intelligence.lowRepairs?.length === 0 ? <p className="text-xs text-slate-400 italic">Not enough data.</p> : 
+                            {intelligence.lowRepairs?.length === 0 ? <p className="text-xs text-slate-400 italic">Not enough data.</p> :
                                 intelligence.lowRepairs?.map(([name, count], i) => (
                                     <li key={i} className="flex justify-between text-sm">
                                         <span className="text-slate-600 truncate max-w-[150px]">{name}</span>
@@ -324,11 +331,11 @@ const Dashboard = () => {
                     {/* Slow Movers */}
                     <div className={`${CARD_STYLE} p-5`}>
                         <div className="flex items-center gap-2 mb-4 border-b border-gray-50 pb-3">
-                            <AlertCircle className="text-red-500" size={20}/>
+                            <AlertCircle className="text-red-500" size={20} />
                             <h3 className="font-bold text-slate-700">Slow Movers (High Stock)</h3>
                         </div>
                         <ul className="space-y-3">
-                            {intelligence.lowProducts?.length === 0 ? <p className="text-xs text-slate-400 italic">Inventory balanced.</p> : 
+                            {intelligence.lowProducts?.length === 0 ? <p className="text-xs text-slate-400 italic">Inventory balanced.</p> :
                                 intelligence.lowProducts?.map((item, i) => (
                                     <li key={i} className="flex justify-between text-sm">
                                         <span className="text-slate-600 truncate max-w-[150px]">{item.name}</span>
@@ -341,21 +348,21 @@ const Dashboard = () => {
                 </div>
 
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                    
+
                     {/* LEFT: REVENUE CHART */}
                     <div className={`${CARD_STYLE} p-6 xl:col-span-2`}>
                         <div className="flex justify-between items-center mb-6">
-                            <div><h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><TrendingUp size={18} className="text-purple-600"/> Revenue Trend</h3><p className="text-xs font-medium text-slate-400">7 Day Performance</p></div>
+                            <div><h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><TrendingUp size={18} className="text-purple-600" /> Revenue Trend</h3><p className="text-xs font-medium text-slate-400">7 Day Performance</p></div>
                             <button onClick={() => navigate('/admin/performance')} className="text-xs font-bold text-purple-700 bg-purple-50 px-4 py-2 rounded-xl hover:bg-purple-100 transition shadow-sm">View Report</button>
                         </div>
                         <div className="h-[250px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={chartData}>
-                                    <defs><linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#7e22ce" stopOpacity={0.1}/><stop offset="95%" stopColor="#7e22ce" stopOpacity={0}/></linearGradient></defs>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize:11, fontWeight: 600, fill:'#94a3b8'}} dy={10}/>
-                                    <YAxis axisLine={false} tickLine={false} tick={{fontSize:11, fontWeight: 600, fill:'#94a3b8'}} tickFormatter={(val)=>`₦${val/1000}k`}/>
-                                    <Tooltip cursor={{stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4'}} contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgba(0, 0, 0, 0.1)', padding:'12px'}} formatter={(value) => [<span className="font-bold text-slate-800">{formatCurrency(value)}</span>, <span className="text-xs text-slate-400">Revenue</span>]} labelStyle={{color:'#64748b', fontSize:'12px', fontWeight:'bold', marginBottom:'4px'}}/>
+                                    <defs><linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#7e22ce" stopOpacity={0.1} /><stop offset="95%" stopColor="#7e22ce" stopOpacity={0} /></linearGradient></defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 600, fill: '#94a3b8' }} dy={10} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 600, fill: '#94a3b8' }} tickFormatter={(val) => `₦${val / 1000}k`} />
+                                    <Tooltip cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', padding: '12px' }} formatter={(value) => [<span className="font-bold text-slate-800">{formatCurrency(value)}</span>, <span className="text-xs text-slate-400">Revenue</span>]} labelStyle={{ color: '#64748b', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }} />
                                     <Area type="monotone" dataKey="sales" stroke="#7e22ce" strokeWidth={3} fillOpacity={1} fill="url(#colorRev)" />
                                 </AreaChart>
                             </ResponsiveContainer>
@@ -364,9 +371,9 @@ const Dashboard = () => {
 
                     {/* RIGHT: RECENT ACTIVITY */}
                     <div className={`${CARD_STYLE} p-5 flex flex-col h-full max-h-[400px]`}>
-                        <h3 className="font-bold text-slate-800 text-sm mb-4 flex items-center gap-2"><ShoppingCart size={16} className="text-blue-600"/> Recent Activity</h3>
+                        <h3 className="font-bold text-slate-800 text-sm mb-4 flex items-center gap-2"><ShoppingCart size={16} className="text-blue-600" /> Recent Activity</h3>
                         <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-                            {recentOrders?.length === 0 ? <div className="text-center text-slate-400 py-10 text-xs font-medium">No activity today.</div> : 
+                            {recentOrders?.length === 0 ? <div className="text-center text-slate-400 py-10 text-xs font-medium">No activity today.</div> :
                                 recentOrders?.map(order => (
                                     <div key={order.id} onClick={() => navigate(`/admin/orders/${order.ticketId}`)} className="group flex flex-col gap-1 p-3 rounded-xl bg-slate-50/50 hover:bg-white cursor-pointer border border-slate-100 hover:border-blue-100 hover:shadow-sm transition">
                                         <div className="flex justify-between items-start">
@@ -385,18 +392,18 @@ const Dashboard = () => {
                 {/* INVENTORY WIDGET */}
                 <div className={CARD_STYLE}>
                     <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-slate-50/50 to-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                        <div><h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><ShieldAlert size={18} className="text-orange-500"/> Inventory</h3><p className="text-xs font-medium text-slate-400">Real-time stock monitoring</p></div>
+                        <div><h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><ShieldAlert size={18} className="text-orange-500" /> Inventory</h3><p className="text-xs font-medium text-slate-400">Real-time stock monitoring</p></div>
                         <div className="flex bg-white p-1.5 rounded-xl border border-slate-100 shadow-sm">
-                            <button onClick={()=>setAlertTab('critical')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${alertTab === 'critical' ? 'bg-red-50 text-red-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Critical ({inventoryData.critical?.length || 0})</button>
-                            <button onClick={()=>setAlertTab('low')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${alertTab === 'low' ? 'bg-orange-50 text-orange-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Low ({inventoryData.low?.length || 0})</button>
+                            <button onClick={() => setAlertTab('critical')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${alertTab === 'critical' ? 'bg-red-50 text-red-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Critical ({inventoryData.critical?.length || 0})</button>
+                            <button onClick={() => setAlertTab('low')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${alertTab === 'low' ? 'bg-orange-50 text-orange-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Low ({inventoryData.low?.length || 0})</button>
                         </div>
                     </div>
                     <div className="divide-y divide-slate-50 max-h-[300px] overflow-y-auto custom-scrollbar bg-white">
-                        {currentAlerts?.length === 0 ? <div className="p-8 text-center text-slate-400 flex flex-col items-center"><CheckCircle size={32} className="text-green-400 mb-2 opacity-50"/><p className="text-sm font-bold">No items in this category.</p></div> : 
+                        {currentAlerts?.length === 0 ? <div className="p-8 text-center text-slate-400 flex flex-col items-center"><CheckCircle size={32} className="text-green-400 mb-2 opacity-50" /><p className="text-sm font-bold">No items in this category.</p></div> :
                             currentAlerts?.map(item => (
                                 <div key={item.id} className="px-5 py-3 flex justify-between items-center hover:bg-slate-50/80 transition group">
                                     <div className="flex items-center gap-3">
-                                        <div className={`p-2 rounded-xl shadow-sm ${alertTab === 'critical' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}>{alertTab === 'critical' ? <XCircle size={16}/> : <AlertCircle size={16}/>}</div>
+                                        <div className={`p-2 rounded-xl shadow-sm ${alertTab === 'critical' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}>{alertTab === 'critical' ? <XCircle size={16} /> : <AlertCircle size={16} />}</div>
                                         <div><p className="text-xs font-bold text-slate-800">{item.name}</p><div className="flex items-center gap-2 mt-1">{item.price > 50000 && <span className="text-[9px] font-black bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-100">HIGH VALUE</span>}<span className="text-[10px] font-medium text-slate-400">{item.category}</span></div></div>
                                     </div>
                                     <div className="flex items-center gap-4"><div className="text-right"><span className={`block text-xs font-black ${alertTab === 'critical' ? 'text-red-600' : 'text-slate-700'}`}>{item.stock} Left</span><div className="w-16 h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden ml-auto shadow-inner"><div className={`h-full rounded-full ${item.stock === 0 ? 'bg-red-500 w-0' : 'bg-gradient-to-r from-orange-400 to-orange-500'}`} style={{ width: `${(item.stock / 5) * 100}%` }}></div></div></div><button onClick={() => navigate('/admin/store')} className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition hover:bg-blue-100 shadow-sm">Restock</button></div>
