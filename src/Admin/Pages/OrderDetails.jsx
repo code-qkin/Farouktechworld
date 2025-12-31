@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
     ArrowLeft, Printer, DollarSign, 
     CheckCircle, Wrench, Ban, PlusCircle, 
-    X, RotateCcw, RefreshCw, Lock, Smartphone, Edit2, Trash2, AlertTriangle, Package, Save
+    X, RotateCcw, RefreshCw, Lock, Smartphone, Edit2, Trash2, AlertTriangle, Package, Save,
+    Send, Loader2, Calendar, User, ShoppingBag
 } from 'lucide-react';
 import { 
     collection, query, where, getDocs, doc, 
@@ -17,9 +18,14 @@ const OrderDetails = () => {
     const { orderId } = useParams(); 
     const id = orderId;
     const navigate = useNavigate();
-    // eslint-disable-next-line no-unused-vars
-    const { role } = useAuth();
+    const { role, user } = useAuth();
     
+    // ✅ Defined Categories
+    const storeCategories = [
+        "Accessories", "Phones", "Laptops", "Chargers", 
+        "Screen Guards", "Audio", "Parts", "Services", "Others"
+    ];
+
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
     const [workers, setWorkers] = useState([]);
@@ -35,9 +41,24 @@ const OrderDetails = () => {
     // Condition Editing State
     const [editingCondition, setEditingCondition] = useState({ index: -1, value: '' });
 
+    // Delete Request State
+    const [requestModalOpen, setRequestModalOpen] = useState(false);
+    const [deleteReason, setDeleteReason] = useState('');
+    const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
     const [promptConfig, setPromptConfig] = useState({ isOpen: false, title: '', message: '', max: 1, action: null });
+
+    // 🔥 FIX: Auto-Dismiss Toast after 3 seconds
+    useEffect(() => {
+        if (toast.message) {
+            const timer = setTimeout(() => {
+                setToast({ message: '', type: '' });
+            }, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [toast.message]);
 
     // 1. FETCH ORDER DATA (Real-time)
     useEffect(() => {
@@ -94,9 +115,7 @@ const OrderDetails = () => {
         try {
             const newItems = JSON.parse(JSON.stringify(order.items));
             newItems[i].services[s].worker = newWorker;
-            
             let newOrderStatus = order.status; 
-
             if (newWorker === 'Unassigned') {
                 newItems[i].services[s].status = 'Pending';
             } else {
@@ -105,12 +124,7 @@ const OrderDetails = () => {
                     newOrderStatus = 'In Progress';
                 }
             }
-            
-            await updateDoc(doc(db, "Orders", order.id), { 
-                items: newItems,
-                status: newOrderStatus
-            });
-
+            await updateDoc(doc(db, "Orders", order.id), { items: newItems, status: newOrderStatus });
             setToast({message: `Assigned to ${newWorker}`, type: 'success'});
         } catch(e) { console.error(e); setToast({message: "Assignment Failed", type: 'error'}); }
         setIsUpdating(false);
@@ -119,48 +133,32 @@ const OrderDetails = () => {
     const handleUpdateDiscount = async () => {
         const val = Number(discountInput);
         if (val < 0) return;
-        
         setIsUpdating(true);
         try {
             await runTransaction(db, async (t) => {
                 const ref = doc(db, "Orders", order.id);
-                const docSnap = await t.get(ref);
-                const data = docSnap.data();
-                
+                const data = (await t.get(ref)).data();
                 const currentSubtotal = data.subtotal || (data.totalCost + (data.discount || 0));
                 const newDiscount = val;
                 const newTotalCost = Math.max(0, currentSubtotal - newDiscount);
-                
                 let finalPaid = data.amountPaid || 0;
                 let newRefunded = data.refundedAmount || 0;
-
                 if (finalPaid > newTotalCost) {
                     const diff = finalPaid - newTotalCost;
                     finalPaid = newTotalCost;
                     newRefunded += diff; 
                 }
-                
                 const newBalance = newTotalCost - finalPaid;
-
                 t.update(ref, {
-                    subtotal: currentSubtotal,
-                    discount: newDiscount,
-                    totalCost: newTotalCost,
-                    amountPaid: finalPaid,
-                    refundedAmount: newRefunded,
-                    balance: newBalance,
+                    subtotal: currentSubtotal, discount: newDiscount, totalCost: newTotalCost,
+                    amountPaid: finalPaid, refundedAmount: newRefunded, balance: newBalance,
                     paymentStatus: finalPaid >= newTotalCost ? 'Paid' : (finalPaid > 0 ? 'Part Payment' : 'Unpaid'),
                     paid: finalPaid >= newTotalCost
                 });
             });
             setToast({ message: "Discount Applied", type: "success" });
             setShowDiscountModal(false);
-        } catch (e) {
-            console.error(e);
-            setToast({ message: "Update Failed", type: "error" });
-        } finally {
-            setIsUpdating(false);
-        }
+        } catch (e) { console.error(e); setToast({ message: "Update Failed", type: "error" }); } finally { setIsUpdating(false); }
     };
 
     const handleVoidProductTrigger = (i) => {
@@ -190,39 +188,26 @@ const OrderDetails = () => {
                 const newItems = JSON.parse(JSON.stringify(data.items));
                 const item = newItems[i];
                 if(item.returned) throw "Already returned";
-                
                 if (item.productId) {
                     const invRef = doc(db, "Inventory", item.productId);
                     const invSnap = await t.get(invRef);
                     if(invSnap.exists()) t.update(invRef, { stock: (invSnap.data().stock || 0) + returnQty });
                 }
-
                 if (returnQty === item.qty) { newItems[i].returned = true; } 
                 else { 
                     newItems[i].qty -= returnQty; 
                     newItems[i].total = newItems[i].price * newItems[i].qty; 
                     newItems.push({ ...item, qty: returnQty, total: item.price * returnQty, returned: true }); 
                 }
-                
                 const deduction = item.price * returnQty;
                 const currentDiscount = data.discount || 0;
                 const newSubtotal = (data.subtotal || data.totalCost) - deduction;
                 const newTotalCost = Math.max(0, newSubtotal - currentDiscount);
-
                 let newAmountPaid = data.amountPaid || 0;
                 let newRefundedAmount = data.refundedAmount || 0;
-                
-                if (newAmountPaid > newTotalCost) { 
-                    const refundDue = newAmountPaid - newTotalCost; 
-                    newAmountPaid = newTotalCost; 
-                    newRefundedAmount += refundDue; 
-                }
+                if (newAmountPaid > newTotalCost) { newAmountPaid = newTotalCost; newRefundedAmount += (data.amountPaid - newTotalCost); }
                 const newBalance = newTotalCost - newAmountPaid;
-                
-                t.update(ref, { 
-                    items: newItems, subtotal: newSubtotal, totalCost: newTotalCost, 
-                    amountPaid: newAmountPaid, refundedAmount: newRefundedAmount, balance: newBalance 
-                });
+                t.update(ref, { items: newItems, subtotal: newSubtotal, totalCost: newTotalCost, amountPaid: newAmountPaid, refundedAmount: newRefundedAmount, balance: newBalance });
             });
             setToast({message: "Item Returned", type: 'success'});
         } catch(e) { setToast({message: "Failed", type: 'error'}); }
@@ -239,35 +224,20 @@ const OrderDetails = () => {
                         const ref = doc(db, "Orders", order.id);
                         const data = (await t.get(ref)).data();
                         const newItems = JSON.parse(JSON.stringify(data.items));
-                        
                         const svc = newItems[i].services[s];
                         if (svc.status === 'Void') throw "Already voided"; 
                         svc.status = 'Void'; svc.worker = 'Unassigned';
-
                         if (newItems[i].type === 'repair') {
-                             newItems[i].total = newItems[i].services.reduce((acc, curr) => {
-                                 return acc + (curr.status !== 'Void' ? Number(curr.cost || 0) : 0);
-                             }, 0);
+                             newItems[i].total = newItems[i].services.reduce((acc, curr) => acc + (curr.status !== 'Void' ? Number(curr.cost || 0) : 0), 0);
                         }
-
                         const newSubtotal = newItems.reduce((acc, item) => acc + (Number(item.total) || 0), 0);
                         const currentDiscount = data.discount || 0;
                         const newTotalCost = Math.max(0, newSubtotal - currentDiscount);
-
                         let newAmountPaid = data.amountPaid || 0;
                         let newRefundedAmount = data.refundedAmount || 0;
-                        
-                        if (newAmountPaid > newTotalCost) {
-                            const refundDue = newAmountPaid - newTotalCost;
-                            newAmountPaid = newTotalCost;
-                            newRefundedAmount += refundDue;
-                        }
+                        if (newAmountPaid > newTotalCost) { newAmountPaid = newTotalCost; newRefundedAmount += (data.amountPaid - newTotalCost); }
                         const newBalance = newTotalCost - newAmountPaid;
-                        
-                        t.update(ref, { 
-                            items: newItems, subtotal: newSubtotal, totalCost: newTotalCost, 
-                            amountPaid: newAmountPaid, refundedAmount: newRefundedAmount, balance: newBalance 
-                        });
+                        t.update(ref, { items: newItems, subtotal: newSubtotal, totalCost: newTotalCost, amountPaid: newAmountPaid, refundedAmount: newRefundedAmount, balance: newBalance });
                     });
                     setToast({message: "Service Voided", type: 'success'});
                 } catch(e) { setToast({message: "Failed", type: 'error'}); }
@@ -281,15 +251,18 @@ const OrderDetails = () => {
         const amt = Number(paymentInput);
         if(!amt) return;
         setIsUpdating(true);
-        await runTransaction(db, async (t) => {
-            const ref = doc(db, "Orders", order.id);
-            const data = (await t.get(ref)).data();
-            const newPaid = (data.amountPaid || 0) + amt;
-            const newBal = data.totalCost - newPaid;
-            t.update(ref, { amountPaid: newPaid, balance: newBal, paymentStatus: newBal <= 0 ? 'Paid' : 'Part Payment', paid: newBal <= 0 });
-        });
+        try {
+            await runTransaction(db, async (t) => {
+                const ref = doc(db, "Orders", order.id);
+                const data = (await t.get(ref)).data();
+                const newPaid = (data.amountPaid || 0) + amt;
+                const newBal = data.totalCost - newPaid;
+                t.update(ref, { amountPaid: newPaid, balance: newBal, paymentStatus: newBal <= 0 ? 'Paid' : 'Part Payment', paid: newBal <= 0 });
+            });
+            setToast({ message: "Payment Recorded", type: "success" }); 
+        } catch(e) { setToast({ message: "Payment Failed", type: "error" }); }
         setIsUpdating(false);
-        setShowPaymentModal(false);
+        setShowPaymentModal(false); // ✅ Closes Payment Modal
     };
 
     const handleVoidOrder = async () => {
@@ -299,28 +272,77 @@ const OrderDetails = () => {
             navigate('/admin/orders');
          } catch(e) { setToast({message: "Void Failed", type: 'error'}); }
          setIsUpdating(false);
+         setConfirmConfig({...confirmConfig, isOpen: false}); // ✅ Ensures Modal Closes
     };
 
-    const handleDeleteOrder = async () => {
+    const handleProcessRefund = async () => {
+        setIsUpdating(true);
+        await updateDoc(doc(db, "Orders", order.id), { amountPaid: 0, refundedAmount: order.amountPaid, paymentStatus: 'Refunded', balance: 0 });
+        setToast({ message: "Refund Processed", type: "success" });
+        setIsUpdating(false);
+        setConfirmConfig({...confirmConfig, isOpen: false}); // ✅ Ensures Modal Closes
+    };
+
+    const handleResetPayment = async () => {
+         setIsUpdating(true);
+         await updateDoc(doc(db, "Orders", order.id), { amountPaid: 0, balance: order.totalCost, paymentStatus: 'Unpaid', paid: false });
+         setToast({ message: "Payment Reset", type: "success" });
+         setIsUpdating(false);
+         setConfirmConfig({...confirmConfig, isOpen: false}); // ✅ Ensures Modal Closes
+    };
+    
+    const handleStatusChange = async (e) => {
+        const newStatus = e.target.value;
+        if (newStatus === 'Void') {
+            setConfirmConfig({ isOpen: true, title: "Void Order?", message: "This cancels everything and zeros the balance. Continue?", confirmText: "Void", confirmColor: "bg-red-600", action: handleVoidOrder });
+            return;
+        }
+        setIsUpdating(true);
+        await updateDoc(doc(db, "Orders", order.id), { status: newStatus });
+        setToast({ message: "Status Updated", type: "success" });
+        setIsUpdating(false);
+    };
+
+    const handleCollectionToggle = async () => {
+        const next = order.status === 'Collected' ? 'Ready for Pickup' : 'Collected';
+        setIsUpdating(true);
+        await updateDoc(doc(db, "Orders", order.id), { status: next });
+        setToast({ message: `Marked as ${next}`, type: "success" });
+        setIsUpdating(false);
+        setConfirmConfig({...confirmConfig, isOpen: false}); // ✅ Ensures Modal Closes
+    };
+
+    const handleRemovePart = (partItem) => {
         setConfirmConfig({
-            isOpen: true,
-            title: "Delete Order?",
-            message: `Permanently delete this order? This cannot be undone.`,
-            confirmText: "Delete Forever",
-            confirmColor: "bg-red-600",
+            isOpen: true, title: "Remove Part?", message: `Remove "${partItem.name}" and restore stock?`, confirmText: "Remove & Restore", confirmColor: "bg-red-600",
             action: async () => {
                 setIsUpdating(true);
                 try {
-                    await deleteDoc(doc(db, "Orders", order.id));
-                    setToast({ message: "Order Deleted", type: "success" });
-                    navigate('/admin/orders');
-                } catch (e) {
-                    setToast({ message: "Delete Failed", type: "error" });
-                    setIsUpdating(false);
-                }
-                setConfirmConfig({ ...confirmConfig, isOpen: false });
+                    await runTransaction(db, async (t) => {
+                        if (partItem.partId) {
+                            const partRef = doc(db, "Inventory", partItem.partId);
+                            const partDoc = await t.get(partRef);
+                            if (partDoc.exists()) t.update(partRef, { stock: increment(1) });
+                        }
+                        t.update(doc(db, "Orders", order.id), { items: arrayRemove(partItem) });
+                    });
+                    setToast({ message: "Part Removed", type: "success" });
+                } catch (e) { console.error(e); setToast({ message: "Failed to remove part", type: "error" }); } 
+                finally { setIsUpdating(false); setConfirmConfig({ ...confirmConfig, isOpen: false }); }
             }
         });
+    };
+
+    const handleSaveCondition = async (itemIndex) => {
+        setIsUpdating(true);
+        try {
+            const newItems = JSON.parse(JSON.stringify(order.items));
+            newItems[itemIndex].condition = editingCondition.value;
+            await updateDoc(doc(db, "Orders", order.id), { items: newItems });
+            setToast({ message: "Condition updated", type: "success" });
+            setEditingCondition({ index: -1, value: '' }); 
+        } catch(e) { console.error(e); setToast({ message: "Update failed", type: "error" }); } 
+        finally { setIsUpdating(false); }
     };
 
     const handleWarrantyReturn = async (item) => {
@@ -337,87 +359,56 @@ const OrderDetails = () => {
         setIsUpdating(false);
     };
 
-    const handleProcessRefund = async () => {
-        setIsUpdating(true);
-        await updateDoc(doc(db, "Orders", order.id), { amountPaid: 0, refundedAmount: order.amountPaid, paymentStatus: 'Refunded', balance: 0 });
-        setIsUpdating(false);
-    };
-
-    const handleResetPayment = async () => {
-         setIsUpdating(true);
-         await updateDoc(doc(db, "Orders", order.id), { amountPaid: 0, balance: order.totalCost, paymentStatus: 'Unpaid', paid: false });
-         setIsUpdating(false);
-    };
-    
-    const handleStatusChange = async (e) => {
-        const newStatus = e.target.value;
-        if (newStatus === 'Void') {
-            setConfirmConfig({
-                isOpen: true, title: "Void Order?", message: "This cancels everything and zeros the balance. Continue?", confirmText: "Void", confirmColor: "bg-red-600", action: handleVoidOrder
-            });
+    // 🔥 HANDLE DELETE CLICK
+    const handleDeleteClick = () => {
+        if (!order) return;
+        if (role === 'secretary') {
+            setRequestModalOpen(true);
             return;
         }
-        setIsUpdating(true);
-        await updateDoc(doc(db, "Orders", order.id), { status: newStatus });
-        setIsUpdating(false);
-    };
-
-    const handleCollectionToggle = async () => {
-        const next = order.status === 'Collected' ? 'Ready for Pickup' : 'Collected';
-        setIsUpdating(true);
-        await updateDoc(doc(db, "Orders", order.id), { status: next });
-        setIsUpdating(false);
-    };
-
-    const handleRemovePart = (partItem) => {
         setConfirmConfig({
             isOpen: true,
-            title: "Remove Part?",
-            message: `Remove "${partItem.name}" and restore stock?`,
-            confirmText: "Remove & Restore",
+            title: "Delete Order?",
+            message: "This action is permanent. Are you sure?",
+            confirmText: "Delete Forever",
             confirmColor: "bg-red-600",
             action: async () => {
-                setIsUpdating(true);
                 try {
-                    await runTransaction(db, async (t) => {
-                        if (partItem.partId) {
-                            const partRef = doc(db, "Inventory", partItem.partId);
-                            const partDoc = await t.get(partRef);
-                            if (partDoc.exists()) {
-                                t.update(partRef, { stock: increment(1) });
-                            }
-                        }
-                        t.update(doc(db, "Orders", order.id), {
-                            items: arrayRemove(partItem)
-                        });
-                    });
-                    setToast({ message: "Part Removed", type: "success" });
+                    await deleteDoc(doc(db, "Orders", order.id));
+                    setToast({ message: "Order Deleted", type: "success" });
+                    setTimeout(() => navigate('/admin/orders'), 1000);
                 } catch (e) {
-                    console.error(e);
-                    setToast({ message: "Failed to remove part", type: "error" });
-                } finally {
-                    setIsUpdating(false);
-                    setConfirmConfig({ ...confirmConfig, isOpen: false });
+                    setToast({ message: "Delete failed", type: "error" });
                 }
+                setConfirmConfig({ ...confirmConfig, isOpen: false });
             }
         });
     };
 
-    // 🔥 NEW: SAVE EDITED CONDITION
-    const handleSaveCondition = async (itemIndex) => {
-        setIsUpdating(true);
+    // 🔥 SUBMIT DELETION REQUEST
+    const handleSubmitRequest = async (e) => {
+        e.preventDefault();
+        if (!deleteReason.trim()) return setToast({ message: "Reason required", type: "error" });
+
+        setIsSubmittingRequest(true);
         try {
-            const newItems = JSON.parse(JSON.stringify(order.items));
-            newItems[itemIndex].condition = editingCondition.value;
-            
-            await updateDoc(doc(db, "Orders", order.id), { items: newItems });
-            setToast({ message: "Condition updated", type: "success" });
-            setEditingCondition({ index: -1, value: '' }); // Close editor
-        } catch(e) {
-            console.error(e);
-            setToast({ message: "Update failed", type: "error" });
+            await addDoc(collection(db, "DeletionRequests"), {
+                orderId: order.id,
+                ticketId: order.ticketId,
+                customer: order.customer?.name || "Unknown",
+                reason: deleteReason,
+                requestedBy: user?.name || user?.email || "Secretary",
+                requestedAt: serverTimestamp(),
+                status: 'pending'
+            });
+            setToast({ message: "Request sent to Admin", type: "success" });
+            setRequestModalOpen(false);
+            setDeleteReason('');
+        } catch (error) {
+            console.error(error);
+            setToast({ message: "Failed to send request", type: "error" });
         } finally {
-            setIsUpdating(false);
+            setIsSubmittingRequest(false);
         }
     };
 
@@ -428,12 +419,12 @@ const OrderDetails = () => {
     
     const formatDate = (date) => (!date ? '' : new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }));
     const isReturn = order?.orderType === 'return';
-
-    // Filter parts used
     const partsUsed = order?.items?.filter(i => i.type === 'part_usage') || [];
 
     if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-4 border-purple-900"></div></div>;
-    if (!order) return null;
+    if (!order) return <div className="p-10 text-center text-gray-500 font-bold">Order not found.</div>;
+
+    const dateStr = order.createdAt?.seconds ? new Date(order.createdAt.seconds * 1000).toLocaleString() : 'N/A';
 
     return (
         <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
@@ -445,7 +436,14 @@ const OrderDetails = () => {
             <div className="max-w-7xl mx-auto mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <button onClick={() => navigate(-1)} className="flex items-center text-gray-600 hover:text-purple-700 transition bg-white px-4 py-2 rounded-lg shadow-sm border"><ArrowLeft size={20} className="mr-2"/> Back</button>
                 <div className="flex flex-wrap gap-2 no-print">
-                    <button onClick={handleDeleteOrder} disabled={isUpdating} className="flex items-center gap-2 bg-red-100 text-red-700 border border-red-200 px-4 py-2 rounded-lg hover:bg-red-200 text-sm font-bold"><Trash2 size={16}/> Delete</button>
+                    
+                    {/* 🔥 DELETE BUTTON */}
+                    {(role === 'admin' || role === 'secretary') && (
+                        <button onClick={handleDeleteClick} disabled={isUpdating} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold border transition ${role === 'secretary' ? 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100' : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'}`}>
+                            {role === 'secretary' ? <AlertTriangle size={16}/> : <Trash2 size={16}/>}
+                            {role === 'secretary' ? 'Request Delete' : 'Delete'}
+                        </button>
+                    )}
                     
                     {order.status !== 'Void' && <button onClick={() => setConfirmConfig({isOpen:true, title:"Void Order?", message:"This cancels everything.", confirmText:"Void", confirmColor:"bg-red-600", action: handleVoidOrder})} disabled={isUpdating} className="flex items-center gap-2 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 text-sm font-bold"><Ban size={16}/> Void</button>}
                     <button onClick={() => setShowReceipt(true)} className="flex items-center gap-2 bg-purple-900 text-white px-4 py-2 rounded-lg hover:bg-purple-800 text-sm font-bold"><Printer size={16}/> Receipt</button>
@@ -457,10 +455,11 @@ const OrderDetails = () => {
                 {/* LEFT COLUMN */}
                 <div className="lg:col-span-2 space-y-6">
                     <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
-                        <div className="bg-purple-900 p-6 text-white flex justify-between items-center">
+                        {/* Status Bar */}
+                        <div className="bg-slate-900 p-6 sm:p-8 text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
                             <div>
-                                <h1 className="text-2xl font-bold flex items-center gap-2">Order #{order.ticketId}</h1>
-                                <p className="text-purple-100 text-sm opacity-90">{order.customer?.name} • {order.customer?.phone}</p>
+                                <h1 className="text-3xl font-mono font-black tracking-tight">{order.ticketId}</h1>
+                                <p className="text-slate-400 text-sm mt-1 flex items-center gap-2"><Calendar size={14}/> {dateStr}</p>
                             </div>
                             <div className="bg-white/20 px-3 py-1 rounded-lg backdrop-blur-sm">
                                 <select value={order.status} onChange={handleStatusChange} disabled={isUpdating || order.status === 'Void'} className="bg-transparent text-white font-bold outline-none cursor-pointer disabled:opacity-80">
@@ -474,6 +473,7 @@ const OrderDetails = () => {
                             </div>
                         </div>
 
+                        {/* Order Items Table */}
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
@@ -502,7 +502,7 @@ const OrderDetails = () => {
                                                                 {item.imei && <span className="flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded"><Smartphone size={10}/> IMEI: {item.imei}</span>}
                                                                 {item.passcode && <span className="flex items-center gap-1 bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded border border-yellow-100 font-bold"><Lock size={10}/> Pass: {item.passcode}</span>}
                                                                 
-                                                                {/* 🔥 CONDITION DISPLAY & EDITING */}
+                                                                {/* CONDITION DISPLAY & EDITING */}
                                                                 <div className="flex items-center gap-2 group">
                                                                     {editingCondition.index === i ? (
                                                                         <div className="flex items-center gap-1 animate-in fade-in">
@@ -573,7 +573,7 @@ const OrderDetails = () => {
                         </div>
                     </div>
 
-                    {/* 🔥 PARTS USED SECTION */}
+                    {/* PARTS USED SECTION */}
                     {partsUsed.length > 0 && (
                         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                              <div className="bg-yellow-50 px-6 py-3 border-b border-yellow-100 flex items-center gap-2">
@@ -587,12 +587,7 @@ const OrderDetails = () => {
                                             <span className="text-sm font-bold text-slate-700">{part.name.replace('Used: ', '')}</span>
                                             <div className="text-xs text-slate-400">By {part.worker || 'Unknown'} • {part.usedAt ? new Date(part.usedAt).toLocaleString() : ''}</div>
                                         </div>
-                                        <button 
-                                            onClick={() => handleRemovePart(part)}
-                                            className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-full transition"
-                                            title="Remove Part & Restore Stock"
-                                            disabled={isUpdating}
-                                        >
+                                        <button onClick={() => handleRemovePart(part)} className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-full transition" title="Remove Part & Restore Stock" disabled={isUpdating}>
                                             <Trash2 size={16}/>
                                         </button>
                                     </div>
@@ -604,6 +599,18 @@ const OrderDetails = () => {
 
                 {/* RIGHT COLUMN */}
                 <div className="space-y-6">
+                    
+                    {/* CUSTOMER CARD */}
+                    <div className="bg-purple-50 p-6 rounded-2xl h-fit border border-purple-100">
+                        <h3 className="text-xs font-bold text-purple-800 uppercase tracking-wider mb-4 flex items-center gap-2"><User size={16}/> Customer</h3>
+                        <div className="space-y-4">
+                            <div><p className="text-xs text-purple-400 font-bold uppercase">Name</p><p className="font-bold text-slate-800 text-lg">{order.customer?.name}</p></div>
+                            <div><p className="text-xs text-purple-400 font-bold uppercase">Phone</p><p className="font-bold text-slate-800">{order.customer?.phone || 'N/A'}</p></div>
+                            <div><p className="text-xs text-purple-400 font-bold uppercase">Email</p><p className="font-bold text-slate-800 text-sm">{order.customer?.email || 'N/A'}</p></div>
+                        </div>
+                    </div>
+
+                    {/* PAYMENT SUMMARY */}
                     <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 shadow-sm h-fit">
                         <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2"><DollarSign size={18}/> Payment Summary</h3>
                         <div className="space-y-3 text-sm mb-6">
@@ -705,10 +712,32 @@ const OrderDetails = () => {
                 </div>
             )}
 
-            {/* Receipt Modal */}
+            {/* 🔥 SECRETARY REQUEST MODAL */}
+            {requestModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/80 z-[120] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 transform transition-all scale-100">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><AlertTriangle className="text-orange-500"/> Request Deletion</h3>
+                            <button onClick={() => setRequestModalOpen(false)}><X size={20} className="text-slate-400"/></button>
+                        </div>
+                        <p className="text-sm text-slate-500 mb-4">State reason for deleting ticket <b>{order.ticketId}</b>:</p>
+                        <form onSubmit={handleSubmitRequest}>
+                            <textarea className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500 text-sm mb-4" rows="3" placeholder="Reason..." value={deleteReason} onChange={e => setDeleteReason(e.target.value)} required autoFocus />
+                            <div className="flex gap-2">
+                                <button type="button" onClick={() => setRequestModalOpen(false)} className="flex-1 py-3 text-slate-500 font-bold bg-gray-100 rounded-xl">Cancel</button>
+                                <button type="submit" disabled={isSubmittingRequest} className="flex-1 py-3 bg-orange-600 text-white font-bold rounded-xl flex items-center justify-center gap-2">
+                                    {isSubmittingRequest ? <Loader2 className="animate-spin" size={18}/> : <Send size={18}/>} Send
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* 🔥 FIXED & SCROLLABLE RECEIPT MODAL */}
             {showReceipt && (
                 <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-md p-8 rounded shadow-2xl relative printable-receipt">
+                    <div className="bg-white w-full max-w-md p-8 rounded shadow-2xl relative printable-receipt max-h-[90vh] overflow-y-auto">
                         <button onClick={() => setShowReceipt(false)} className="absolute top-2 right-2 text-gray-400 print:hidden hover:text-gray-600"><X/></button>
                         
                         <div className="text-center border-b-2 border-black pb-4 mb-4">

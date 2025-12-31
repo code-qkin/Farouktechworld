@@ -1,21 +1,41 @@
 import React, { useState } from 'react';
-import { Search, AlertCircle, CheckCircle, Clock, Truck, Package } from 'lucide-react';
+import { 
+    Search, CheckCircle, Clock, Truck, Package, 
+    Smartphone, CreditCard, User, Calendar, Wrench, ArrowRight, XCircle 
+} from 'lucide-react';
 import { db } from '../firebaseConfig'; 
 import { collection, query, where, getDocs } from 'firebase/firestore';
-// ✅ Correct Import for Toast
 import { Toast } from '../Admin/Components/Feedback'; 
+
+// --- CONFIGURATION ---
+const STEPS = [
+    { id: 1, label: 'Received', status: 'Pending', icon: Package },
+    { id: 2, label: 'Repairing', status: 'In Progress', icon: Wrench },
+    { id: 3, label: 'Ready', status: 'Ready for Pickup', icon: CheckCircle },
+    { id: 4, label: 'Collected', status: 'Collected', icon: Truck },
+];
+
+const getStepIndex = (status) => {
+    if (status === 'Void') return -1;
+    switch (status) {
+        case 'Pending': return 1;
+        case 'In Progress': return 2;
+        case 'Ready for Pickup': return 3;
+        case 'Collected': return 4;
+        case 'Completed': return 3; // Treat Completed as Ready
+        default: return 0;
+    }
+};
 
 const TrackingPage = () => {
     const [ticketNumber, setTicketNumber] = useState('');
     const [loading, setLoading] = useState(false);
-    const [orderStatus, setOrderStatus] = useState(null);
-    
-    // Feedback State
+    const [order, setOrder] = useState(null);
     const [toast, setToast] = useState({ message: '', type: '' });
 
     const handleTrack = async (e) => {
         e.preventDefault();
-        setOrderStatus(null);
+        setOrder(null);
         setLoading(true);
 
         const normalizedTicket = ticketNumber.trim().toUpperCase();
@@ -27,32 +47,16 @@ const TrackingPage = () => {
         }
 
         try {
-            // Query Firestore for the Ticket ID
             const q = query(collection(db, "Orders"), where("ticketId", "==", normalizedTicket));
             const querySnapshot = await getDocs(q);
 
             if (!querySnapshot.empty) {
                 const data = querySnapshot.docs[0].data();
-                
-                // Format Items List for Display
-                const itemsDisplay = data.items?.map(i => i.name || i.deviceModel).join(', ') || 'Device Repair';
-                
-                // Privacy: Mask Customer Name (e.g., "John Doe" -> "John ***")
-                const customerName = data.customer?.name ? `${data.customer.name.split(' ')[0]} ***` : "Customer";
-
-                setOrderStatus({
-                    ticketId: data.ticketId,
-                    status: data.status,
-                    paymentStatus: data.paymentStatus || (data.paid ? 'Paid' : 'Unpaid'),
-                    items: itemsDisplay,
-                    customer: customerName,
-                    date: data.createdAt?.toDate ? data.createdAt.toDate().toLocaleDateString() : 'Recent'
-                });
+                setOrder({ id: querySnapshot.docs[0].id, ...data });
                 setToast({ message: "Order Found!", type: "success" });
             } else {
                 setToast({ message: "Ticket not found. Please check the ID.", type: "error" });
             }
-
         } catch (err) {
             console.error("Tracking Error:", err);
             setToast({ message: "System error. Please try again.", type: "error" });
@@ -60,86 +64,188 @@ const TrackingPage = () => {
             setLoading(false);
         }
     };
-    
+
+    const activeStep = order ? getStepIndex(order.status) : 0;
+    const isVoid = order?.status === 'Void';
+
     return (
-        <section className="bg-gradient-to-b from-purple-50 to-white py-24 min-h-screen px-4 flex flex-col items-center">
-            
-            {/* Feedback Toast */}
+        <section className="bg-slate-50 min-h-screen pt-28 pb-20 px-4">
             <Toast message={toast.message} type={toast.type} onClose={() => setToast({message:'', type:''})} />
 
-            <div className="max-w-xl w-full text-center">
-                <h1 className="text-4xl font-extrabold text-purple-900 mb-4">Track Your Repair</h1>
-                <p className="text-gray-600 mb-8">Enter your Ticket ID (e.g., FTW-2024...) to check the live status of your device.</p>
+            <div className="max-w-4xl mx-auto">
+                
+                {/* --- HEADER --- */}
+                <div className="text-center mb-12">
+                    <h1 className="text-3xl md:text-5xl font-black text-slate-900 mb-4">
+                        Track Your Repair
+                    </h1>
+                    <p className="text-slate-500 text-lg">
+                        Enter your Ticket ID below to see the live status of your device.
+                    </p>
+                </div>
 
-                <form onSubmit={handleTrack} className="relative mb-12 group">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                        <Search className="text-gray-400 group-focus-within:text-purple-600 transition" />
-                    </div>
-                    <input
-                        type="text"
-                        value={ticketNumber}
-                        onChange={(e) => setTicketNumber(e.target.value)}
-                        placeholder="Enter Ticket ID"
-                        className="w-full pl-12 pr-32 py-4 border-2 border-gray-200 rounded-2xl focus:ring-4 focus:ring-purple-100 focus:border-purple-600 outline-none transition text-lg font-mono uppercase shadow-sm"
-                    />
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="absolute right-2 top-2 bottom-2 bg-purple-700 text-white px-6 rounded-xl font-bold hover:bg-purple-800 transition disabled:opacity-70 flex items-center gap-2"
-                    >
-                        {loading ? 'Checking...' : 'Track'}
-                    </button>
-                </form>
+                {/* --- SEARCH BAR --- */}
+                <div className="bg-white p-2 rounded-2xl shadow-xl shadow-purple-900/5 max-w-2xl mx-auto mb-16 border border-slate-100">
+                    <form onSubmit={handleTrack} className="relative flex items-center">
+                        <Search className="absolute left-4 text-slate-400" size={24} />
+                        <input
+                            type="text"
+                            value={ticketNumber}
+                            onChange={(e) => setTicketNumber(e.target.value)}
+                            placeholder="ENTER TICKET ID (E.G. FTW-2024...)"
+                            className="w-full pl-14 pr-36 py-4 bg-transparent outline-none text-lg font-bold text-slate-700 placeholder-slate-300 uppercase font-mono"
+                        />
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="absolute right-2 bg-purple-900 text-white px-8 py-2.5 rounded-xl font-bold hover:bg-purple-800 transition disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {loading ? <span className="animate-pulse">Checking...</span> : <>Track <ArrowRight size={18}/></>}
+                        </button>
+                    </form>
+                </div>
 
-                {/* ORDER STATUS CARD */}
-                {orderStatus && (
-                    <div className="bg-white text-left rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-fade-in-up transform transition-all">
-                        {/* Status Banner */}
-                        <div className={`p-6 flex justify-between items-center ${
-                             orderStatus.status === 'Completed' ? 'bg-green-600' : 
-                             orderStatus.status === 'Ready for Pickup' ? 'bg-indigo-600' :
-                             orderStatus.status === 'Collected' ? 'bg-gray-800' :
-                             'bg-yellow-500'
-                        } text-white`}>
-                            <div>
-                                <p className="text-xs font-bold opacity-80 uppercase tracking-wider">Current Status</p>
-                                <h2 className="text-2xl font-black uppercase">{orderStatus.status}</h2>
-                            </div>
-                            <div className="bg-white/20 p-3 rounded-full">
-                                {orderStatus.status === 'Completed' ? <CheckCircle size={28}/> : 
-                                 orderStatus.status === 'Ready for Pickup' ? <Truck size={28}/> : 
-                                 <Clock size={28}/>}
-                            </div>
+                {/* --- RESULTS AREA --- */}
+                {order && (
+                    <div className="animate-in fade-in slide-in-from-bottom-8 duration-500">
+                        
+                        {/* 1. STATUS CARD HEADER */}
+                        <div className="bg-white rounded-t-3xl shadow-sm border border-slate-200 p-8 text-center relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 via-indigo-500 to-blue-500"></div>
+                            
+                            {isVoid ? (
+                                <div className="text-red-500 flex flex-col items-center">
+                                    <XCircle size={48} className="mb-2"/>
+                                    <h2 className="text-2xl font-black uppercase">Order Cancelled</h2>
+                                    <p className="text-slate-500">This ticket has been marked as void.</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mb-2">Current Status</p>
+                                    <h2 className="text-3xl md:text-4xl font-black text-purple-900 uppercase mb-8">
+                                        {order.status}
+                                    </h2>
+
+                                    {/* PROGRESS STEPPER */}
+                                    <div className="relative flex justify-between items-center max-w-2xl mx-auto">
+                                        {/* Progress Bar Line */}
+                                        <div className="absolute top-5 left-0 w-full h-1 bg-slate-100 -z-0 rounded-full"></div>
+                                        <div 
+                                            className="absolute top-5 left-0 h-1 bg-purple-600 -z-0 transition-all duration-1000 rounded-full"
+                                            style={{ width: `${((activeStep - 1) / (STEPS.length - 1)) * 100}%` }}
+                                        ></div>
+
+                                        {STEPS.map((step) => {
+                                            const StepIcon = step.icon;
+                                            const isActive = activeStep >= step.id;
+                                            const isCurrent = activeStep === step.id;
+
+                                            return (
+                                                <div key={step.id} className="relative z-10 flex flex-col items-center gap-3">
+                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center border-4 transition-all duration-500 ${
+                                                        isActive 
+                                                        ? 'bg-purple-600 border-purple-600 text-white shadow-lg shadow-purple-200' 
+                                                        : 'bg-white border-slate-200 text-slate-300'
+                                                    }`}>
+                                                        {isActive ? <CheckCircle size={18} /> : <StepIcon size={18} />}
+                                                    </div>
+                                                    <span className={`text-xs font-bold uppercase tracking-wider ${
+                                                        isCurrent ? 'text-purple-700' : isActive ? 'text-slate-700' : 'text-slate-300'
+                                                    }`}>
+                                                        {step.label}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            )}
                         </div>
 
-                        {/* Details Body */}
-                        <div className="p-6 space-y-6">
-                            <div className="flex justify-between border-b border-gray-100 pb-4">
-                                <div>
-                                    <p className="text-xs text-gray-500 uppercase font-bold">Ticket ID</p>
-                                    <p className="text-lg font-mono font-bold text-purple-900">{orderStatus.ticketId}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-xs text-gray-500 uppercase font-bold">Date</p>
-                                    <p className="text-gray-700 font-medium">{orderStatus.date}</p>
+                        {/* 2. DETAILS GRID */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-slate-200 border-x border-b border-slate-200 rounded-b-3xl overflow-hidden">
+                            
+                            {/* Left: Device Info */}
+                            <div className="bg-white p-8">
+                                <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-6">
+                                    <Smartphone className="text-purple-600" /> Device Details
+                                </h3>
+                                <div className="space-y-4">
+                                    {/* 🔥 FILTERED OUT 'part_usage' ITEMS HERE */}
+                                    {order.items?.filter(item => item.type !== 'part_usage').map((item, idx) => (
+                                        <div key={idx} className="flex items-start gap-4 p-4 rounded-xl bg-slate-50 border border-slate-100">
+                                            <div className="bg-white p-2 rounded-lg shadow-sm">
+                                                <Wrench size={20} className="text-slate-400"/>
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-slate-800">{item.name || item.deviceModel}</p>
+                                                {item.type === 'repair' && (
+                                                    <ul className="mt-1 space-y-1">
+                                                        {item.services.map((s, i) => (
+                                                            <li key={i} className="text-xs text-slate-500 flex items-center gap-1">
+                                                                <div className="w-1 h-1 rounded-full bg-purple-400"></div> 
+                                                                {s.service}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
 
-                            <div>
-                                <p className="text-xs text-gray-500 uppercase font-bold mb-2">Device / Items</p>
-                                <div className="flex items-start gap-3 bg-purple-50 p-3 rounded-lg">
-                                    <Package className="text-purple-600 mt-1" size={18}/>
-                                    <p className="text-gray-800 font-medium">{orderStatus.items}</p>
+                            {/* Right: Info & Payment */}
+                            <div className="bg-white p-8 flex flex-col justify-between">
+                                <div>
+                                    <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-6">
+                                        <User className="text-purple-600" /> Ownership
+                                    </h3>
+                                    <div className="space-y-4 text-sm text-slate-600">
+                                        <div className="flex justify-between items-center border-b border-slate-50 pb-3">
+                                            <span>Customer Name</span>
+                                            <span className="font-bold text-slate-900">
+                                                {order.customer?.name ? `${order.customer.name.split(' ')[0]} ***` : 'Walk-In'}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between items-center border-b border-slate-50 pb-3">
+                                            <span>Date Dropped</span>
+                                            <span className="font-bold text-slate-900 flex items-center gap-1">
+                                                <Calendar size={14}/>
+                                                {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString() : 'N/A'}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between items-center pt-2">
+                                            <span>Ticket ID</span>
+                                            <span className="font-mono font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">{order.ticketId}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="mt-8 bg-purple-50 p-5 rounded-xl border border-purple-100">
+                                    <h4 className="font-bold text-purple-900 flex items-center gap-2 mb-3">
+                                        <CreditCard size={18}/> Payment Status
+                                    </h4>
+                                    <div className="flex items-center justify-between">
+                                        <span className={`text-sm font-bold px-3 py-1 rounded-full ${
+                                            order.paymentStatus === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                        }`}>
+                                            {order.paymentStatus || (order.paid ? 'Paid' : 'Unpaid')}
+                                        </span>
+                                        {order.balance > 0 && (
+                                            <span className="text-sm font-bold text-slate-600">
+                                                Bal: ₦{order.balance.toLocaleString()}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                            
-                            <div className="flex items-center justify-between pt-2">
-                                <div className="flex items-center gap-2">
-                                    <span className={`w-2.5 h-2.5 rounded-full ${orderStatus.paymentStatus === 'Paid' ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                                    <span className="text-sm text-gray-600 font-medium">Payment: <span className="font-bold text-gray-900">{orderStatus.paymentStatus}</span></span>
-                                </div>
-                                <span className="text-xs text-gray-400 italic">Owned by {orderStatus.customer}</span>
-                            </div>
+
+                        </div>
+
+                        {/* Footer Note */}
+                        <div className="text-center mt-8 text-slate-400 text-sm">
+                            <p>Issues with your status? Call us at <b className="text-slate-600">0809 511 5931</b></p>
                         </div>
                     </div>
                 )}

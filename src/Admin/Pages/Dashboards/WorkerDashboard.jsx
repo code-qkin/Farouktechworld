@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     Wrench, CheckCircle, Clock, BoxSelect, LogOut, 
-    Search, X, Box, Briefcase, Layers, Undo2, Lock, Package, AlertTriangle
+    Search, X, Box, Briefcase, Layers, Undo2, Lock, Package, AlertTriangle, Bell
 } from 'lucide-react';
 import { useAuth } from '../../AdminContext.jsx';
 import { db, auth } from '../../../firebaseConfig.js';
@@ -71,7 +71,34 @@ const WorkerDashboard = ({ user: propUser }) => {
   const [toast, setToast] = useState({ message: '', type: '' });
   const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
-  // --- FETCH DATA ---
+  // 🔥 Notification Logic
+  const lastAssignedJobIds = useRef(new Set());
+  const isFirstRun = useRef(true);
+  const [permissionStatus, setPermissionStatus] = useState(Notification.permission);
+
+  // --- 🔒 ROBUST OWNERSHIP CHECK ---
+  const isMyJob = (workerName) => {
+    if (!workerName) return false;
+    const assigned = String(workerName).trim().toLowerCase();
+    const myName = String(user?.name || '').trim().toLowerCase();
+    const myEmail = String(user?.email || '').trim().toLowerCase();
+    return assigned === myName || assigned === myEmail;
+  };
+
+  // --- REQUEST PERMISSION HANDLER ---
+  const requestNotificationPermission = () => {
+    Notification.requestPermission().then((permission) => {
+        setPermissionStatus(permission);
+        if (permission === 'granted') {
+            new Notification("Notifications Enabled! 🔔", {
+                body: "You will now receive alerts for new repair jobs.",
+                icon: '/vite.svg'
+            });
+        }
+    });
+  };
+
+  // --- FETCH DATA & HANDLE NOTIFICATIONS ---
   useEffect(() => {
     const unsubInv = onSnapshot(collection(db, "Inventory"), snap => 
         setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() })))
@@ -81,21 +108,77 @@ const WorkerDashboard = ({ user: propUser }) => {
         const allJobs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setOrders(allJobs);
         setLoading(false);
+
+        // 🔥 NOTIFICATION LOGIC START
+        if (user) {
+            const myCurrentJobIds = new Set();
+            
+            allJobs.forEach(order => {
+                // Check if this order has any ACTIVE job assigned to me
+                const hasMyActiveJob = order.items?.some(item => 
+                    item.type === 'repair' && 
+                    item.services?.some(svc => isMyJob(svc.worker) && svc.status !== 'Completed')
+                );
+                
+                if (hasMyActiveJob) {
+                    myCurrentJobIds.add(order.id);
+                }
+            });
+
+            // If not first run, check for differences (New Assignments)
+            if (!isFirstRun.current) {
+                // Find IDs that are in 'myCurrent' but NOT in 'lastAssigned'
+                const newJobs = [...myCurrentJobIds].filter(x => !lastAssignedJobIds.current.has(x));
+                
+                if (newJobs.length > 0) {
+                    const message = `You have ${newJobs.length} new repair task(s).`;
+                    
+                    // 1. In-App Toast
+                    setToast({ message: `🚀 ${message}`, type: 'info' });
+
+                    // 2. Play Sound
+                    try {
+                        const audio = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+                        audio.volume = 1.0;
+                        audio.play().catch(e => console.log("Audio blocked:", e));
+                    } catch (e) { /* silent fail */ }
+
+                    // 3. System Notification (Status Bar)
+                    if (Notification.permission === 'granted') {
+                        // Try ServiceWorker method first (Better for mobile)
+                        if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+                            navigator.serviceWorker.ready.then(registration => {
+                                registration.showNotification("New Job Assigned 🛠️", {
+                                    body: message,
+                                    icon: '/vite.svg',
+                                    vibrate: [200, 100, 200],
+                                    tag: 'new-job'
+                                });
+                            });
+                        } else {
+                            // Fallback to standard API
+                            new Notification("New Job Assigned 🛠️", { 
+                                body: message,
+                                icon: '/vite.svg',
+                                vibrate: [200, 100, 200]
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Update refs for next snapshot
+            lastAssignedJobIds.current = myCurrentJobIds;
+            isFirstRun.current = false;
+        }
+        // 🔥 NOTIFICATION LOGIC END
+
     });
 
     return () => { unsubInv(); unsubOrders(); };
-  }, []);
+  }, [user]);
 
   const handleLogout = async () => { await signOut(auth); navigate('/admin/login'); };
-
-  // --- 🔒 ROBUST OWNERSHIP CHECK ---
-  const isMyJob = (workerName) => {
-      if (!workerName) return false;
-      const assigned = String(workerName).trim().toLowerCase();
-      const myName = String(user?.name || '').trim().toLowerCase();
-      const myEmail = String(user?.email || '').trim().toLowerCase();
-      return assigned === myName || assigned === myEmail;
-  };
 
   // --- COMPUTED DATA ---
   const dashboardStats = useMemo(() => {
@@ -137,8 +220,7 @@ const WorkerDashboard = ({ user: propUser }) => {
   }, [orders, user]);
 
   // --- ACTIONS ---
-  
-  const claimService = (order, itemIndex, serviceIndex) => {
+  const claimService = (order, itemIndex, serviceIndex) => { /* ... existing code ... */ 
       setConfirmConfig({
           isOpen: true, title: "Claim Job", message: "Add this task to your workbench?", confirmText: "Claim Job", confirmColor: "bg-blue-600",
           action: async () => {
@@ -156,7 +238,7 @@ const WorkerDashboard = ({ user: propUser }) => {
       });
   };
 
-  const markServiceDone = (order, itemIndex, serviceIndex) => {
+  const markServiceDone = (order, itemIndex, serviceIndex) => { /* ... existing code ... */ 
       setConfirmConfig({
           isOpen: true, title: "Complete Task", message: "Mark repair as finished?", confirmText: "Complete", confirmColor: "bg-green-600",
           action: async () => {
@@ -176,7 +258,7 @@ const WorkerDashboard = ({ user: propUser }) => {
       });
   };
 
-  const undoCompletion = (order, itemIndex, serviceIndex) => {
+  const undoCompletion = (order, itemIndex, serviceIndex) => { /* ... existing code ... */ 
       setConfirmConfig({
           isOpen: true, title: "Undo Completion", message: "Move this task back to your workbench?", confirmText: "Undo", confirmColor: "bg-slate-600",
           action: async () => {
@@ -192,7 +274,7 @@ const WorkerDashboard = ({ user: propUser }) => {
       });
   };
 
-  const handleUsePart = async () => {
+  const handleUsePart = async () => { /* ... existing code ... */ 
     if (!selectedPart) return;
     const part = inventory.find(i => i.id === selectedPart);
     try {
@@ -202,53 +284,30 @@ const WorkerDashboard = ({ user: propUser }) => {
             if (partDoc.data().stock < 1) throw "Out of Stock!";
             
             t.update(partRef, { stock: increment(-1) });
-            
             const myIdentity = user.name || user.email || "Technician";
-            
-            const usageEntry = { 
-                type: 'part_usage', 
-                name: `Used: ${part.name}`, 
-                worker: myIdentity, 
-                cost: 0, 
-                partId: part.id,
-                usedAt: new Date().toISOString() 
-            };
-
-            t.update(doc(db, "Orders", selectedTask.id), {
-                items: arrayUnion(usageEntry)
-            });
+            const usageEntry = { type: 'part_usage', name: `Used: ${part.name}`, worker: myIdentity, cost: 0, partId: part.id, usedAt: new Date().toISOString() };
+            t.update(doc(db, "Orders", selectedTask.id), { items: arrayUnion(usageEntry) });
         });
         setShowPartModal(false); setSelectedPart(''); setPartSearch('');
         setToast({ message: `Logged usage: ${part.name}`, type: 'success' });
     } catch (e) { setToast({ message: `Error: ${e}`, type: 'error' }); }
   };
 
-  const handleUndoPart = (orderId, partItem) => {
+  const handleUndoPart = (orderId, partItem) => { /* ... existing code ... */ 
       setConfirmConfig({
-          isOpen: true,
-          title: "Undo Part Usage?",
-          message: `Remove "${partItem.name.replace('Used: ', '')}" from this ticket and restore +1 to stock?`,
-          confirmText: "Restore Stock",
-          confirmColor: "bg-red-600",
+          isOpen: true, title: "Undo Part Usage?", message: `Remove "${partItem.name.replace('Used: ', '')}" from this ticket and restore +1 to stock?`, confirmText: "Restore Stock", confirmColor: "bg-red-600",
           action: async () => {
               try {
                   await runTransaction(db, async (t) => {
                       if (partItem.partId) {
                           const partRef = doc(db, "Inventory", partItem.partId);
                           const partDoc = await t.get(partRef);
-                          if (partDoc.exists()) {
-                              t.update(partRef, { stock: increment(1) });
-                          }
+                          if (partDoc.exists()) { t.update(partRef, { stock: increment(1) }); }
                       }
-                      t.update(doc(db, "Orders", orderId), {
-                          items: arrayRemove(partItem)
-                      });
+                      t.update(doc(db, "Orders", orderId), { items: arrayRemove(partItem) });
                   });
                   setToast({ message: "Part removed & stock restored", type: "success" });
-              } catch (e) {
-                  console.error(e);
-                  setToast({ message: "Undo failed", type: "error" });
-              }
+              } catch (e) { console.error(e); setToast({ message: "Undo failed", type: "error" }); }
               setConfirmConfig({ ...confirmConfig, isOpen: false });
           }
       });
@@ -308,9 +367,21 @@ const WorkerDashboard = ({ user: propUser }) => {
                 <p className="text-[10px] text-slate-500 font-medium truncate max-w-[120px]">{user?.name || user?.email}</p>
             </div>
         </div>
-        <button onClick={handleLogout} className="flex items-center gap-1.5 bg-red-50 border border-red-100 text-red-600 px-3 py-1.5 rounded-lg font-bold hover:bg-red-100 text-[10px] transition">
-            <LogOut size={12} /> Exit
-        </button>
+
+        <div className="flex items-center gap-2">
+            {/* 🔥 PERMISSION BUTTON (Only shows if needed) */}
+            {permissionStatus === 'default' && (
+                <button 
+                    onClick={requestNotificationPermission}
+                    className="flex items-center gap-1.5 bg-yellow-100 text-yellow-700 px-3 py-1.5 rounded-lg font-bold text-[10px] hover:bg-yellow-200 transition"
+                >
+                    <Bell size={12}/> Enable Alerts
+                </button>
+            )}
+            <button onClick={handleLogout} className="flex items-center gap-1.5 bg-red-50 border border-red-100 text-red-600 px-3 py-1.5 rounded-lg font-bold hover:bg-red-100 text-[10px] transition">
+                <LogOut size={12} /> Exit
+            </button>
+        </div>
       </header>
 
       <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
@@ -385,7 +456,6 @@ const WorkerDashboard = ({ user: propUser }) => {
                                                 <span className="font-mono text-[10px] font-bold text-slate-800">{item.passcode}</span>
                                             </div>
                                         )}
-                                        {/* Condition Display */}
                                         {item.condition && (
                                             <div className="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
                                                 <AlertTriangle size={10} className="text-orange-500"/>
@@ -461,7 +531,8 @@ const WorkerDashboard = ({ user: propUser }) => {
           )}
       </div>
 
-      {/* PART MODAL */}
+      {/* PART MODAL (Existing logic) */}
+      {/* ... */}
       {showPartModal && (
           <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
               <div className="bg-white p-5 rounded-2xl shadow-2xl w-full max-w-sm animate-in zoom-in-95 flex flex-col max-h-[80vh]">

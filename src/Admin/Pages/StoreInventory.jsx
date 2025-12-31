@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Package, Plus, Search, Edit2, Trash2, Smartphone, 
     ArrowLeft, ArrowUpCircle, Save, X, 
-    AlertTriangle, CheckCircle, ClipboardEdit, Loader2,
-    Download, Filter, ChevronDown, Layers, ChevronLeft, ChevronRight, History, Wrench, User
+    AlertTriangle, ClipboardEdit, Loader2,
+    Download, Filter, ChevronDown, ChevronLeft, ChevronRight, History, Wrench
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AdminContext';
@@ -79,8 +79,8 @@ const StoreInventory = () => {
     const navigate = useNavigate();
     
     // UI State
-    const [activeTab, setActiveTab] = useState('products'); // 'products' or 'history'
-    const [isCreating, setIsCreating] = useState(false); // Toggle for Add Form
+    const [activeTab, setActiveTab] = useState('products'); 
+    const [isCreating, setIsCreating] = useState(false); 
 
     // Data State
     const [products, setProducts] = useState([]); 
@@ -93,11 +93,10 @@ const StoreInventory = () => {
     const [filterCategory, setFilterCategory] = useState('All');
     const [filterStock, setFilterStock] = useState('All'); 
 
-    // Pagination (Inventory)
+    // Pagination (Client Side)
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 50;
 
-    // Pagination (History)
     const [historyPage, setHistoryPage] = useState(1);
     const historyPerPage = 20;
 
@@ -114,9 +113,11 @@ const StoreInventory = () => {
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
-    // 1. LIVE FETCH INVENTORY
+    // 1. LIVE FETCH INVENTORY (ALL)
     useEffect(() => {
+        // 🔥 Reverted: Removed 'limit'
         const q = query(collection(db, "Inventory"), orderBy("category"));
+        
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const inventoryList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setProducts(inventoryList);
@@ -128,9 +129,10 @@ const StoreInventory = () => {
         return () => unsubscribe();
     }, []);
 
-    // 2. FETCH HISTORY (Sales & Parts Used)
+    // 2. FETCH HISTORY (ALL)
     useEffect(() => {
         if (activeTab === 'history') {
+            // 🔥 Reverted: Removed 'limit'
             const q = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
             const unsub = onSnapshot(q, (snapshot) => {
                 const sales = [];
@@ -170,7 +172,7 @@ const StoreInventory = () => {
         };
     }, [products]);
 
-    // 4. FILTERING & PAGINATION
+    // 4. FILTERING & PAGINATION (Client Side)
     const filteredProducts = useMemo(() => {
         return products.filter(product => {
             const term = searchTerm.toLowerCase();
@@ -293,11 +295,11 @@ const StoreInventory = () => {
             {activeTab === 'products' && (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
                     <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase">Total Value</span>
+                        <span className="text-[10px] font-bold text-gray-400 uppercase">Total Value (Loaded)</span>
                         <span className="text-lg sm:text-xl font-black text-slate-900">{formatCurrency(stats.totalValue)}</span>
                     </div>
                     <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase">Stock</span>
+                        <span className="text-[10px] font-bold text-gray-400 uppercase">Loaded Stock</span>
                         <span className="text-lg sm:text-xl font-black text-slate-900">{stats.totalItems} Items</span>
                     </div>
                     <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24">
@@ -325,7 +327,7 @@ const StoreInventory = () => {
                     <div className="bg-white p-3 rounded-xl shadow-sm border flex flex-col md:flex-row gap-3">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-3 text-gray-400" size={18}/>
-                            <input className="w-full pl-10 pr-4 py-2.5 bg-gray-50 rounded-lg outline-none text-sm font-medium focus:ring-2 focus:ring-purple-500" placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+                            <input className="w-full pl-10 pr-4 py-2.5 bg-gray-50 rounded-lg outline-none text-sm font-medium focus:ring-2 focus:ring-purple-500" placeholder="Search loaded items..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
                         </div>
                         <div className="grid grid-cols-2 md:flex gap-2">
                             <select className="px-3 py-2.5 bg-gray-50 rounded-lg text-sm font-bold outline-none" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
@@ -409,7 +411,7 @@ const StoreInventory = () => {
 
                         {/* Pagination */}
                         {filteredProducts.length > 0 && (
-                            <div className="bg-gray-50 border-t px-6 py-4 flex items-center justify-between">
+                            <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-between">
                                 <span className="text-xs font-bold text-gray-500">Page {currentPage} of {totalPages}</span>
                                 <div className="flex gap-2">
                                     <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 bg-white border rounded-lg disabled:opacity-50"><ChevronLeft size={16}/></button>
@@ -421,7 +423,7 @@ const StoreInventory = () => {
                 </div>
             )}
 
-            {/* --- TAB: HISTORY --- */}
+            {/* --- TAB: HISTORY (Reverted to Full Load) --- */}
             {activeTab === 'history' && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in">
                     <div className="p-4 border-b border-gray-100 flex justify-between items-center">
@@ -429,7 +431,6 @@ const StoreInventory = () => {
                         <div className="text-xs text-slate-500 font-bold bg-slate-100 px-2 py-1 rounded-full">{salesHistory.length} Txns</div>
                     </div>
                     
-                    {/* Desktop Table */}
                     <div className="hidden md:block overflow-x-auto">
                         <table className="w-full text-left text-sm">
                             <thead className="bg-gray-50 border-b text-xs font-bold text-slate-500 uppercase">
