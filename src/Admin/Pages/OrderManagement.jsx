@@ -6,7 +6,7 @@ import {
     ArrowLeft, ShoppingCart, Menu,
     Filter, ChevronDown, CheckCircle, AlertCircle, Wrench, ArrowRight,
     RotateCcw, ChevronLeft, ChevronRight, Plus, Minus, AlertTriangle, Send,
-    DownloadCloud, Loader2, Users, Calendar, DollarSign
+    DownloadCloud, Loader2, Users, Calendar, DollarSign, Edit3
 } from 'lucide-react';
 import { useAuth } from '../AdminContext.jsx'; 
 import { db } from '../../firebaseConfig.js';
@@ -85,7 +85,7 @@ const OrdersManagement = () => {
     const [storePage, setStorePage] = useState(1);
     const itemsPerStorePage = 24;
 
-    // Client-side Pagination (Main List)
+    // Client-side Pagination
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 20;
     
@@ -221,28 +221,17 @@ const OrdersManagement = () => {
         });
     }, [orders, searchTerm, filterStatus, filterType, filterPayment]);
 
-    // 🔥 STORE SEARCH & FILTERING (Fixed Pagination Reset)
     const filteredInventory = useMemo(() => {
         return inventory.filter(item => {
-            const term = storeSearch.toLowerCase();
-            // Safe checks for missing fields
-            const itemName = (item.name || '').toLowerCase();
-            const itemModel = (item.model || '').toLowerCase();
-            
-            const matchSearch = itemName.includes(term) || itemModel.includes(term);
+            const matchSearch = item.name.toLowerCase().includes(storeSearch.toLowerCase()) || (item.model || '').toLowerCase().includes(storeSearch.toLowerCase());
             const matchCategory = storeCategory === 'All' || item.category === storeCategory;
-            
             return matchSearch && matchCategory;
         });
     }, [inventory, storeSearch, storeCategory]);
 
-    // 🔥 AUTO-RESET PAGINATION FOR STORE GRID
-    useEffect(() => {
-        setStorePage(1);
-    }, [storeSearch, storeCategory]);
-
-    // Pagination Calculations (Main Orders)
     useEffect(() => { setCurrentPage(1); }, [searchTerm, filterStatus, filterType, timeFilter, filterPayment]);
+    
+    // Client-Side Pagination
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
     const currentOrders = filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
@@ -301,6 +290,32 @@ const OrdersManagement = () => {
     
     const removeFromCart = (id) => setCart(cart.filter(item => item.id !== id));
 
+    // 🔥 NEW: Edit Item in Cart Function
+    const handleEditCartItem = (item) => {
+        // 1. If repair item, load details back into form
+        if (item.type === 'repair') {
+            setRepairInput({
+                deviceModel: item.deviceModel || '',
+                imei: item.imei || '',
+                passcode: item.passcode || '',
+                condition: item.condition || ''
+            });
+            setCurrentDeviceServices(item.services || []);
+            setActiveTab('repair');
+        } else {
+            // For products, usually just removing and re-adding is fast enough, 
+            // but we could switch to store tab.
+            setActiveTab('store');
+        }
+        
+        // 2. Remove item from cart so it can be re-added updated
+        setCart(prev => prev.filter(i => i.id !== item.id));
+        
+        // 3. Switch view to inputs
+        setMobilePosTab('input');
+        setToast({ message: "Item loaded for editing", type: "info" });
+    };
+
     const handleCheckout = async () => {
         if (isSubmitting) return;
         if (!customer.name || cart.length === 0) return setToast({message: "Fill details & add items!", type: "error"});
@@ -348,7 +363,7 @@ const OrdersManagement = () => {
                     const newOrderRef = doc(collection(db, "Orders"));
                     t.set(newOrderRef, { 
                         ticketId, customer, orderType, 
-                        items: processedItems, // Save new items
+                        items: processedItems,
                         subtotal, discount: discountAmount, totalCost,
                         amountPaid: 0, balance: totalCost, paymentStatus: 'Unpaid', paymentMethod: null, paid: false, 
                         status: orderType === 'repair' ? 'Pending' : 'Completed', createdAt: serverTimestamp(), warrantyExpiry: Timestamp.fromDate(warrantyDate) 
@@ -741,7 +756,21 @@ const OrdersManagement = () => {
                                          <button onClick={() => removeFromCart(item.id)} className="absolute top-3 right-3 text-slate-300 hover:text-red-500 transition bg-gray-50 p-1.5 rounded-full"><Trash2 size={16}/></button>
                                          <div className="font-bold text-slate-800 pr-8 text-sm sm:text-base">{item.name || item.deviceModel}</div>
                                          <div className="flex justify-between items-end mt-4">
-                                            {item.type === 'product' && <div className="flex items-center bg-gray-100 rounded-lg p-1 gap-3"><button onClick={() => updateCartQty(item.id, -1)} className="w-8 h-8 flex items-center justify-center bg-white rounded shadow-sm"><Minus size={14}/></button><span className="text-sm font-bold w-4 text-center">{item.qty}</span><button onClick={() => updateCartQty(item.id, 1)} className="w-8 h-8 flex items-center justify-center bg-white rounded shadow-sm"><Plus size={14}/></button></div>}
+                                            {item.type === 'product' ? (
+                                                <div className="flex items-center bg-gray-100 rounded-lg p-1 gap-3">
+                                                    <button onClick={() => updateCartQty(item.id, -1)} className="w-8 h-8 flex items-center justify-center bg-white rounded shadow-sm"><Minus size={14}/></button>
+                                                    <span className="text-sm font-bold w-4 text-center">{item.qty}</span>
+                                                    <button onClick={() => updateCartQty(item.id, 1)} className="w-8 h-8 flex items-center justify-center bg-white rounded shadow-sm"><Plus size={14}/></button>
+                                                </div>
+                                            ) : (
+                                                // 🔥 NEW: Edit Button for Phones
+                                                <button 
+                                                    onClick={() => handleEditCartItem(item)}
+                                                    className="text-xs font-bold bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-blue-100 transition"
+                                                >
+                                                    <Edit3 size={12}/> Edit Details
+                                                </button>
+                                            )}
                                             <div className="text-right font-mono font-bold text-lg text-purple-700 ml-auto">{formatCurrency(item.total)}</div>
                                          </div>
                                      </div>
