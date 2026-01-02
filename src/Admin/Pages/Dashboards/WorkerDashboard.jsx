@@ -71,10 +71,14 @@ const WorkerDashboard = ({ user: propUser }) => {
   const [toast, setToast] = useState({ message: '', type: '' });
   const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
-  // 🔥 Notification Logic
+  // 🔥 Notification Logic (Safe Initialization)
   const lastAssignedJobIds = useRef(new Set());
   const isFirstRun = useRef(true);
-  const [permissionStatus, setPermissionStatus] = useState(Notification.permission);
+  
+  // FIX: Check if 'Notification' exists on window before accessing properties
+  const [permissionStatus, setPermissionStatus] = useState(
+      (typeof window !== 'undefined' && 'Notification' in window) ? Notification.permission : 'denied'
+  );
 
   // --- 🔒 ROBUST OWNERSHIP CHECK ---
   const isMyJob = (workerName) => {
@@ -85,15 +89,24 @@ const WorkerDashboard = ({ user: propUser }) => {
     return assigned === myName || assigned === myEmail;
   };
 
-  // --- REQUEST PERMISSION HANDLER ---
+  // --- REQUEST PERMISSION HANDLER (FIXED) ---
   const requestNotificationPermission = () => {
+    if (!('Notification' in window)) {
+        setToast({ message: "Notifications not supported on this device", type: "error" });
+        return;
+    }
+
     Notification.requestPermission().then((permission) => {
         setPermissionStatus(permission);
         if (permission === 'granted') {
-            new Notification("Notifications Enabled! 🔔", {
-                body: "You will now receive alerts for new repair jobs.",
-                icon: '/vite.svg'
-            });
+            try {
+                new Notification("Notifications Enabled! 🔔", {
+                    body: "You will now receive alerts for new repair jobs.",
+                    icon: '/vite.svg'
+                });
+            } catch (e) {
+                console.log("Notification test failed:", e);
+            }
         }
     });
   };
@@ -114,8 +127,7 @@ const WorkerDashboard = ({ user: propUser }) => {
             const myCurrentJobIds = new Set();
             
             allJobs.forEach(order => {
-                // Check if this order has any ACTIVE job assigned to me
-                // 🔥 Exclude Void Orders/Services
+                // Exclude Void Orders/Services
                 if (order.status === 'Void') return;
 
                 const hasMyActiveJob = order.items?.some(item => 
@@ -146,8 +158,8 @@ const WorkerDashboard = ({ user: propUser }) => {
                         audio.play().catch(e => console.log("Audio blocked:", e));
                     } catch (e) { /* silent fail */ }
 
-                    // 3. System Notification (Status Bar)
-                    if (Notification.permission === 'granted') {
+                    // 3. System Notification (Status Bar) - FIXED CHECK
+                    if ('Notification' in window && Notification.permission === 'granted') {
                         // Try ServiceWorker method first (Better for mobile)
                         if (navigator.serviceWorker && navigator.serviceWorker.ready) {
                             navigator.serviceWorker.ready.then(registration => {
@@ -157,14 +169,24 @@ const WorkerDashboard = ({ user: propUser }) => {
                                     vibrate: [200, 100, 200],
                                     tag: 'new-job'
                                 });
+                            }).catch(() => {
+                                // Fallback if SW fails
+                                try {
+                                    new Notification("New Job Assigned 🛠️", { 
+                                        body: message,
+                                        icon: '/vite.svg'
+                                    });
+                                } catch (e) { console.error(e); }
                             });
                         } else {
                             // Fallback to standard API
-                            new Notification("New Job Assigned 🛠️", { 
-                                body: message,
-                                icon: '/vite.svg',
-                                vibrate: [200, 100, 200]
-                            });
+                            try {
+                                new Notification("New Job Assigned 🛠️", { 
+                                    body: message,
+                                    icon: '/vite.svg',
+                                    vibrate: [200, 100, 200]
+                                });
+                            } catch (e) { console.error(e); }
                         }
                     }
                 }
@@ -255,7 +277,7 @@ const WorkerDashboard = ({ user: propUser }) => {
                   newItems[itemIndex].services[serviceIndex].status = 'Completed';
                   const allRepairsDone = newItems.every(item => {
                       if (item.type !== 'repair' || !item.services) return true;
-                      return item.services.every(s => s.status === 'Completed' || s.status === 'Void'); // Ignore void services
+                      return item.services.every(s => s.status === 'Completed' || s.status === 'Void');
                   });
                   const newStatus = allRepairsDone ? 'Ready for Pickup' : 'In Progress';
                   await updateDoc(doc(db, "Orders", order.id), { items: newItems, status: newStatus });
@@ -383,8 +405,8 @@ const WorkerDashboard = ({ user: propUser }) => {
         </div>
 
         <div className="flex items-center gap-2">
-            {/* 🔥 PERMISSION BUTTON (Only shows if needed) */}
-            {permissionStatus === 'default' && (
+            {/* 🔥 PERMISSION BUTTON (Only shows if needed and supported) */}
+            {permissionStatus === 'default' && typeof window !== 'undefined' && 'Notification' in window && (
                 <button 
                     onClick={requestNotificationPermission}
                     className="flex items-center gap-1.5 bg-yellow-100 text-yellow-700 px-3 py-1.5 rounded-lg font-bold text-[10px] hover:bg-yellow-200 transition"
