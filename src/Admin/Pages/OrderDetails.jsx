@@ -3,8 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
     ArrowLeft, Printer, DollarSign, 
     CheckCircle, Wrench, Ban, PlusCircle, 
-    X, RotateCcw, RefreshCw, Lock, Smartphone, Edit2, Trash2, AlertTriangle, Package, Save,
-    Send, Loader2, Calendar, User, ShoppingBag
+    X, RotateCcw, RefreshCw, Lock, Smartphone, Edit2, Trash2, AlertTriangle, Package,
+    Loader2, Calendar, User, ShoppingBag
 } from 'lucide-react';
 import { 
     collection, query, where, getDocs, doc, 
@@ -110,20 +110,89 @@ const OrderDetails = () => {
 
     // --- HANDLERS ---
     
+    // Check if order is locked
+    const isLocked = order?.status === 'Collected' || (order?.amountPaid > 0) || order?.status === 'Void';
+
+    const handleEditOrder = () => {
+        if (isLocked) return setToast({ message: "Order is locked (Paid/Collected)", type: "error" });
+        
+        // 🔥 FIX: Sanitize order object (remove non-serializable Firestore Timestamps)
+        const safeOrder = {
+            id: order.id,
+            ticketId: order.ticketId,
+            discount: order.discount || 0,
+            customer: {
+                name: order.customer?.name || '',
+                phone: order.customer?.phone || '',
+                email: order.customer?.email || ''
+            },
+            // Only take Editable Items (Repairs/Products), filter out Parts used by workers
+            items: (order.items || []).filter(i => i.type === 'repair' || i.type === 'product').map(item => ({
+                ...item,
+                // Ensure numbers are numbers, not undefined
+                qty: Number(item.qty || 1),
+                total: Number(item.total || 0),
+                price: Number(item.price || 0),
+                collected: item.collected || false, // 🔥 Preserve collected status
+                // Deep copy services to ensure no hidden non-serializable data
+                services: item.services ? item.services.map(s => ({...s})) : []
+            }))
+        };
+
+        navigate('/admin/orders', { state: { orderToEdit: safeOrder } });
+    };
+
+    // 🔥 NEW: Toggle Individual Item Collection (Multiple Phones Support)
+    const toggleItemCollected = async (index) => {
+        const item = order.items[index];
+        const newStatus = !item.collected;
+        const actionText = newStatus ? "Mark Collected" : "Undo Collection";
+
+        setConfirmConfig({
+            isOpen: true, 
+            title: `${actionText}?`, 
+            message: newStatus 
+                ? `Confirm that customer has received "${item.name || item.deviceModel}"?` 
+                : "Mark this item as NOT collected yet?",
+            confirmText: "Yes, Update", 
+            confirmColor: newStatus ? "bg-green-600" : "bg-orange-500",
+            action: async () => {
+                setIsUpdating(true);
+                try {
+                    const newItems = [...order.items];
+                    newItems[index] = { ...newItems[index], collected: newStatus };
+                    
+                    // Check if ALL items are collected to auto-update order status
+                    const allCollected = newItems.every(i => i.collected || i.type === 'part_usage');
+                    const updates = { items: newItems };
+                    
+                    if (allCollected && order.status !== 'Collected') {
+                        updates.status = 'Collected'; // Auto-Close
+                    } else if (!allCollected && order.status === 'Collected') {
+                        updates.status = 'Ready for Pickup'; // Re-Open
+                    }
+
+                    await updateDoc(doc(db, "Orders", order.id), updates);
+                    setToast({ message: "Item status updated", type: "success" });
+                } catch (e) {
+                    console.error(e);
+                    setToast({ message: "Update failed", type: "error" });
+                } finally {
+                    setIsUpdating(false);
+                    setConfirmConfig({ ...confirmConfig, isOpen: false });
+                }
+            }
+        });
+    };
+
     const handleServiceAssign = async (i, s, newWorker) => {
         setIsUpdating(true);
         try {
             const newItems = JSON.parse(JSON.stringify(order.items));
             newItems[i].services[s].worker = newWorker;
-            let newOrderStatus = order.status; 
-            if (newWorker === 'Unassigned') {
-                newItems[i].services[s].status = 'Pending';
-            } else {
-                newItems[i].services[s].status = 'In Progress';
-                if (order.status === 'Pending') {
-                    newOrderStatus = 'In Progress';
-                }
-            }
+            let newStatus = newWorker === 'Unassigned' ? 'Pending' : 'In Progress';
+            newItems[i].services[s].status = newStatus;
+            let newOrderStatus = order.status === 'Pending' && newStatus === 'In Progress' ? 'In Progress' : order.status;
             await updateDoc(doc(db, "Orders", order.id), { items: newItems, status: newOrderStatus });
             setToast({message: `Assigned to ${newWorker}`, type: 'success'});
         } catch(e) { console.error(e); setToast({message: "Assignment Failed", type: 'error'}); }
@@ -204,8 +273,8 @@ const OrderDetails = () => {
                 const newSubtotal = (data.subtotal || data.totalCost) - deduction;
                 const newTotalCost = Math.max(0, newSubtotal - currentDiscount);
                 let newAmountPaid = data.amountPaid || 0;
-                let newRefundedAmount = data.refundedAmount || 0;
-                if (newAmountPaid > newTotalCost) { newAmountPaid = newTotalCost; newRefundedAmount += (data.amountPaid - newTotalCost); }
+                let newRefunded = data.refundedAmount || 0;
+                if (newAmountPaid > newTotalCost) { newAmountPaid = newTotalCost; newRefunded += (data.amountPaid - newTotalCost); }
                 const newBalance = newTotalCost - newAmountPaid;
                 t.update(ref, { items: newItems, subtotal: newSubtotal, totalCost: newTotalCost, amountPaid: newAmountPaid, refundedAmount: newRefundedAmount, balance: newBalance });
             });
@@ -234,8 +303,8 @@ const OrderDetails = () => {
                         const currentDiscount = data.discount || 0;
                         const newTotalCost = Math.max(0, newSubtotal - currentDiscount);
                         let newAmountPaid = data.amountPaid || 0;
-                        let newRefundedAmount = data.refundedAmount || 0;
-                        if (newAmountPaid > newTotalCost) { newAmountPaid = newTotalCost; newRefundedAmount += (data.amountPaid - newTotalCost); }
+                        let newRefunded = data.refundedAmount || 0;
+                        if (newAmountPaid > newTotalCost) { newAmountPaid = newTotalCost; newRefunded += (data.amountPaid - newTotalCost); }
                         const newBalance = newTotalCost - newAmountPaid;
                         t.update(ref, { items: newItems, subtotal: newSubtotal, totalCost: newTotalCost, amountPaid: newAmountPaid, refundedAmount: newRefundedAmount, balance: newBalance });
                     });
@@ -262,7 +331,7 @@ const OrderDetails = () => {
             setToast({ message: "Payment Recorded", type: "success" }); 
         } catch(e) { setToast({ message: "Payment Failed", type: "error" }); }
         setIsUpdating(false);
-        setShowPaymentModal(false); // ✅ Closes Payment Modal
+        setShowPaymentModal(false);
     };
 
     const handleVoidOrder = async () => {
@@ -272,7 +341,7 @@ const OrderDetails = () => {
             navigate('/admin/orders');
          } catch(e) { setToast({message: "Void Failed", type: 'error'}); }
          setIsUpdating(false);
-         setConfirmConfig({...confirmConfig, isOpen: false}); // ✅ Ensures Modal Closes
+         setConfirmConfig({...confirmConfig, isOpen: false});
     };
 
     const handleProcessRefund = async () => {
@@ -280,7 +349,7 @@ const OrderDetails = () => {
         await updateDoc(doc(db, "Orders", order.id), { amountPaid: 0, refundedAmount: order.amountPaid, paymentStatus: 'Refunded', balance: 0 });
         setToast({ message: "Refund Processed", type: "success" });
         setIsUpdating(false);
-        setConfirmConfig({...confirmConfig, isOpen: false}); // ✅ Ensures Modal Closes
+        setConfirmConfig({...confirmConfig, isOpen: false});
     };
 
     const handleResetPayment = async () => {
@@ -288,7 +357,7 @@ const OrderDetails = () => {
          await updateDoc(doc(db, "Orders", order.id), { amountPaid: 0, balance: order.totalCost, paymentStatus: 'Unpaid', paid: false });
          setToast({ message: "Payment Reset", type: "success" });
          setIsUpdating(false);
-         setConfirmConfig({...confirmConfig, isOpen: false}); // ✅ Ensures Modal Closes
+         setConfirmConfig({...confirmConfig, isOpen: false});
     };
     
     const handleStatusChange = async (e) => {
@@ -306,10 +375,15 @@ const OrderDetails = () => {
     const handleCollectionToggle = async () => {
         const next = order.status === 'Collected' ? 'Ready for Pickup' : 'Collected';
         setIsUpdating(true);
-        await updateDoc(doc(db, "Orders", order.id), { status: next });
+        // Mark all items as collected if closing order
+        const updates = { status: next };
+        if (next === 'Collected') {
+            updates.items = order.items.map(i => ({...i, collected: true}));
+        }
+        await updateDoc(doc(db, "Orders", order.id), updates);
         setToast({ message: `Marked as ${next}`, type: "success" });
         setIsUpdating(false);
-        setConfirmConfig({...confirmConfig, isOpen: false}); // ✅ Ensures Modal Closes
+        setConfirmConfig({...confirmConfig, isOpen: false});
     };
 
     const handleRemovePart = (partItem) => {
@@ -359,7 +433,6 @@ const OrderDetails = () => {
         setIsUpdating(false);
     };
 
-    // 🔥 HANDLE DELETE CLICK
     const handleDeleteClick = () => {
         if (!order) return;
         if (role === 'secretary') {
@@ -367,11 +440,7 @@ const OrderDetails = () => {
             return;
         }
         setConfirmConfig({
-            isOpen: true,
-            title: "Delete Order?",
-            message: "This action is permanent. Are you sure?",
-            confirmText: "Delete Forever",
-            confirmColor: "bg-red-600",
+            isOpen: true, title: "Delete Order?", message: "This action is permanent. Are you sure?", confirmText: "Delete Forever", confirmColor: "bg-red-600",
             action: async () => {
                 try {
                     await deleteDoc(doc(db, "Orders", order.id));
@@ -385,7 +454,6 @@ const OrderDetails = () => {
         });
     };
 
-    // 🔥 SUBMIT DELETION REQUEST
     const handleSubmitRequest = async (e) => {
         e.preventDefault();
         if (!deleteReason.trim()) return setToast({ message: "Reason required", type: "error" });
@@ -420,9 +488,10 @@ const OrderDetails = () => {
     const formatDate = (date) => (!date ? '' : new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }));
     const isReturn = order?.orderType === 'return';
     const partsUsed = order?.items?.filter(i => i.type === 'part_usage') || [];
+    const isCollected = order?.status === 'Collected';
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-4 border-purple-900"></div></div>;
-    if (!order) return <div className="p-10 text-center text-gray-500 font-bold">Order not found.</div>;
+    if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin"/></div>;
+    if (!order) return <div className="p-10 text-center font-bold">Order not found.</div>;
 
     const dateStr = order.createdAt?.seconds ? new Date(order.createdAt.seconds * 1000).toLocaleString() : 'N/A';
 
@@ -445,7 +514,7 @@ const OrderDetails = () => {
                         </button>
                     )}
                     
-                    {order.status !== 'Void' && <button onClick={() => setConfirmConfig({isOpen:true, title:"Void Order?", message:"This cancels everything.", confirmText:"Void", confirmColor:"bg-red-600", action: handleVoidOrder})} disabled={isUpdating} className="flex items-center gap-2 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 text-sm font-bold"><Ban size={16}/> Void</button>}
+                    {order.status !== 'Void' && <button onClick={() => setConfirmConfig({isOpen:true, title:"Void Order?", message:"This cancels everything.", confirmText:"Void", confirmColor:"bg-red-600", action: handleVoidOrder})} disabled={isUpdating} className="flex items-center gap-2 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold"><Ban size={16}/> Void</button>}
                     <button onClick={() => setShowReceipt(true)} className="flex items-center gap-2 bg-purple-900 text-white px-4 py-2 rounded-lg hover:bg-purple-800 text-sm font-bold"><Printer size={16}/> Receipt</button>
                 </div>
             </div>
@@ -473,27 +542,54 @@ const OrderDetails = () => {
                             </div>
                         </div>
 
-                        {/* Order Items Table */}
+                        {/* 🔥 EDIT ORDER BUTTON (Locked if collected/paid) */}
+                        <div className="bg-gray-50 border-b border-gray-200 px-6 py-3 flex justify-between items-center">
+                            <h3 className="text-xs font-bold text-gray-500 uppercase">Items & Services</h3>
+                            {!isLocked && (
+                                <button 
+                                    onClick={handleEditOrder} 
+                                    className="bg-purple-100 text-purple-700 px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-200 transition flex items-center gap-1"
+                                >
+                                    <Edit2 size={14}/> Edit Order
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Items Table */}
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
-                                <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
-                                    <tr><th className="px-6 py-3 text-left">Item / Service</th><th className="px-6 py-3 text-right">Cost</th></tr>
+                                <thead className="bg-gray-50 text-gray-500 uppercase text-xs hidden sm:table-header-group">
+                                    <tr><th className="px-6 py-3 text-left">Description</th><th className="px-6 py-3 text-right">Cost</th></tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
                                     {order.items.map((item, i) => {
                                         if (item.type === 'part_usage') return null;
                                         return (
-                                            <tr key={i} className="hover:bg-gray-50">
+                                            <tr key={i} className={`hover:bg-gray-50 transition ${item.collected ? 'bg-green-50/50' : ''}`}>
                                                 <td className="px-6 py-4">
                                                     <div>
                                                         <div className="font-bold text-gray-900 text-base flex items-center gap-2">
                                                             {item.name || item.deviceModel}
-                                                            {item.returned && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded border border-red-200">Returned</span>}
-                                                            {item.type === 'product' && !item.returned && !isReturn && order.status !== 'Void' && (
-                                                                <button onClick={() => handleVoidProductTrigger(i)} disabled={isUpdating} className="text-red-500 hover:bg-red-50 p-1 rounded ml-auto" title="Return Product"><RotateCcw size={16}/></button>
+                                                            {item.returned && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded border border-red-200 ml-2">Returned</span>}
+                                                            {/* 🔥 COLLECTED BADGE */}
+                                                            {item.collected && (
+                                                                <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded border border-green-200 font-bold flex items-center gap-1">
+                                                                    <CheckCircle size={10}/> Collected
+                                                                </span>
                                                             )}
-                                                            {item.type === 'repair' && !isReturn && !item.returned && (order.status === 'Completed' || order.status === 'Collected') && (
-                                                                <button onClick={() => handleWarrantyReturn(item)} className="bg-orange-100 text-orange-700 text-[10px] px-2 py-1 rounded ml-auto flex items-center gap-1"><RefreshCw size={12}/> Warranty</button>
+                                                            
+                                                            {/* 🔥 PARTIAL COLLECT TOGGLE */}
+                                                            {order.status !== 'Void' && !isReturn && !item.returned && (
+                                                                <button onClick={() => toggleItemCollected(i)} disabled={isUpdating} className={`ml-auto text-[10px] px-2 py-1 rounded border font-bold transition flex items-center gap-1 ${item.collected ? 'text-gray-400 border-gray-200 hover:bg-gray-100' : 'text-green-700 border-green-200 bg-green-50 hover:bg-green-100'}`}>
+                                                                    {item.collected ? "Undo Collect" : "Mark Collected"}
+                                                                </button>
+                                                            )}
+
+                                                            {item.type === 'product' && !item.returned && !isReturn && !isLocked && !item.collected && (
+                                                                <button onClick={() => handleVoidProductTrigger(i)} disabled={isUpdating} className="text-red-500 hover:bg-red-50 p-1 rounded ml-2" title="Return Product"><RotateCcw size={16}/></button>
+                                                            )}
+                                                            {item.type === 'repair' && !isReturn && !item.returned && (item.collected || order.status === 'Completed' || order.status === 'Collected') && (
+                                                                <div className="ml-2"><button onClick={() => handleWarrantyReturn(item)} className="bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded border border-orange-200 flex items-center gap-1 w-fit"><RefreshCw size={10}/> Warranty</button></div>
                                                             )}
                                                         </div>
 
@@ -525,7 +621,7 @@ const OrderDetails = () => {
                                                                             ) : (
                                                                                 <span className="text-xs text-gray-300 italic flex items-center gap-1"><AlertTriangle size={10}/> No condition notes</span>
                                                                             )}
-                                                                            {!isReturn && order.status !== 'Void' && (
+                                                                            {!isReturn && !isLocked && (
                                                                                 <button 
                                                                                     onClick={() => setEditingCondition({ index: i, value: item.condition || '' })}
                                                                                     className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-purple-600 transition p-1"
@@ -552,8 +648,8 @@ const OrderDetails = () => {
                                                                     </span>
                                                                 </div>
                                                                 <div className="flex items-center gap-2">
-                                                                    {svc.status !== 'Void' && order.status !== 'Void' && <button onClick={() => handleVoidService(i, sIdx)} disabled={isUpdating} className="text-gray-400 hover:text-red-500"><Ban size={14}/></button>}
-                                                                    <select className="bg-white border text-xs p-1.5 rounded font-bold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500" value={svc.worker || "Unassigned"} onChange={(e) => handleServiceAssign(i, sIdx, e.target.value)} disabled={order.status === 'Void' || svc.status === 'Void'}>
+                                                                    {svc.status !== 'Void' && !isLocked && <button onClick={() => handleVoidService(i, sIdx)} disabled={isUpdating} className="text-gray-400 hover:text-red-500"><Ban size={14}/></button>}
+                                                                    <select className="bg-white border text-xs p-1.5 rounded font-bold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50" value={svc.worker || "Unassigned"} onChange={(e) => handleServiceAssign(i, sIdx, e.target.value)} disabled={isLocked || svc.status === 'Void'}>
                                                                         <option value="Unassigned">Unassigned</option>
                                                                         {workers.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
                                                                     </select>
@@ -562,9 +658,7 @@ const OrderDetails = () => {
                                                         ))}
                                                     </div>}
                                                 </td>
-                                                <td className="px-6 py-4 text-right font-bold text-gray-800 align-top">
-                                                    {formatCurrency(item.total ?? item.cost ?? 0)}
-                                                </td>
+                                                <td className="px-6 py-4 text-right font-bold text-gray-800 align-top">{formatCurrency(item.total ?? item.cost ?? 0)}</td>
                                             </tr>
                                         )
                                     })}
@@ -587,7 +681,7 @@ const OrderDetails = () => {
                                             <span className="text-sm font-bold text-slate-700">{part.name.replace('Used: ', '')}</span>
                                             <div className="text-xs text-slate-400">By {part.worker || 'Unknown'} • {part.usedAt ? new Date(part.usedAt).toLocaleString() : ''}</div>
                                         </div>
-                                        <button onClick={() => handleRemovePart(part)} className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-full transition" title="Remove Part & Restore Stock" disabled={isUpdating}>
+                                        <button onClick={() => handleRemovePart(part)} className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-full transition disabled:opacity-30" title="Remove Part" disabled={isUpdating || isLocked}>
                                             <Trash2 size={16}/>
                                         </button>
                                     </div>
@@ -623,7 +717,7 @@ const OrderDetails = () => {
                             <div className="flex justify-between items-center text-red-500 my-1">
                                 <div className="flex items-center gap-2">
                                     <span>Discount</span>
-                                    {order.status !== 'Void' && (
+                                    {!isLocked && (
                                         <button 
                                             onClick={() => { setDiscountInput(order.discount || ''); setShowDiscountModal(true); }}
                                             className="bg-red-50 text-red-600 p-1 rounded hover:bg-red-100 transition"
@@ -669,7 +763,7 @@ const OrderDetails = () => {
                              
                              {!isReturn && (
                                  <button onClick={() => setConfirmConfig({isOpen:true, title:"Update Status", message:`Mark as ${order.status === 'Collected' ? 'Ready' : 'Collected'}?`, confirmText:"Yes", action: handleCollectionToggle})} className={`w-full py-3 rounded-lg font-bold text-sm shadow-sm flex items-center justify-center gap-2 transition border ${order.status === 'Collected' ? 'bg-white text-green-700 border-green-300' : 'bg-blue-600 text-white border-transparent hover:bg-blue-700'}`}>
-                                     {order.status === 'Collected' ? 'Undo Collection' : <>Mark COLLECTED <CheckCircle size={16}/></>}
+                                     {order.status === 'Collected' ? 'Undo Collection' : <>Mark All COLLECTED <CheckCircle size={16}/></>}
                                  </button>
                              )}
                         </div>
@@ -712,89 +806,51 @@ const OrderDetails = () => {
                 </div>
             )}
 
-            {/* 🔥 SECRETARY REQUEST MODAL */}
+            {/* Request Deletion Modal */}
             {requestModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/80 z-[120] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 transform transition-all scale-100">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><AlertTriangle className="text-orange-500"/> Request Deletion</h3>
-                            <button onClick={() => setRequestModalOpen(false)}><X size={20} className="text-slate-400"/></button>
-                        </div>
+                        <div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><AlertTriangle className="text-orange-500"/> Request Deletion</h3><button onClick={() => setRequestModalOpen(false)}><X size={20} className="text-slate-400"/></button></div>
                         <p className="text-sm text-slate-500 mb-4">State reason for deleting ticket <b>{order.ticketId}</b>:</p>
                         <form onSubmit={handleSubmitRequest}>
                             <textarea className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500 text-sm mb-4" rows="3" placeholder="Reason..." value={deleteReason} onChange={e => setDeleteReason(e.target.value)} required autoFocus />
                             <div className="flex gap-2">
                                 <button type="button" onClick={() => setRequestModalOpen(false)} className="flex-1 py-3 text-slate-500 font-bold bg-gray-100 rounded-xl">Cancel</button>
-                                <button type="submit" disabled={isSubmittingRequest} className="flex-1 py-3 bg-orange-600 text-white font-bold rounded-xl flex items-center justify-center gap-2">
-                                    {isSubmittingRequest ? <Loader2 className="animate-spin" size={18}/> : <Send size={18}/>} Send
-                                </button>
+                                <button type="submit" disabled={isSubmittingRequest} className="flex-1 py-3 bg-orange-600 text-white font-bold rounded-xl flex items-center justify-center gap-2">{isSubmittingRequest ? <Loader2 className="animate-spin" size={18}/> : <Send size={18}/>} Send</button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
 
-            {/* 🔥 FIXED & SCROLLABLE RECEIPT MODAL */}
+            {/* Receipt Modal */}
             {showReceipt && (
                 <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-md p-8 rounded shadow-2xl relative printable-receipt max-h-[90vh] overflow-y-auto">
                         <button onClick={() => setShowReceipt(false)} className="absolute top-2 right-2 text-gray-400 print:hidden hover:text-gray-600"><X/></button>
-                        
                         <div className="text-center border-b-2 border-black pb-4 mb-4">
                             <h2 className="text-2xl font-extrabold uppercase tracking-tight">Farouk Techworld</h2>
                             <p className="text-xs font-mono">Mokola Rd, Ibadan</p>
                             <div className="mt-4 border-2 border-black inline-block px-4 py-1 font-bold text-sm">TICKET: {order.ticketId}</div>
                         </div>
-                        
-                        <div className="flex justify-between text-xs mb-4 font-mono border-b border-dashed border-gray-300 pb-2">
-                            <span>{formatDate(new Date())}</span>
-                            <span>{new Date().toLocaleTimeString()}</span>
-                        </div>
-                        
+                        <div className="flex justify-between text-xs mb-4 font-mono border-b border-dashed border-gray-300 pb-2"><span>{new Date().toLocaleDateString()}</span><span>{new Date().toLocaleTimeString()}</span></div>
                         <div className="mb-6 text-sm font-bold uppercase border-b border-black pb-2">Customer: {order.customer.name}</div>
-                        
                         <table className="w-full text-xs mb-6 font-mono">
                             <tbody>
                                 {order.items.map((item, i) => { 
                                     if(item.type==='part_usage') return null; 
                                     return (
-                                        <tr key={i}>
-                                            <td className="py-1 pr-2 align-top"><div className="font-bold">{item.name || item.deviceModel}</div></td>
-                                            <td className="text-right align-top whitespace-nowrap">{formatCurrency(item.total ?? item.cost ?? 0)}</td>
-                                        </tr>
+                                        <tr key={i}><td className="py-1 pr-2 align-top"><div className="font-bold">{item.name || item.deviceModel}</div></td><td className="text-right align-top whitespace-nowrap">{formatCurrency(item.total ?? item.cost ?? 0)}</td></tr>
                                     ) 
                                 })}
                             </tbody>
                         </table>
-                        
-                        <div className="flex justify-between text-lg font-bold border-t-2 border-black pt-2 mb-1">
-                            <span>SUBTOTAL:</span>
-                            <span>{formatCurrency(order.subtotal || (order.totalCost + (order.discount || 0)))}</span>
-                        </div>
-                        {order.discount > 0 && (
-                            <div className="flex justify-between text-sm font-medium mb-1">
-                                <span>DISCOUNT:</span>
-                                <span>-{formatCurrency(order.discount)}</span>
-                            </div>
-                        )}
-                        <div className="flex justify-between text-lg font-bold border-t-2 border-black pt-2 mb-1">
-                            <span>TOTAL:</span>
-                            <span>{formatCurrency(order.totalCost)}</span>
-                        </div>
-
-                        <div className="space-y-1 text-sm font-mono mb-6 border-b border-black pb-4">
-                            <div className="flex justify-between"><span>Paid:</span><span>{formatCurrency(order.amountPaid || 0)}</span></div>
-                            <div className="flex justify-between font-bold"><span>Balance:</span><span>{formatCurrency(order.balance)}</span></div>
-                        </div>
-                        
+                        <div className="flex justify-between text-lg font-bold border-t-2 border-black pt-2 mb-1"><span>SUBTOTAL:</span><span>{formatCurrency(order.subtotal || (order.totalCost + (order.discount || 0)))}</span></div>
+                        {order.discount > 0 && (<div className="flex justify-between text-sm font-medium mb-1"><span>DISCOUNT:</span><span>-{formatCurrency(order.discount)}</span></div>)}
+                        <div className="flex justify-between text-lg font-bold border-t-2 border-black pt-2 mb-1"><span>TOTAL:</span><span>{formatCurrency(order.totalCost)}</span></div>
+                        <div className="space-y-1 text-sm font-mono mb-6 border-b border-black pb-4"><div className="flex justify-between"><span>Paid:</span><span>{formatCurrency(order.amountPaid || 0)}</span></div><div className="flex justify-between font-bold"><span>Balance:</span><span>{formatCurrency(order.balance)}</span></div></div>
                         <div className="text-center font-bold border-2 border-black p-2 mb-6 text-sm uppercase">{order.paymentStatus === 'Paid' ? 'PAYMENT COMPLETE' : 'PAYMENT PENDING'}</div>
-                        
-                        <div className="text-center text-[10px] font-mono uppercase">
-                            <p>No Refund after payment</p>
-                            <p>Warranty covers repair only</p>
-                            <p className="mt-2 font-bold">Thank you for your patronage!</p>
-                        </div>
-                        
+                        <div className="text-center text-[10px] font-mono uppercase"><p>No Refund after payment</p><p>Warranty covers repair only</p><p className="mt-2 font-bold">Thank you for your patronage!</p></div>
                         <button onClick={() => window.print()} className="w-full mt-6 bg-black text-white py-3 font-bold uppercase rounded hover:bg-gray-800 print:hidden flex items-center justify-center gap-2"><Printer size={18}/> Print Now</button>
                     </div>
                 </div>

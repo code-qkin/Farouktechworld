@@ -3,7 +3,7 @@ import {
     Package, Plus, Search, Edit2, Trash2, Smartphone, 
     ArrowLeft, ArrowUpCircle, Save, X, 
     AlertTriangle, ClipboardEdit, Loader2,
-    Download, Filter, ChevronDown, ChevronLeft, ChevronRight, History, Wrench
+    Download, Filter, ChevronDown, ChevronLeft, ChevronRight, History, Wrench, CheckSquare, Layers, Palette, List
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AdminContext';
@@ -93,6 +93,16 @@ const StoreInventory = () => {
     const [filterCategory, setFilterCategory] = useState('All');
     const [filterStock, setFilterStock] = useState('All'); 
 
+    // Bulk Selection State
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [bulkStockInput, setBulkStockInput] = useState(10);
+    const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
+    const [bulkEditData, setBulkEditData] = useState({ price: '', category: '', stock: '', color: '' });
+
+    // 🔥 Custom Color per Model State
+    const [isCustomColorMode, setIsCustomColorMode] = useState(false);
+    const [modelSpecificColors, setModelSpecificColors] = useState({});
+
     // Pagination (Client Side)
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 50;
@@ -106,42 +116,33 @@ const StoreInventory = () => {
     const [editingItem, setEditingItem] = useState(null); 
     const [isBulkMode, setIsBulkMode] = useState(false); 
     const [newProduct, setNewProduct] = useState({ 
-        name: '', category: '', type: '', model: '', price: '', stock: 0,
+        name: '', category: '', type: '', model: '', price: '', stock: 0, color: '',
         rangeStart: 'iPhone X', rangeEnd: 'iPhone 14 Pro Max' 
     });
 
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
-    // 1. LIVE FETCH INVENTORY (ALL)
+    // 1. LIVE FETCH INVENTORY
     useEffect(() => {
-        // 🔥 Reverted: Removed 'limit'
         const q = query(collection(db, "Inventory"), orderBy("category"));
-        
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const inventoryList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setProducts(inventoryList);
-            setLoading(false);
-        }, (error) => {
-            console.error("Fetch Error:", error);
             setLoading(false);
         });
         return () => unsubscribe();
     }, []);
 
-    // 2. FETCH HISTORY (ALL)
+    // 2. FETCH HISTORY
     useEffect(() => {
         if (activeTab === 'history') {
-            // 🔥 Reverted: Removed 'limit'
             const q = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
             const unsub = onSnapshot(q, (snapshot) => {
                 const sales = [];
                 snapshot.docs.forEach(doc => {
                     const data = doc.data();
-                    
-                    // Filter for Store Products AND Parts Used
                     const historyItems = data.items?.filter(i => i.type === 'product' || i.type === 'part_usage') || [];
-                    
                     if (historyItems.length > 0) {
                         sales.push({
                             id: doc.id,
@@ -160,36 +161,170 @@ const StoreInventory = () => {
         }
     }, [activeTab]);
 
-    // 3. METRICS
-    const dynamicCategories = useMemo(() => [...new Set(products.map(p => p.category).filter(Boolean))].sort(), [products]);
-    const stats = useMemo(() => {
-        const totalValue = products.reduce((sum, p) => sum + (safeParseFloat(p.price) * Math.max(0, safeParseInt(p.stock))), 0);
-        return { 
-            totalItems: products.length, 
-            lowStock: products.filter(p => p.stock > 0 && p.stock < 5).length,
-            outOfStock: products.filter(p => p.stock <= 0).length,
-            totalValue 
-        };
-    }, [products]);
-
-    // 4. FILTERING & PAGINATION (Client Side)
+    // 3. FILTERING
     const filteredProducts = useMemo(() => {
         return products.filter(product => {
             const term = searchTerm.toLowerCase();
-            const matchesSearch = product.name.toLowerCase().includes(term) || product.model?.toLowerCase().includes(term);
+            const matchesSearch = product.name.toLowerCase().includes(term) || 
+                                  product.model?.toLowerCase().includes(term) ||
+                                  product.color?.toLowerCase().includes(term);
             const matchesCategory = filterCategory === 'All' || product.category === filterCategory;
             const matchesStock = filterStock === 'All' || (filterStock === 'Low' && product.stock < 5 && product.stock > 0) || (filterStock === 'Out' && product.stock <= 0);
             return matchesSearch && matchesCategory && matchesStock;
         });
     }, [products, searchTerm, filterCategory, filterStock]);
 
+    // 4. METRICS
+    const dynamicCategories = useMemo(() => [...new Set(products.map(p => p.category).filter(Boolean))].sort(), [products]);
+    const stats = useMemo(() => {
+        const sourceData = filteredProducts;
+        const totalValue = sourceData.reduce((sum, p) => sum + (safeParseFloat(p.price) * Math.max(0, safeParseInt(p.stock))), 0);
+        return { 
+            totalItems: sourceData.length, 
+            lowStock: sourceData.filter(p => p.stock > 0 && p.stock < 5).length,
+            outOfStock: sourceData.filter(p => p.stock <= 0).length,
+            totalValue 
+        };
+    }, [filteredProducts]);
+
+    // 5. PAGINATION
     const currentProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
     const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
-
     const currentHistory = salesHistory.slice((historyPage - 1) * historyPerPage, historyPage * historyPerPage);
     const totalHistoryPages = Math.ceil(salesHistory.length / historyPerPage);
 
-    // 5. ACTIONS
+    // 🔥 Helper: Get current models in range for the form
+    const activeModelsInRange = useMemo(() => {
+        if (!isBulkMode) return [];
+        return getModelRange(newProduct.rangeStart, newProduct.rangeEnd);
+    }, [isBulkMode, newProduct.rangeStart, newProduct.rangeEnd]);
+
+    // 🔥 Helper: Sync custom colors when range changes
+    useEffect(() => {
+        if (isBulkMode && isCustomColorMode) {
+            const newMap = {};
+            activeModelsInRange.forEach(m => {
+                // Preserve existing input if avail, else default to global color input
+                newMap[m] = modelSpecificColors[m] || newProduct.color || ""; 
+            });
+            setModelSpecificColors(newMap);
+        }
+    }, [activeModelsInRange, isCustomColorMode, isBulkMode]);
+
+    // 🔥 BULK SELECTION HELPERS
+    const isAllSelected = currentProducts.length > 0 && currentProducts.every(p => selectedIds.includes(p.id));
+
+    const handleSelectAll = () => {
+        if (isAllSelected) {
+            const currentIds = currentProducts.map(p => p.id);
+            setSelectedIds(prev => prev.filter(id => !currentIds.includes(id)));
+        } else {
+            const currentIds = currentProducts.map(p => p.id);
+            const combined = new Set([...selectedIds, ...currentIds]);
+            setSelectedIds(Array.from(combined));
+        }
+    };
+
+    const handleSelectOne = (id) => {
+        if (selectedIds.includes(id)) {
+            setSelectedIds(prev => prev.filter(sid => sid !== id));
+        } else {
+            setSelectedIds(prev => [...prev, id]);
+        }
+    };
+
+    const handleBulkPushStock = async () => {
+        if (selectedIds.length === 0) return;
+        setConfirmConfig({
+            isOpen: true, 
+            title: "Bulk Stock Push", 
+            message: `Add +${bulkStockInput} stock to ${selectedIds.length} items?`, 
+            confirmText: "Push Stock", 
+            confirmColor: "bg-green-600",
+            action: async () => {
+                setActionLoading(true);
+                try {
+                    const batch = writeBatch(db);
+                    selectedIds.forEach(id => {
+                        const docRef = doc(db, "Inventory", id);
+                        batch.update(docRef, { stock: increment(Number(bulkStockInput)) });
+                    });
+                    await batch.commit();
+                    setToast({ message: "Bulk stock updated!", type: "success" });
+                    setSelectedIds([]);
+                } catch (e) {
+                    setToast({ message: "Bulk update failed", type: "error" });
+                }
+                setActionLoading(false);
+                setConfirmConfig({ ...confirmConfig, isOpen: false });
+            }
+        });
+    };
+
+    const handleBulkDelete = async () => {
+        if (selectedIds.length === 0) return;
+        setConfirmConfig({
+            isOpen: true,
+            title: "Delete All Selected?",
+            message: `You are about to PERMANENTLY delete ${selectedIds.length} items.\nThis cannot be undone.`,
+            confirmText: "Delete All",
+            confirmColor: "bg-red-600",
+            action: async () => {
+                setActionLoading(true);
+                try {
+                    const batch = writeBatch(db);
+                    selectedIds.forEach(id => {
+                        const docRef = doc(db, "Inventory", id);
+                        batch.delete(docRef);
+                    });
+                    await batch.commit();
+                    setToast({ message: `Deleted ${selectedIds.length} items.`, type: "success" });
+                    setSelectedIds([]);
+                } catch (e) {
+                    console.error(e);
+                    setToast({ message: "Bulk delete failed.", type: "error" });
+                }
+                setActionLoading(false);
+                setConfirmConfig({ ...confirmConfig, isOpen: false });
+            }
+        });
+    };
+
+    const handleBulkEditSave = async (e) => {
+        e.preventDefault();
+        if (selectedIds.length === 0) return;
+        
+        const updates = {};
+        if (bulkEditData.price) updates.price = safeParseFloat(bulkEditData.price);
+        if (bulkEditData.stock) updates.stock = safeParseInt(bulkEditData.stock);
+        if (bulkEditData.category) updates.category = bulkEditData.category.trim();
+        if (bulkEditData.color) updates.color = bulkEditData.color.trim();
+
+        if (Object.keys(updates).length === 0) {
+            setToast({ message: "No fields to update.", type: "error" });
+            return;
+        }
+
+        setActionLoading(true);
+        try {
+            const batch = writeBatch(db);
+            selectedIds.forEach(id => {
+                const docRef = doc(db, "Inventory", id);
+                batch.update(docRef, { ...updates, lastUpdated: serverTimestamp() });
+            });
+            await batch.commit();
+            setToast({ message: `Updated ${selectedIds.length} items!`, type: "success" });
+            setIsBulkEditOpen(false);
+            setBulkEditData({ price: '', category: '', stock: '', color: '' });
+            setSelectedIds([]);
+        } catch (e) {
+            console.error(e);
+            setToast({ message: "Bulk update failed.", type: "error" });
+        }
+        setActionLoading(false);
+    };
+
+    // 6. ACTIONS
     const handleCreateProduct = async (e) => {
         e.preventDefault();
         setActionLoading(true);
@@ -200,22 +335,81 @@ const StoreInventory = () => {
             if (isBulkMode) {
                 const models = getModelRange(newProduct.rangeStart, newProduct.rangeEnd);
                 if (models.length === 0) throw new Error("Invalid Range");
-                const batch = writeBatch(db);
+                
+                // Prepare Items List (Flat)
+                let itemsToCreate = [];
                 models.forEach(model => {
-                    const fullName = `${newProduct.name} - ${model}`;
-                    const safeId = fullName.replace(/[^a-zA-Z0-9]/g, '_'); 
-                    const docRef = doc(db, "Inventory", safeId);
-                    batch.set(docRef, { name: fullName, category: newProduct.category.trim(), model, price: safePrice, stock: safeStock, lastUpdated: serverTimestamp() }, { merge: true });
+                    // Determine which colors to use for THIS model
+                    let colorsString = isCustomColorMode ? (modelSpecificColors[model] || "") : newProduct.color;
+                    
+                    // Parse Comma-Separated Colors
+                    const colorList = colorsString 
+                        ? colorsString.split(',').map(c => c.trim()).filter(c => c !== "") 
+                        : [];
+
+                    if (colorList.length > 0) {
+                        colorList.forEach(color => {
+                            itemsToCreate.push({
+                                name: `${newProduct.name} - ${model} - ${color}`,
+                                model,
+                                color
+                            });
+                        });
+                    } else {
+                        itemsToCreate.push({
+                            name: `${newProduct.name} - ${model}`,
+                            model,
+                            color: ""
+                        });
+                    }
                 });
-                await batch.commit();
-                setToast({ message: `Added ${models.length} items!`, type: "success" });
+
+                // Batch Write (Chunked to 450 to stay under 500 limit)
+                const BATCH_SIZE = 450;
+                for (let i = 0; i < itemsToCreate.length; i += BATCH_SIZE) {
+                    const batch = writeBatch(db);
+                    const chunk = itemsToCreate.slice(i, i + BATCH_SIZE);
+                    
+                    chunk.forEach(item => {
+                        const safeId = item.name.replace(/[^a-zA-Z0-9]/g, '_'); 
+                        const docRef = doc(db, "Inventory", safeId);
+                        batch.set(docRef, { 
+                            name: item.name, 
+                            category: newProduct.category.trim(), 
+                            model: item.model, 
+                            price: safePrice, 
+                            stock: safeStock, 
+                            color: item.color,
+                            lastUpdated: serverTimestamp() 
+                        }, { merge: true });
+                    });
+                    await batch.commit();
+                }
+                
+                setToast({ message: `Added ${itemsToCreate.length} items!`, type: "success" });
             } else {
-                await addDoc(collection(db, "Inventory"), { name: newProduct.name.trim(), category: newProduct.category.trim(), model: newProduct.model || "", price: safePrice, stock: safeStock, lastUpdated: serverTimestamp() });
+                // Single Create
+                const safeColor = newProduct.color ? newProduct.color.trim() : "";
+                await addDoc(collection(db, "Inventory"), { 
+                    name: newProduct.name.trim(), 
+                    category: newProduct.category.trim(), 
+                    model: newProduct.model || "", 
+                    price: safePrice, 
+                    stock: safeStock, 
+                    color: safeColor,
+                    lastUpdated: serverTimestamp() 
+                });
                 setToast({ message: "Product Added", type: "success" });
             }
-            setNewProduct(prev => ({ ...prev, name: '', model: '', price: '', stock: 0 }));
+            // Reset Form
+            setNewProduct(prev => ({ ...prev, name: '', model: '', price: '', stock: 0, color: '' }));
             setIsCreating(false);
-        } catch (e) { setToast({ message: "Failed to add", type: "error" }); }
+            setIsCustomColorMode(false);
+            setModelSpecificColors({});
+        } catch (e) { 
+            console.error(e);
+            setToast({ message: "Failed to add product", type: "error" }); 
+        }
         setActionLoading(false);
     };
 
@@ -225,8 +419,13 @@ const StoreInventory = () => {
         setActionLoading(true);
         try {
             await updateDoc(doc(db, "Inventory", editingItem.id), {
-                name: editingItem.name, category: editingItem.category, model: editingItem.model,
-                price: safeParseFloat(editingItem.price), stock: safeParseInt(editingItem.stock), lastUpdated: serverTimestamp()
+                name: editingItem.name, 
+                category: editingItem.category, 
+                model: editingItem.model,
+                price: safeParseFloat(editingItem.price), 
+                stock: safeParseInt(editingItem.stock), 
+                color: editingItem.color || "",
+                lastUpdated: serverTimestamp()
             });
             setToast({ message: "Saved", type: "success" });
             setEditingItem(null);
@@ -261,7 +460,7 @@ const StoreInventory = () => {
 
     const handleExport = () => {
         const data = products.map(p => ({
-            "Product": p.name, "Category": p.category, "Model": p.model,
+            "Product": p.name, "Category": p.category, "Model": p.model, "Color": p.color || '',
             "Price": safeParseFloat(p.price), "Stock": safeParseInt(p.stock), "Value": safeParseFloat(p.price) * Math.max(0, safeParseInt(p.stock))
         }));
         const ws = XLSX.utils.json_to_sheet(data);
@@ -295,11 +494,11 @@ const StoreInventory = () => {
             {activeTab === 'products' && (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
                     <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase">Total Value (Loaded)</span>
+                        <span className="text-[10px] font-bold text-gray-400 uppercase">Value (Current View)</span>
                         <span className="text-lg sm:text-xl font-black text-slate-900">{formatCurrency(stats.totalValue)}</span>
                     </div>
                     <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase">Loaded Stock</span>
+                        <span className="text-[10px] font-bold text-gray-400 uppercase">Visible Stock</span>
                         <span className="text-lg sm:text-xl font-black text-slate-900">{stats.totalItems} Items</span>
                     </div>
                     <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24">
@@ -345,6 +544,36 @@ const StoreInventory = () => {
                         </div>
                     </div>
 
+                    {/* 🔥 BULK ACTION BAR */}
+                    {selectedIds.length > 0 && (
+                        <div className="bg-purple-50 border border-purple-100 p-3 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in shadow-sm">
+                            <div className="flex items-center gap-3 w-full sm:w-auto">
+                                <span className="text-xs font-bold text-purple-700 bg-purple-100 px-3 py-1 rounded-full whitespace-nowrap">{selectedIds.length} Selected</span>
+                                <div className="flex items-center gap-2 flex-1">
+                                    <span className="text-xs font-bold text-purple-700 whitespace-nowrap">Add Stock:</span>
+                                    <input 
+                                        type="number" 
+                                        className="w-16 p-1 text-center border border-purple-200 rounded text-sm font-bold outline-none focus:ring-2 focus:ring-purple-500" 
+                                        value={bulkStockInput} 
+                                        onChange={e => setBulkStockInput(e.target.value)} 
+                                    />
+                                    <button onClick={handleBulkPushStock} className="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-700 shadow-sm flex items-center gap-1">
+                                        <ArrowUpCircle size={14}/> Push
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div className="flex gap-2 w-full sm:w-auto">
+                                <button onClick={() => setIsBulkEditOpen(true)} className="flex-1 sm:flex-none bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 shadow-sm flex items-center justify-center gap-2">
+                                    <Edit2 size={14}/> Bulk Edit
+                                </button>
+                                <button onClick={handleBulkDelete} className="flex-1 sm:flex-none bg-red-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-red-700 shadow-sm flex items-center justify-center gap-2">
+                                    <Trash2 size={14}/> Delete All
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {/* TABLE (Desktop) & CARDS (Mobile) */}
                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                         
@@ -353,6 +582,9 @@ const StoreInventory = () => {
                             <table className="w-full text-left">
                                 <thead className="bg-gray-50 border-b text-xs font-bold text-slate-500 uppercase">
                                     <tr>
+                                        <th className="px-6 py-4 w-10">
+                                            <input type="checkbox" className="w-4 h-4 accent-purple-600 cursor-pointer" checked={isAllSelected} onChange={handleSelectAll} />
+                                        </th>
                                         <th className="px-6 py-4">Product</th>
                                         <th className="px-6 py-4">Category</th>
                                         <th className="px-6 py-4 text-right">Price</th>
@@ -361,52 +593,70 @@ const StoreInventory = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
-                                    {currentProducts.map((p) => (
-                                        <tr key={p.id} className="hover:bg-purple-50/30 transition group">
-                                            <td className="px-6 py-4">
-                                                <div className="font-bold text-slate-900">{p.name}</div>
-                                                <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Smartphone size={10}/> {p.model}</div>
-                                            </td>
-                                            <td className="px-6 py-4"><span className="px-2 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border">{p.category}</span></td>
-                                            <td className="px-6 py-4 text-right font-mono font-bold text-slate-800">{formatCurrency(p.price)}</td>
-                                            <td className="px-6 py-4"><StockHealth stock={p.stock}/></td>
-                                            <td className="px-6 py-4 text-right">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    <button onClick={() => setRestockItem(p)} className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100"><ArrowUpCircle size={16}/></button>
-                                                    <button onClick={() => setEditingItem(p)} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"><Edit2 size={16}/></button>
-                                                    <button onClick={() => handleDelete(p)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"><Trash2 size={16}/></button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {currentProducts.map((p) => {
+                                        const isSelected = selectedIds.includes(p.id);
+                                        return (
+                                            <tr key={p.id} onClick={() => handleSelectOne(p.id)} className={`transition group cursor-pointer ${isSelected ? 'bg-purple-50/60' : 'hover:bg-gray-50'}`}>
+                                                <td className="px-6 py-4" onClick={e => e.stopPropagation()}>
+                                                    <input type="checkbox" className="w-4 h-4 accent-purple-600 cursor-pointer" checked={isSelected} onChange={() => handleSelectOne(p.id)} />
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="font-bold text-slate-900">{p.name}</div>
+                                                    <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                                                        <Smartphone size={10}/> {p.model}
+                                                        {p.color && <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded flex items-center gap-1 border border-slate-200"><Palette size={8}/> {p.color}</span>}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4"><span className="px-2 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border">{p.category}</span></td>
+                                                <td className="px-6 py-4 text-right font-mono font-bold text-slate-800">{formatCurrency(p.price)}</td>
+                                                <td className="px-6 py-4"><StockHealth stock={p.stock}/></td>
+                                                <td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}>
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <button onClick={() => setRestockItem(p)} className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100"><ArrowUpCircle size={16}/></button>
+                                                        <button onClick={() => setEditingItem(p)} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"><Edit2 size={16}/></button>
+                                                        <button onClick={() => handleDelete(p)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"><Trash2 size={16}/></button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
 
                         {/* Mobile Cards */}
                         <div className="md:hidden divide-y divide-gray-100">
-                            {currentProducts.map((p) => (
-                                <div key={p.id} className="p-4 flex flex-col gap-3">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <h4 className="font-bold text-slate-900 text-sm">{p.name}</h4>
-                                            <p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><Smartphone size={10}/> {p.model}</p>
+                            {currentProducts.map((p) => {
+                                const isSelected = selectedIds.includes(p.id);
+                                return (
+                                    <div key={p.id} onClick={() => handleSelectOne(p.id)} className={`p-4 flex flex-col gap-3 cursor-pointer ${isSelected ? 'bg-purple-50' : ''}`}>
+                                        <div className="flex justify-between items-start">
+                                            <div className="flex gap-3">
+                                                <input type="checkbox" className="w-5 h-5 accent-purple-600 mt-1" checked={isSelected} onChange={() => handleSelectOne(p.id)} onClick={e => e.stopPropagation()} />
+                                                <div>
+                                                    <h4 className="font-bold text-slate-900 text-sm">{p.name}</h4>
+                                                    <div className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                                                        <Smartphone size={10}/> {p.model}
+                                                        {p.color && <span className="ml-1 bg-slate-100 px-1 rounded flex items-center gap-0.5"><Palette size={8}/> {p.color}</span>}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="font-mono font-bold text-slate-800 text-sm">{formatCurrency(p.price)}</p>
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase">{p.category}</span>
+                                            </div>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="font-mono font-bold text-slate-800 text-sm">{formatCurrency(p.price)}</p>
-                                            <span className="text-[10px] font-bold text-slate-400 uppercase">{p.category}</span>
+                                        <div className="flex items-center gap-4 pl-8">
+                                            <div className="flex-1"><StockHealth stock={p.stock}/></div>
+                                            <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                                                <button onClick={() => setRestockItem(p)} className="p-2 bg-green-50 text-green-600 rounded-lg"><ArrowUpCircle size={16}/></button>
+                                                <button onClick={() => setEditingItem(p)} className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Edit2 size={16}/></button>
+                                                <button onClick={() => handleDelete(p)} className="p-2 bg-red-50 text-red-600 rounded-lg"><Trash2 size={16}/></button>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-4">
-                                        <div className="flex-1"><StockHealth stock={p.stock}/></div>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => setRestockItem(p)} className="p-2 bg-green-50 text-green-600 rounded-lg"><ArrowUpCircle size={16}/></button>
-                                            <button onClick={() => setEditingItem(p)} className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Edit2 size={16}/></button>
-                                            <button onClick={() => handleDelete(p)} className="p-2 bg-red-50 text-red-600 rounded-lg"><Trash2 size={16}/></button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
 
                         {/* Pagination */}
@@ -423,7 +673,7 @@ const StoreInventory = () => {
                 </div>
             )}
 
-            {/* --- TAB: HISTORY (Reverted to Full Load) --- */}
+            {/* --- TAB: HISTORY --- */}
             {activeTab === 'history' && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in">
                     <div className="p-4 border-b border-gray-100 flex justify-between items-center">
@@ -534,6 +784,50 @@ const StoreInventory = () => {
                                 ) : (
                                     <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Model</label><input className="w-full p-3 border rounded-xl" placeholder="e.g. A2638" value={newProduct.model} onChange={e => setNewProduct({...newProduct, model: e.target.value})} /></div>
                                 )}
+                                
+                                <div className="col-span-1 md:col-span-2">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase">
+                                            {isBulkMode && isCustomColorMode ? "Color Configuration" : "Colors (Comma Separated)"}
+                                        </label>
+                                        {isBulkMode && (
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setIsCustomColorMode(!isCustomColorMode)}
+                                                className={`text-xs font-bold px-2 py-1 rounded flex items-center gap-1 transition ${isCustomColorMode ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-500'}`}
+                                            >
+                                                <List size={14}/> {isCustomColorMode ? "Simple Mode" : "Customize per Model"}
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {isBulkMode && isCustomColorMode ? (
+                                        <div className="border rounded-xl p-3 bg-gray-50 max-h-48 overflow-y-auto space-y-2 custom-scrollbar">
+                                            {activeModelsInRange.map(m => (
+                                                <div key={m} className="flex items-center gap-2">
+                                                    <span className="text-xs font-bold text-slate-600 w-28 shrink-0">{m}</span>
+                                                    <input 
+                                                        className="w-full p-2 text-xs border rounded bg-white outline-none focus:border-purple-500" 
+                                                        placeholder="e.g. Black, White"
+                                                        value={modelSpecificColors[m] || ""} 
+                                                        onChange={e => setModelSpecificColors({...modelSpecificColors, [m]: e.target.value})}
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="relative">
+                                            <input 
+                                                className="w-full p-3 border rounded-xl outline-none" 
+                                                placeholder={isBulkMode ? "e.g. Black, White, Gold (Applies to all)" : "e.g. Black"} 
+                                                value={newProduct.color} 
+                                                onChange={e => setNewProduct({...newProduct, color: e.target.value})} 
+                                            />
+                                            {isBulkMode && <p className="text-[10px] text-gray-400 mt-1 ml-1">Example: "Red, Blue" will create 2 items for each selected model.</p>}
+                                        </div>
+                                    )}
+                                </div>
+
                                 <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Price</label><input type="text" className="w-full p-3 border rounded-xl font-mono font-bold" placeholder="0.00" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required /></div>
                                 <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Stock</label><input type="number" className="w-full p-3 border rounded-xl font-bold" placeholder="0" value={newProduct.stock} onChange={e => setNewProduct({...newProduct, stock: e.target.value})} /></div>
                             </div>
@@ -557,6 +851,8 @@ const StoreInventory = () => {
                     </div>
                 </div>
             )}
+            
+            {/* SINGLE EDIT MODAL */}
             {editingItem && (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 w-full max-w-md animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
@@ -564,14 +860,85 @@ const StoreInventory = () => {
                         <form onSubmit={handleUpdateProduct} className="space-y-4">
                             <div><label className="text-xs font-bold text-slate-400 uppercase">Name</label><input className="w-full p-3 border rounded-xl font-bold bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-500" value={editingItem.name} onChange={e => setEditingItem({...editingItem, name: e.target.value})}/></div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><label className="text-xs font-bold text-slate-400 uppercase">Category</label><input className="w-full p-3 border rounded-xl outline-none" value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}/></div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Category</label>
+                                    <input 
+                                        list="editCatList"
+                                        className="w-full p-3 border rounded-xl outline-none" 
+                                        value={editingItem.category} 
+                                        onChange={e => setEditingItem({...editingItem, category: e.target.value})}
+                                    />
+                                    <datalist id="editCatList">
+                                        {dynamicCategories.map(c => <option key={c} value={c}/>)}
+                                    </datalist>
+                                </div>
                                 <div><label className="text-xs font-bold text-slate-400 uppercase">Model</label><input className="w-full p-3 border rounded-xl outline-none" value={editingItem.model} onChange={e => setEditingItem({...editingItem, model: e.target.value})}/></div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><label className="text-xs font-bold text-slate-400 uppercase">Color</label><input className="w-full p-3 border rounded-xl outline-none" value={editingItem.color} onChange={e => setEditingItem({...editingItem, color: e.target.value})}/></div>
                                 <div><label className="text-xs font-bold text-slate-400 uppercase">Price</label><input type="text" className="w-full p-3 border rounded-xl outline-none font-mono font-bold" value={editingItem.price} onChange={e => setEditingItem({...editingItem, price: e.target.value})}/></div>
-                                <div><label className="text-xs font-bold text-red-400 uppercase flex gap-1"><AlertTriangle size={12}/> Manual Stock</label><input type="number" className="w-full p-3 border border-red-100 bg-red-50 rounded-xl outline-none font-bold text-red-900" value={editingItem.stock} onChange={e => setEditingItem({...editingItem, stock: e.target.value})}/></div>
                             </div>
+                            <div><label className="text-xs font-bold text-red-400 uppercase flex gap-1"><AlertTriangle size={12}/> Manual Stock</label><input type="number" className="w-full p-3 border border-red-100 bg-red-50 rounded-xl outline-none font-bold text-red-900" value={editingItem.stock} onChange={e => setEditingItem({...editingItem, stock: e.target.value})}/></div>
                             <button type="submit" disabled={actionLoading} className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 shadow-lg mt-4">Save Changes</button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* 🔥 BULK EDIT MODAL */}
+            {isBulkEditOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 w-full max-w-md animate-in zoom-in-95">
+                        <div className="flex justify-between items-center mb-6">
+                            <div>
+                                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2"><Layers className="text-blue-600"/> Bulk Edit</h3>
+                                <p className="text-xs text-gray-500">Updating {selectedIds.length} items</p>
+                            </div>
+                            <button onClick={() => setIsBulkEditOpen(false)}><X size={20}/></button>
+                        </div>
+                        <form onSubmit={handleBulkEditSave} className="space-y-4">
+                            <div className="p-3 bg-blue-50 rounded-lg text-xs text-blue-700 mb-4">
+                                Only fields you fill in will be updated. Leave blank to keep existing values.
+                            </div>
+                            
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 uppercase">New Price (Optional)</label>
+                                <input type="number" className="w-full p-3 border rounded-xl font-mono font-bold" placeholder="Leave blank to keep current" value={bulkEditData.price} onChange={e => setBulkEditData({...bulkEditData, price: e.target.value})}/>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">New Category</label>
+                                    <input 
+                                        list="bulkCatList"
+                                        className="w-full p-3 border rounded-xl" 
+                                        placeholder="Optional" 
+                                        value={bulkEditData.category} 
+                                        onChange={e => setBulkEditData({...bulkEditData, category: e.target.value})}
+                                    />
+                                    <datalist id="bulkCatList">
+                                        {dynamicCategories.map(c => <option key={c} value={c}/>)}
+                                    </datalist>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">New Color</label>
+                                    <input 
+                                        className="w-full p-3 border rounded-xl" 
+                                        placeholder="Optional" 
+                                        value={bulkEditData.color} 
+                                        onChange={e => setBulkEditData({...bulkEditData, color: e.target.value})}
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 uppercase">Set Exact Stock (Optional)</label>
+                                <input type="number" className="w-full p-3 border rounded-xl font-bold" placeholder="Leave blank to keep current" value={bulkEditData.stock} onChange={e => setBulkEditData({...bulkEditData, stock: e.target.value})}/>
+                            </div>
+
+                            <button type="submit" disabled={actionLoading} className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 shadow-lg mt-2">
+                                {actionLoading ? <Loader2 className="animate-spin mx-auto"/> : "Update All Items"}
+                            </button>
                         </form>
                     </div>
                 </div>

@@ -115,9 +115,12 @@ const WorkerDashboard = ({ user: propUser }) => {
             
             allJobs.forEach(order => {
                 // Check if this order has any ACTIVE job assigned to me
+                // 🔥 Exclude Void Orders/Services
+                if (order.status === 'Void') return;
+
                 const hasMyActiveJob = order.items?.some(item => 
                     item.type === 'repair' && 
-                    item.services?.some(svc => isMyJob(svc.worker) && svc.status !== 'Completed')
+                    item.services?.some(svc => isMyJob(svc.worker) && svc.status !== 'Completed' && svc.status !== 'Void')
                 );
                 
                 if (hasMyActiveJob) {
@@ -193,12 +196,17 @@ const WorkerDashboard = ({ user: propUser }) => {
 
       orders.forEach(order => {
           if (!order.items) return;
+          // 🔥 EXCLUDE VOID ORDERS FROM STATS
+          if (order.status === 'Void') return;
           
-          const isClosed = order.status === 'Collected' || order.status === 'Void';
+          const isClosed = order.status === 'Collected';
           
           order.items.forEach(item => {
               if (item.type === 'repair' && item.services) {
                   item.services.forEach(svc => {
+                      // 🔥 EXCLUDE VOID SERVICES FROM STATS
+                      if (svc.status === 'Void') return;
+
                       if (!isClosed && isMyJob(svc.worker) && svc.status !== 'Completed') myActive++;
                       if (!isClosed && (!svc.worker || svc.worker === 'Unassigned')) poolCount++;
                       
@@ -220,7 +228,7 @@ const WorkerDashboard = ({ user: propUser }) => {
   }, [orders, user]);
 
   // --- ACTIONS ---
-  const claimService = (order, itemIndex, serviceIndex) => { /* ... existing code ... */ 
+  const claimService = (order, itemIndex, serviceIndex) => { 
       setConfirmConfig({
           isOpen: true, title: "Claim Job", message: "Add this task to your workbench?", confirmText: "Claim Job", confirmColor: "bg-blue-600",
           action: async () => {
@@ -238,7 +246,7 @@ const WorkerDashboard = ({ user: propUser }) => {
       });
   };
 
-  const markServiceDone = (order, itemIndex, serviceIndex) => { /* ... existing code ... */ 
+  const markServiceDone = (order, itemIndex, serviceIndex) => {
       setConfirmConfig({
           isOpen: true, title: "Complete Task", message: "Mark repair as finished?", confirmText: "Complete", confirmColor: "bg-green-600",
           action: async () => {
@@ -247,7 +255,7 @@ const WorkerDashboard = ({ user: propUser }) => {
                   newItems[itemIndex].services[serviceIndex].status = 'Completed';
                   const allRepairsDone = newItems.every(item => {
                       if (item.type !== 'repair' || !item.services) return true;
-                      return item.services.every(s => s.status === 'Completed');
+                      return item.services.every(s => s.status === 'Completed' || s.status === 'Void'); // Ignore void services
                   });
                   const newStatus = allRepairsDone ? 'Ready for Pickup' : 'In Progress';
                   await updateDoc(doc(db, "Orders", order.id), { items: newItems, status: newStatus });
@@ -258,7 +266,7 @@ const WorkerDashboard = ({ user: propUser }) => {
       });
   };
 
-  const undoCompletion = (order, itemIndex, serviceIndex) => { /* ... existing code ... */ 
+  const undoCompletion = (order, itemIndex, serviceIndex) => {
       setConfirmConfig({
           isOpen: true, title: "Undo Completion", message: "Move this task back to your workbench?", confirmText: "Undo", confirmColor: "bg-slate-600",
           action: async () => {
@@ -274,7 +282,7 @@ const WorkerDashboard = ({ user: propUser }) => {
       });
   };
 
-  const handleUsePart = async () => { /* ... existing code ... */ 
+  const handleUsePart = async () => { 
     if (!selectedPart) return;
     const part = inventory.find(i => i.id === selectedPart);
     try {
@@ -293,7 +301,7 @@ const WorkerDashboard = ({ user: propUser }) => {
     } catch (e) { setToast({ message: `Error: ${e}`, type: 'error' }); }
   };
 
-  const handleUndoPart = (orderId, partItem) => { /* ... existing code ... */ 
+  const handleUndoPart = (orderId, partItem) => {
       setConfirmConfig({
           isOpen: true, title: "Undo Part Usage?", message: `Remove "${partItem.name.replace('Used: ', '')}" from this ticket and restore +1 to stock?`, confirmText: "Restore Stock", confirmColor: "bg-red-600",
           action: async () => {
@@ -320,12 +328,18 @@ const WorkerDashboard = ({ user: propUser }) => {
         order.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase());
       if (!matchesSearch) return null;
 
-      if ((activeTab === 'pool' || activeTab === 'my-jobs') && (order.status === 'Collected' || order.status === 'Void')) return null;
+      // 🔥 EXCLUDE VOID ORDERS FROM LIST
+      if (order.status === 'Void') return null;
+
+      if ((activeTab === 'pool' || activeTab === 'my-jobs') && order.status === 'Collected') return null;
 
       const visibleItems = order.items?.map((item, iIdx) => {
           if (item.type !== 'repair' || !item.services) return null;
 
           const visibleServices = item.services.map((svc, sIdx) => {
+              // 🔥 EXCLUDE VOID SERVICES FROM LIST
+              if (svc.status === 'Void') return null;
+
               const mine = isMyJob(svc.worker);
               const isUnassigned = !svc.worker || svc.worker === 'Unassigned';
 
@@ -532,7 +546,6 @@ const WorkerDashboard = ({ user: propUser }) => {
       </div>
 
       {/* PART MODAL (Existing logic) */}
-      {/* ... */}
       {showPartModal && (
           <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
               <div className="bg-white p-5 rounded-2xl shadow-2xl w-full max-w-sm animate-in zoom-in-95 flex flex-col max-h-[80vh]">
