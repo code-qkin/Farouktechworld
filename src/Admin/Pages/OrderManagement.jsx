@@ -77,7 +77,7 @@ const OrdersManagement = () => {
     const [timeFilter, setTimeFilter] = useState('week'); // 'day', 'week', 'month', 'all'
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterType, setFilterType] = useState('All');
-    const [filterPayment, setFilterPayment] = useState('All'); // 🔥 NEW: Payment Filter
+    const [filterPayment, setFilterPayment] = useState('All'); 
 
     // POS Filters
     const [storeSearch, setStoreSearch] = useState('');
@@ -85,7 +85,7 @@ const OrdersManagement = () => {
     const [storePage, setStorePage] = useState(1);
     const itemsPerStorePage = 24;
 
-    // Client-side Pagination
+    // Client-side Pagination (Main List)
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 20;
     
@@ -213,7 +213,7 @@ const OrdersManagement = () => {
                 if (filterType === 'Sale') matchType = type === 'store_sale';
             }
 
-            // 🔥 MATCH PAYMENT FILTER
+            // MATCH PAYMENT FILTER
             const currentPayment = o.paymentStatus || (o.paid ? 'Paid' : 'Unpaid');
             const matchPayment = filterPayment === 'All' || currentPayment === filterPayment;
 
@@ -221,17 +221,28 @@ const OrdersManagement = () => {
         });
     }, [orders, searchTerm, filterStatus, filterType, filterPayment]);
 
+    // 🔥 STORE SEARCH & FILTERING (Fixed Pagination Reset)
     const filteredInventory = useMemo(() => {
         return inventory.filter(item => {
-            const matchSearch = item.name.toLowerCase().includes(storeSearch.toLowerCase()) || (item.model || '').toLowerCase().includes(storeSearch.toLowerCase());
+            const term = storeSearch.toLowerCase();
+            // Safe checks for missing fields
+            const itemName = (item.name || '').toLowerCase();
+            const itemModel = (item.model || '').toLowerCase();
+            
+            const matchSearch = itemName.includes(term) || itemModel.includes(term);
             const matchCategory = storeCategory === 'All' || item.category === storeCategory;
+            
             return matchSearch && matchCategory;
         });
     }, [inventory, storeSearch, storeCategory]);
 
+    // 🔥 AUTO-RESET PAGINATION FOR STORE GRID
+    useEffect(() => {
+        setStorePage(1);
+    }, [storeSearch, storeCategory]);
+
+    // Pagination Calculations (Main Orders)
     useEffect(() => { setCurrentPage(1); }, [searchTerm, filterStatus, filterType, timeFilter, filterPayment]);
-    
-    // Client-Side Pagination
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
     const currentOrders = filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
@@ -311,10 +322,10 @@ const OrdersManagement = () => {
                 const totalCost = Math.max(0, subtotal - discountAmount);
                 const orderType = cart.some(i => i.type === 'repair') ? 'repair' : 'store_sale';
 
-                // 🔥 PRESERVE COLLECTED STATUS ON EDIT
+                // PRESERVE COLLECTED STATUS ON EDIT
                 const processedItems = cart.map(item => ({
                     ...item,
-                    collected: item.collected || false // Keep existing flag or default false
+                    collected: item.collected || false 
                 }));
 
                 if (editOrderId) {
@@ -323,7 +334,7 @@ const OrdersManagement = () => {
                     const paid = oldDoc.amountPaid || 0;
                     t.update(ref, {
                         customer, 
-                        items: processedItems, // Save items with collected status
+                        items: processedItems, 
                         subtotal, discount: discountAmount, totalCost,
                         balance: totalCost - paid,
                         paymentStatus: paid >= totalCost ? 'Paid' : (paid > 0 ? 'Part Payment' : 'Unpaid'),
@@ -447,7 +458,7 @@ const OrdersManagement = () => {
                     <div><h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">Order Management</h1><p className="text-sm text-slate-500 font-medium">Manage repairs, sales, and warranties.</p></div>
                 </div>
                 <div className="flex gap-3">
-                    {/* <button onClick={() => navigate('/admin/customers')} className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-indigo-700 px-5 py-2.5 rounded-xl font-bold hover:bg-indigo-100 transition text-sm shadow-sm"><Users size={16} /> Customers</button> */}
+                    <button onClick={() => navigate('/admin/customers')} className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-indigo-700 px-5 py-2.5 rounded-xl font-bold hover:bg-indigo-100 transition text-sm shadow-sm"><Users size={16} /> Customers</button>
                     <button onClick={handleExport} className="flex items-center gap-2 bg-white border border-gray-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition text-sm shadow-sm"><Download size={16} /> Export</button>
                     {(role === 'admin' || role === 'secretary') && <button onClick={() => { setEditOrderId(null); setShowPOS(true); }} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md shadow-purple-200 flex gap-2 items-center justify-center transition"><PlusCircle size={18}/> New Order</button>}
                 </div>
@@ -478,7 +489,7 @@ const OrdersManagement = () => {
                         <ChevronDown className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" size={14}/>
                     </div>
 
-                    {/* 🔥 PAYMENT FILTER */}
+                    {/* PAYMENT FILTER */}
                     <div className="relative min-w-[140px]">
                         <DollarSign className="absolute left-3 top-3.5 text-gray-400" size={16}/>
                         <select className="w-full pl-9 pr-8 py-3 bg-gray-50 rounded-xl border-none outline-none text-sm font-bold text-slate-600 cursor-pointer appearance-none" value={filterPayment} onChange={e => { setFilterPayment(e.target.value); setCurrentPage(1); }}>
@@ -602,14 +613,55 @@ const OrdersManagement = () => {
                                 )}
                                 {/* STORE GRID */}
                                 {activeTab === 'store' && (
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 mb-6">
-                                        {filteredInventory.slice((storePage-1)*itemsPerStorePage, storePage*itemsPerStorePage).map(p => (
-                                            <button key={p.id} onClick={() => handleGridAddToCart(p)} disabled={p.stock < 1} className="p-3 bg-white border border-gray-200 rounded-xl text-left hover:border-purple-500 transition group disabled:opacity-50">
-                                                <span className="font-bold text-xs text-slate-700">{p.name}</span>
-                                                <div className="flex justify-between mt-2"><span className="text-slate-900 font-black">{formatCurrency(p.price)}</span><span className="text-[10px] font-bold text-slate-400">{p.stock} left</span></div>
-                                            </button>
-                                        ))}
-                                    </div>
+                                    <>
+                                        {/* Store Filters */}
+                                        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+                                            <div className="relative flex-1">
+                                                <Search className="absolute left-3 top-3 text-gray-400" size={18}/>
+                                                <input 
+                                                    className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 outline-none focus:ring-2 focus:ring-purple-500 text-sm" 
+                                                    placeholder="Search item..." 
+                                                    value={storeSearch} 
+                                                    onChange={e => setStoreSearch(e.target.value)} 
+                                                />
+                                            </div>
+                                            <div className="relative min-w-[150px]">
+                                                <select className="w-full p-2.5 bg-white border border-gray-200 rounded-lg outline-none text-sm font-bold text-slate-700 appearance-none" value={storeCategory} onChange={e => setStoreCategory(e.target.value)}>
+                                                    <option value="All">All Categories</option>
+                                                    {storeCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                                                </select>
+                                                <Filter className="absolute right-3 top-3 text-gray-400 pointer-events-none" size={16}/>
+                                            </div>
+                                        </div>
+
+                                        {/* Store Items */}
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 mb-6">
+                                            {filteredInventory.slice((storePage-1)*itemsPerStorePage, storePage*itemsPerStorePage).map(p => (
+                                                <button key={p.id} onClick={() => handleGridAddToCart(p)} disabled={p.stock < 1} className="p-3 sm:p-4 bg-white border border-gray-200 rounded-xl text-left h-32 flex flex-col justify-between hover:border-purple-500 hover:shadow-md transition group disabled:opacity-50 disabled:bg-gray-100">
+                                                    <span className="font-bold text-xs sm:text-sm text-slate-700 line-clamp-2 group-hover:text-purple-700 transition">{p.name}</span>
+                                                    <div className="flex justify-between items-end w-full">
+                                                        <span className="text-slate-900 font-black text-base sm:text-lg">{formatCurrency(p.price)}</span>
+                                                        <span className={`text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded ${p.stock < 3 ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>{p.stock} left</span>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                            {filteredInventory.length === 0 && (
+                                                <div className="col-span-full py-10 text-center text-slate-400">
+                                                    <ShoppingBag size={48} className="mx-auto mb-2 opacity-20"/>
+                                                    <p className="font-medium">No items found.</p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Store Pagination */}
+                                        {filteredInventory.length > itemsPerStorePage && (
+                                            <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-200 mb-20">
+                                                <button onClick={() => setStorePage(p => Math.max(1, p - 1))} disabled={storePage === 1} className="p-2 hover:bg-gray-100 rounded-lg disabled:opacity-50"><ChevronLeft size={20}/></button>
+                                                <span className="text-xs font-bold text-slate-500">Page {storePage} of {Math.ceil(filteredInventory.length / itemsPerStorePage)}</span>
+                                                <button onClick={() => setStorePage(p => Math.min(Math.ceil(filteredInventory.length / itemsPerStorePage), p + 1))} disabled={storePage === Math.ceil(filteredInventory.length / itemsPerStorePage)} className="p-2 hover:bg-gray-100 rounded-lg disabled:opacity-50"><ChevronRight size={20}/></button>
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                                 {/* REPAIR INPUTS */}
                                 {activeTab === 'repair' && (
@@ -709,4 +761,4 @@ const OrdersManagement = () => {
     );
 };
 
-export default OrdersManagement;    
+export default OrdersManagement;

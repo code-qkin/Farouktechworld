@@ -99,7 +99,7 @@ const StoreInventory = () => {
     const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
     const [bulkEditData, setBulkEditData] = useState({ price: '', category: '', stock: '', color: '' });
 
-    // 🔥 Custom Color per Model State
+    // Custom Color per Model State
     const [isCustomColorMode, setIsCustomColorMode] = useState(false);
     const [modelSpecificColors, setModelSpecificColors] = useState({});
 
@@ -161,18 +161,25 @@ const StoreInventory = () => {
         }
     }, [activeTab]);
 
-    // 3. FILTERING
+    // 3. FILTERING (Fix: Safe string checks)
     const filteredProducts = useMemo(() => {
         return products.filter(product => {
             const term = searchTerm.toLowerCase();
-            const matchesSearch = product.name.toLowerCase().includes(term) || 
-                                  product.model?.toLowerCase().includes(term) ||
-                                  product.color?.toLowerCase().includes(term);
+            const pName = (product.name || '').toLowerCase();
+            const pModel = (product.model || '').toLowerCase();
+            const pColor = (product.color || '').toLowerCase();
+            
+            const matchesSearch = pName.includes(term) || pModel.includes(term) || pColor.includes(term);
             const matchesCategory = filterCategory === 'All' || product.category === filterCategory;
             const matchesStock = filterStock === 'All' || (filterStock === 'Low' && product.stock < 5 && product.stock > 0) || (filterStock === 'Out' && product.stock <= 0);
             return matchesSearch && matchesCategory && matchesStock;
         });
     }, [products, searchTerm, filterCategory, filterStock]);
+
+    // 🔥 FIX: Reset Pagination on Filter Change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, filterCategory, filterStock]);
 
     // 4. METRICS
     const dynamicCategories = useMemo(() => [...new Set(products.map(p => p.category).filter(Boolean))].sort(), [products]);
@@ -190,28 +197,28 @@ const StoreInventory = () => {
     // 5. PAGINATION
     const currentProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
     const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+    
+    // History Pagination
     const currentHistory = salesHistory.slice((historyPage - 1) * historyPerPage, historyPage * historyPerPage);
     const totalHistoryPages = Math.ceil(salesHistory.length / historyPerPage);
 
-    // 🔥 Helper: Get current models in range for the form
+    // Helpers for Bulk Models
     const activeModelsInRange = useMemo(() => {
         if (!isBulkMode) return [];
         return getModelRange(newProduct.rangeStart, newProduct.rangeEnd);
     }, [isBulkMode, newProduct.rangeStart, newProduct.rangeEnd]);
 
-    // 🔥 Helper: Sync custom colors when range changes
     useEffect(() => {
         if (isBulkMode && isCustomColorMode) {
             const newMap = {};
             activeModelsInRange.forEach(m => {
-                // Preserve existing input if avail, else default to global color input
                 newMap[m] = modelSpecificColors[m] || newProduct.color || ""; 
             });
             setModelSpecificColors(newMap);
         }
     }, [activeModelsInRange, isCustomColorMode, isBulkMode]);
 
-    // 🔥 BULK SELECTION HELPERS
+    // BULK SELECTION HELPERS
     const isAllSelected = currentProducts.length > 0 && currentProducts.every(p => selectedIds.includes(p.id));
 
     const handleSelectAll = () => {
@@ -336,16 +343,10 @@ const StoreInventory = () => {
                 const models = getModelRange(newProduct.rangeStart, newProduct.rangeEnd);
                 if (models.length === 0) throw new Error("Invalid Range");
                 
-                // Prepare Items List (Flat)
                 let itemsToCreate = [];
                 models.forEach(model => {
-                    // Determine which colors to use for THIS model
                     let colorsString = isCustomColorMode ? (modelSpecificColors[model] || "") : newProduct.color;
-                    
-                    // Parse Comma-Separated Colors
-                    const colorList = colorsString 
-                        ? colorsString.split(',').map(c => c.trim()).filter(c => c !== "") 
-                        : [];
+                    const colorList = colorsString ? colorsString.split(',').map(c => c.trim()).filter(c => c !== "") : [];
 
                     if (colorList.length > 0) {
                         colorList.forEach(color => {
@@ -364,7 +365,6 @@ const StoreInventory = () => {
                     }
                 });
 
-                // Batch Write (Chunked to 450 to stay under 500 limit)
                 const BATCH_SIZE = 450;
                 for (let i = 0; i < itemsToCreate.length; i += BATCH_SIZE) {
                     const batch = writeBatch(db);
@@ -385,10 +385,8 @@ const StoreInventory = () => {
                     });
                     await batch.commit();
                 }
-                
                 setToast({ message: `Added ${itemsToCreate.length} items!`, type: "success" });
             } else {
-                // Single Create
                 const safeColor = newProduct.color ? newProduct.color.trim() : "";
                 await addDoc(collection(db, "Inventory"), { 
                     name: newProduct.name.trim(), 
@@ -401,7 +399,6 @@ const StoreInventory = () => {
                 });
                 setToast({ message: "Product Added", type: "success" });
             }
-            // Reset Form
             setNewProduct(prev => ({ ...prev, name: '', model: '', price: '', stock: 0, color: '' }));
             setIsCreating(false);
             setIsCustomColorMode(false);
@@ -475,7 +472,7 @@ const StoreInventory = () => {
         <div className="min-h-screen bg-gray-50 p-4 sm:p-8 font-sans text-slate-900">
             <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: '' })} />
             <ConfirmModal isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmText={confirmConfig.confirmText} confirmColor={confirmConfig.confirmColor} onCancel={() => setConfirmConfig({...confirmConfig, isOpen: false})} onConfirm={confirmConfig.action} />
-
+            
             {/* --- HEADER --- */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                 <div className="flex items-center gap-3">
@@ -544,7 +541,7 @@ const StoreInventory = () => {
                         </div>
                     </div>
 
-                    {/* 🔥 BULK ACTION BAR */}
+                    {/* BULK ACTION BAR */}
                     {selectedIds.length > 0 && (
                         <div className="bg-purple-50 border border-purple-100 p-3 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in shadow-sm">
                             <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -662,10 +659,27 @@ const StoreInventory = () => {
                         {/* Pagination */}
                         {filteredProducts.length > 0 && (
                             <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-between">
-                                <span className="text-xs font-bold text-gray-500">Page {currentPage} of {totalPages}</span>
-                                <div className="flex gap-2">
-                                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 bg-white border rounded-lg disabled:opacity-50"><ChevronLeft size={16}/></button>
-                                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 bg-white border rounded-lg disabled:opacity-50"><ChevronRight size={16}/></button>
+                                <span className="text-sm text-gray-500 hidden sm:block">
+                                    Showing <span className="font-bold">{currentPage}</span> of <span className="font-bold">{totalPages}</span> pages
+                                </span>
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
+                                        disabled={currentPage === 1}
+                                        className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:hover:bg-transparent transition"
+                                    >
+                                        <ChevronLeft size={18}/>
+                                    </button>
+                                    <span className="text-xs font-bold bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
+                                        Page {currentPage} of {totalPages}
+                                    </span>
+                                    <button 
+                                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
+                                        disabled={currentPage === totalPages}
+                                        className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:hover:bg-transparent transition"
+                                    >
+                                        <ChevronRight size={18}/>
+                                    </button>
                                 </div>
                             </div>
                         )}
@@ -885,7 +899,7 @@ const StoreInventory = () => {
                 </div>
             )}
 
-            {/* 🔥 BULK EDIT MODAL */}
+            {/* 櫨 BULK EDIT MODAL */}
             {isBulkEditOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 w-full max-w-md animate-in zoom-in-95">
