@@ -74,7 +74,7 @@ const OrdersManagement = () => {
     const [searchTerm, setSearchTerm] = useState('');
 
     // Filters State
-    const [timeFilter, setTimeFilter] = useState('week'); // 'day', 'week', 'month', 'all'
+    const [timeFilter, setTimeFilter] = useState('week'); 
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterType, setFilterType] = useState('All');
     const [filterPayment, setFilterPayment] = useState('All'); 
@@ -116,9 +116,13 @@ const OrdersManagement = () => {
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
-    const storeCategories = ["Accessories", "Phones", "Laptops", "Chargers", "Screen Guards", "Audio", "Parts", "Services", "Others"];
+    // 🔥 DYNAMIC CATEGORIES (Fixed)
+    const dynamicCategories = useMemo(() => {
+        const cats = new Set(inventory.map(i => i.category).filter(Boolean));
+        return ['All', ...Array.from(cats).sort()];
+    }, [inventory]);
 
-    // 1. DATA FETCHING (SMART TIME FILTER)
+    // 1. DATA FETCHING
     useEffect(() => {
         setLoading(true);
         let q;
@@ -136,13 +140,13 @@ const OrdersManagement = () => {
             startDate.setHours(0, 0, 0, 0);
 
             if (timeFilter === 'day') {
-                // Today (start date is already set)
+                // Today
             } else if (timeFilter === 'week') {
                 startDate.setDate(startDate.getDate() - 7);
             } else if (timeFilter === 'month') {
                 startDate.setMonth(startDate.getMonth() - 1);
             } else {
-                startDate = null; // 'all'
+                startDate = null; // all time
             }
 
             if (startDate) {
@@ -213,7 +217,6 @@ const OrdersManagement = () => {
                 if (filterType === 'Sale') matchType = type === 'store_sale';
             }
 
-            // MATCH PAYMENT FILTER
             const currentPayment = o.paymentStatus || (o.paid ? 'Paid' : 'Unpaid');
             const matchPayment = filterPayment === 'All' || currentPayment === filterPayment;
 
@@ -221,17 +224,25 @@ const OrdersManagement = () => {
         });
     }, [orders, searchTerm, filterStatus, filterType, filterPayment]);
 
+    // 🔥 STORE SEARCH & FILTERING (Using Dynamic Categories)
     const filteredInventory = useMemo(() => {
         return inventory.filter(item => {
-            const matchSearch = item.name.toLowerCase().includes(storeSearch.toLowerCase()) || (item.model || '').toLowerCase().includes(storeSearch.toLowerCase());
+            const term = storeSearch.toLowerCase();
+            const itemName = (item.name || '').toLowerCase();
+            const itemModel = (item.model || '').toLowerCase();
+            
+            const matchSearch = itemName.includes(term) || itemModel.includes(term);
             const matchCategory = storeCategory === 'All' || item.category === storeCategory;
+            
             return matchSearch && matchCategory;
         });
     }, [inventory, storeSearch, storeCategory]);
 
+    useEffect(() => {
+        setStorePage(1);
+    }, [storeSearch, storeCategory]);
+
     useEffect(() => { setCurrentPage(1); }, [searchTerm, filterStatus, filterType, timeFilter, filterPayment]);
-    
-    // Client-Side Pagination
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
     const currentOrders = filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
@@ -290,9 +301,7 @@ const OrdersManagement = () => {
     
     const removeFromCart = (id) => setCart(cart.filter(item => item.id !== id));
 
-    // 🔥 NEW: Edit Item in Cart Function
     const handleEditCartItem = (item) => {
-        // 1. If repair item, load details back into form
         if (item.type === 'repair') {
             setRepairInput({
                 deviceModel: item.deviceModel || '',
@@ -303,15 +312,9 @@ const OrdersManagement = () => {
             setCurrentDeviceServices(item.services || []);
             setActiveTab('repair');
         } else {
-            // For products, usually just removing and re-adding is fast enough, 
-            // but we could switch to store tab.
             setActiveTab('store');
         }
-        
-        // 2. Remove item from cart so it can be re-added updated
         setCart(prev => prev.filter(i => i.id !== item.id));
-        
-        // 3. Switch view to inputs
         setMobilePosTab('input');
         setToast({ message: "Item loaded for editing", type: "info" });
     };
@@ -337,7 +340,6 @@ const OrdersManagement = () => {
                 const totalCost = Math.max(0, subtotal - discountAmount);
                 const orderType = cart.some(i => i.type === 'repair') ? 'repair' : 'store_sale';
 
-                // PRESERVE COLLECTED STATUS ON EDIT
                 const processedItems = cart.map(item => ({
                     ...item,
                     collected: item.collected || false 
@@ -629,7 +631,7 @@ const OrdersManagement = () => {
                                 {/* STORE GRID */}
                                 {activeTab === 'store' && (
                                     <>
-                                        {/* Store Filters */}
+                                        {/* Store Filters (Dynamic Categories) */}
                                         <div className="flex flex-col sm:flex-row gap-3 mb-6">
                                             <div className="relative flex-1">
                                                 <Search className="absolute left-3 top-3 text-gray-400" size={18}/>
@@ -642,8 +644,7 @@ const OrdersManagement = () => {
                                             </div>
                                             <div className="relative min-w-[150px]">
                                                 <select className="w-full p-2.5 bg-white border border-gray-200 rounded-lg outline-none text-sm font-bold text-slate-700 appearance-none" value={storeCategory} onChange={e => setStoreCategory(e.target.value)}>
-                                                    <option value="All">All Categories</option>
-                                                    {storeCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                                                    {dynamicCategories.map(c => <option key={c} value={c}>{c}</option>)}
                                                 </select>
                                                 <Filter className="absolute right-3 top-3 text-gray-400 pointer-events-none" size={16}/>
                                             </div>
