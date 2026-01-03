@@ -482,7 +482,7 @@ const OrdersManagement = () => {
                     <div><h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">Order Management</h1><p className="text-sm text-slate-500 font-medium">Manage repairs, sales, and warranties.</p></div>
                 </div>
                 <div className="flex gap-3">
-                    <button onClick={() => navigate('/admin/customers')} className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-indigo-700 px-5 py-2.5 rounded-xl font-bold hover:bg-indigo-100 transition text-sm shadow-sm"><Users size={16} /> Customers</button>
+                    {/* <button onClick={() => navigate('/admin/customers')} className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-indigo-700 px-5 py-2.5 rounded-xl font-bold hover:bg-indigo-100 transition text-sm shadow-sm"><Users size={16} /> Customers</button> */}
                     <button onClick={handleExport} className="flex items-center gap-2 bg-white border border-gray-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition text-sm shadow-sm"><Download size={16} /> Export</button>
                     {(role === 'admin' || role === 'secretary') && <button onClick={() => { setEditOrderId(null); setShowPOS(true); }} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md shadow-purple-200 flex gap-2 items-center justify-center transition"><PlusCircle size={18}/> New Order</button>}
                 </div>
