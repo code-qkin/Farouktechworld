@@ -116,7 +116,7 @@ const OrdersManagement = () => {
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
-    // 🔥 DYNAMIC CATEGORIES (Fixed)
+    // 🔥 DYNAMIC CATEGORIES
     const dynamicCategories = useMemo(() => {
         const cats = new Set(inventory.map(i => i.category).filter(Boolean));
         return ['All', ...Array.from(cats).sort()];
@@ -224,7 +224,7 @@ const OrdersManagement = () => {
         });
     }, [orders, searchTerm, filterStatus, filterType, filterPayment]);
 
-    // 🔥 STORE SEARCH & FILTERING (Using Dynamic Categories)
+    // 🔥 STORE SEARCH & FILTERING
     const filteredInventory = useMemo(() => {
         return inventory.filter(item => {
             const term = storeSearch.toLowerCase();
@@ -251,7 +251,14 @@ const OrdersManagement = () => {
     // 3. HANDLERS
     const handleServiceChange = (e) => {
         const service = e.target.value;
-        const match = dbServices.find(p => p.service === service && (p.model === repairInput.deviceModel || repairInput.deviceModel?.includes(p.model)));
+        // 🔥 FIX: STRICT MATCHING FOR MODEL NAME (Prevents "iPhone 15" from matching "15 Pro Max")
+        const currentModel = repairInput.deviceModel ? repairInput.deviceModel.trim().toLowerCase() : '';
+        
+        const match = dbServices.find(p => 
+            p.service === service && 
+            p.model.trim().toLowerCase() === currentModel
+        );
+
         setServiceInput({ ...serviceInput, type: service, cost: match ? match.price : '' });
     };
 
