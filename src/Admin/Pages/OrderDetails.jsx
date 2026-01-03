@@ -109,12 +109,7 @@ const OrderDetails = () => {
         setIsUpdating(false); setShowPaymentModal(false); setPaymentInput('');
     };
 
-    const handleEmailReceipt = () => {
-        if (!order.customer?.email) return setToast({ message: "No customer email found", type: "error" });
-        const subject = `Receipt for Ticket ${order.ticketId} - FaroukTechWorld`;
-        const body = `Dear ${order.customer.name},%0D%0A%0D%0AHere is your receipt:%0D%0ATicket ID: ${order.ticketId}%0D%0ATotal: ₦${order.totalCost.toLocaleString()}%0D%0APaid: ₦${order.amountPaid.toLocaleString()}%0D%0ABalance: ₦${order.balance.toLocaleString()}%0D%0A%0D%0AThank you!`;
-        window.open(`mailto:${order.customer.email}?subject=${subject}&body=${body}`);
-    };
+    
 
     const handleProcessRefund = async () => {
         const reason = prompt("Enter reason for refund:");
@@ -354,7 +349,6 @@ const OrderDetails = () => {
                             {role === 'secretary' ? <AlertTriangle size={16}/> : <Trash2 size={16}/>} {role === 'secretary' ? 'Request Delete' : 'Delete'}
                         </button>
                     )}
-                    <button onClick={handleEmailReceipt} className="flex items-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 px-4 py-2 rounded-lg hover:bg-blue-100 text-sm font-bold"><Mail size={16}/> Email Receipt</button>
                     <button onClick={() => setShowReceipt(true)} className="flex items-center gap-2 bg-purple-900 text-white px-4 py-2 rounded-lg hover:bg-purple-800 text-sm font-bold"><Printer size={16}/> Receipt</button>
                 </div>
             </div>
