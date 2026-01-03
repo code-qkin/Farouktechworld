@@ -32,6 +32,7 @@ import TrackingPage from './pages/TrackingPage';
 import ServicePrices from './Admin/Pages/ServicePrices';
 // import IssueReports from "./Admin/Pages/IssueReports";
 import ManageProofOfWork from "./Admin/Pages/ManageProofOfWork";
+import DeviceManager from "./Admin/Pages/DeviceManager";
 
 
 const router = createBrowserRouter(
@@ -61,6 +62,7 @@ const router = createBrowserRouter(
           <Route path="payroll" element={<PayrollPage />} />
           <Route path="pricing" element={<ServicePrices />} />
           <Route path="manage-proof-of-work" element={<ManageProofOfWork />} />
+          <Route path="devices" element={<DeviceManager />} />
           {/* <Route path="settings" element={<Settings/>} /> */}
         </Route>
       </Route>

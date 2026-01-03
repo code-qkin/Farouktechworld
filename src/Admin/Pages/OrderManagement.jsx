@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-    ClipboardList, Search, PlusCircle, 
-    Trash2, User, Phone, X, 
-    ShoppingBag, MinusCircle, Download, 
-    ArrowLeft, ShoppingCart, Menu,
+    ClipboardList, Search, PlusCircle, Trash2, User, Phone, X, 
+    ShoppingBag, MinusCircle, Download, ArrowLeft, ShoppingCart, Menu,
     Filter, ChevronDown, CheckCircle, AlertCircle, Wrench, ArrowRight,
     RotateCcw, ChevronLeft, ChevronRight, Plus, Minus, AlertTriangle, Send,
     DownloadCloud, Loader2, Users, Calendar, DollarSign, Edit3
@@ -116,7 +114,7 @@ const OrdersManagement = () => {
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
-    // 🔥 DYNAMIC CATEGORIES
+    // 🔥 DYNAMIC CATEGORIES (Inventory Based)
     const dynamicCategories = useMemo(() => {
         const cats = new Set(inventory.map(i => i.category).filter(Boolean));
         return ['All', ...Array.from(cats).sort()];
@@ -139,30 +137,17 @@ const OrdersManagement = () => {
             let startDate = new Date();
             startDate.setHours(0, 0, 0, 0);
 
-            if (timeFilter === 'day') {
-                // Today
-            } else if (timeFilter === 'week') {
-                startDate.setDate(startDate.getDate() - 7);
-            } else if (timeFilter === 'month') {
-                startDate.setMonth(startDate.getMonth() - 1);
-            } else {
-                startDate = null; // all time
-            }
+            if (timeFilter === 'week') startDate.setDate(startDate.getDate() - 7);
+            else if (timeFilter === 'month') startDate.setMonth(startDate.getMonth() - 1);
+            else startDate = null; // 'all'
 
-            if (startDate) {
-                q = query(
-                    collection(db, "Orders"), 
-                    where("createdAt", ">=", startDate),
-                    orderBy("createdAt", "desc")
-                );
-            } else {
-                q = query(collection(db, "Orders"), orderBy("createdAt", "desc"), limit(100));
-            }
+            q = startDate 
+                ? query(collection(db, "Orders"), where("createdAt", ">=", startDate), orderBy("createdAt", "desc"))
+                : query(collection(db, "Orders"), orderBy("createdAt", "desc"), limit(100));
         }
         
         const unsubOrders = onSnapshot(q, (snap) => {
-            const fetched = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setOrders(fetched);
+            setOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             setLoading(false);
         });
         
@@ -224,7 +209,7 @@ const OrdersManagement = () => {
         });
     }, [orders, searchTerm, filterStatus, filterType, filterPayment]);
 
-    // 🔥 STORE SEARCH & FILTERING
+    // STORE SEARCH & FILTERING (Pagination Reset)
     const filteredInventory = useMemo(() => {
         return inventory.filter(item => {
             const term = storeSearch.toLowerCase();
@@ -251,14 +236,11 @@ const OrdersManagement = () => {
     // 3. HANDLERS
     const handleServiceChange = (e) => {
         const service = e.target.value;
-        // 🔥 FIX: STRICT MATCHING FOR MODEL NAME (Prevents "iPhone 15" from matching "15 Pro Max")
         const currentModel = repairInput.deviceModel ? repairInput.deviceModel.trim().toLowerCase() : '';
-        
         const match = dbServices.find(p => 
             p.service === service && 
             p.model.trim().toLowerCase() === currentModel
         );
-
         setServiceInput({ ...serviceInput, type: service, cost: match ? match.price : '' });
     };
 
@@ -330,11 +312,17 @@ const OrdersManagement = () => {
         if (isSubmitting) return;
         if (!customer.name || cart.length === 0) return setToast({message: "Fill details & add items!", type: "error"});
         setIsSubmitting(true);
+        
         try {
             await runTransaction(db, async (t) => {
                 if (!editOrderId) {
                     const productUpdates = [];
-                    for (const item of cart) { if (item.type === 'product') { const ref = doc(db, "Inventory", item.productId); productUpdates.push({ ref, item }); } }
+                    for (const item of cart) { 
+                        if (item.type === 'product') { 
+                            const ref = doc(db, "Inventory", item.productId); 
+                            productUpdates.push({ ref, item }); 
+                        } 
+                    }
                     const snaps = await Promise.all(productUpdates.map(p => t.get(p.ref)));
                     snaps.forEach((snap, idx) => { 
                         if (!snap.exists() || snap.data().stock < productUpdates[idx].item.qty) throw `Stock Error: ${productUpdates[idx].item.name}`; 
@@ -344,26 +332,20 @@ const OrdersManagement = () => {
 
                 const subtotal = cart.reduce((sum, item) => sum + item.total, 0);
                 const discountAmount = Number(discount) || 0;
-                const totalCost = Math.max(0, subtotal - discountAmount);
-                const orderType = cart.some(i => i.type === 'repair') ? 'repair' : 'store_sale';
+                let totalCost = Math.max(0, subtotal - discountAmount);
+                // VAT REMOVED HERE
 
-                const processedItems = cart.map(item => ({
-                    ...item,
-                    collected: item.collected || false 
-                }));
+                const orderType = cart.some(i => i.type === 'repair') ? 'repair' : 'store_sale';
+                const processedItems = cart.map(item => ({ ...item, collected: item.collected || false }));
 
                 if (editOrderId) {
                     const ref = doc(db, "Orders", editOrderId);
                     const oldDoc = (await t.get(ref)).data();
                     const paid = oldDoc.amountPaid || 0;
                     t.update(ref, {
-                        customer, 
-                        items: processedItems, 
-                        subtotal, discount: discountAmount, totalCost,
-                        balance: totalCost - paid,
-                        paymentStatus: paid >= totalCost ? 'Paid' : (paid > 0 ? 'Part Payment' : 'Unpaid'),
-                        paid: paid >= totalCost,
-                        lastUpdated: serverTimestamp()
+                        customer, items: processedItems, subtotal, discount: discountAmount, totalCost,
+                        balance: totalCost - paid, paymentStatus: paid >= totalCost ? 'Paid' : (paid > 0 ? 'Part Payment' : 'Unpaid'),
+                        paid: paid >= totalCost, lastUpdated: serverTimestamp()
                     });
                     setToast({message: "Order Updated!", type: "success"});
                 } else {
@@ -371,11 +353,8 @@ const OrdersManagement = () => {
                     const warrantyDate = new Date(); warrantyDate.setDate(warrantyDate.getDate() + 7);
                     const newOrderRef = doc(collection(db, "Orders"));
                     t.set(newOrderRef, { 
-                        ticketId, customer, orderType, 
-                        items: processedItems,
-                        subtotal, discount: discountAmount, totalCost,
-                        amountPaid: 0, balance: totalCost, paymentStatus: 'Unpaid', paymentMethod: null, paid: false, 
-                        status: orderType === 'repair' ? 'Pending' : 'Completed', createdAt: serverTimestamp(), warrantyExpiry: Timestamp.fromDate(warrantyDate) 
+                        ticketId, customer, orderType, items: processedItems, subtotal, discount: discountAmount, totalCost,
+                        amountPaid: 0, balance: totalCost, paymentStatus: 'Unpaid', status: orderType === 'repair' ? 'Pending' : 'Completed', createdAt: serverTimestamp(), warrantyExpiry: Timestamp.fromDate(warrantyDate) 
                     });
                     setToast({message: `Order ${ticketId} Created!`, type: "success"});
                 }
@@ -411,13 +390,8 @@ const OrdersManagement = () => {
         try {
             const q = query(collection(db, "Orders"), where("ticketId", "==", warrantyTicketSearch.trim()));
             const snap = await getDocs(q);
-            if (snap.empty) {
-                setToast({message: "Ticket not found", type: "error"});
-                setReturnOrder(null);
-            } else {
-                setReturnOrder({ id: snap.docs[0].id, ...snap.docs[0].data() });
-                setToast({message: "Ticket Found", type: "success"});
-            }
+            if (snap.empty) { setToast({message: "Ticket not found", type: "error"}); setReturnOrder(null); } 
+            else { setReturnOrder({ id: snap.docs[0].id, ...snap.docs[0].data() }); setToast({message: "Ticket Found", type: "success"}); }
         } catch (e) { console.error(e); setToast({message: "Search failed", type: "error"}); }
         setIsSubmitting(false);
     };
@@ -482,7 +456,7 @@ const OrdersManagement = () => {
                     <div><h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">Order Management</h1><p className="text-sm text-slate-500 font-medium">Manage repairs, sales, and warranties.</p></div>
                 </div>
                 <div className="flex gap-3">
-                    {/* <button onClick={() => navigate('/admin/customers')} className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-indigo-700 px-5 py-2.5 rounded-xl font-bold hover:bg-indigo-100 transition text-sm shadow-sm"><Users size={16} /> Customers</button> */}
+                    <button onClick={() => navigate('/admin/customers')} className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-indigo-700 px-5 py-2.5 rounded-xl font-bold hover:bg-indigo-100 transition text-sm shadow-sm"><Users size={16} /> Customers</button>
                     <button onClick={handleExport} className="flex items-center gap-2 bg-white border border-gray-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition text-sm shadow-sm"><Download size={16} /> Export</button>
                     {(role === 'admin' || role === 'secretary') && <button onClick={() => { setEditOrderId(null); setShowPOS(true); }} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md shadow-purple-200 flex gap-2 items-center justify-center transition"><PlusCircle size={18}/> New Order</button>}
                 </div>
@@ -638,7 +612,7 @@ const OrdersManagement = () => {
                                 {/* STORE GRID */}
                                 {activeTab === 'store' && (
                                     <>
-                                        {/* Store Filters (Dynamic Categories) */}
+                                        {/* Store Filters */}
                                         <div className="flex flex-col sm:flex-row gap-3 mb-6">
                                             <div className="relative flex-1">
                                                 <Search className="absolute left-3 top-3 text-gray-400" size={18}/>
@@ -755,7 +729,7 @@ const OrdersManagement = () => {
                         {/* RIGHT: CART PANEL */}
                         <div className={`w-full lg:w-[35%] bg-white shadow-xl flex flex-col border-l border-gray-200 h-full ${mobilePosTab === 'input' ? 'hidden lg:flex' : 'flex'}`}>
                              <div className="p-4 sm:p-5 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center shrink-0">
-                                <h3 className="font-black text-slate-800 text-lg flex items-center gap-2"><ShoppingCart className="text-purple-600"/> Order Items</h3>
+                                <h3 className="font-black text-slate-800 text-lg flex items-center gap-2"><ShoppingCart className="text-purple-600"/> Cart</h3>
                                 <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-bold">{cart.length} Items</span>
                              </div>
                              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 bg-white custom-scrollbar pb-24 lg:pb-5">
@@ -765,19 +739,10 @@ const OrdersManagement = () => {
                                          <div className="font-bold text-slate-800 pr-8 text-sm sm:text-base">{item.name || item.deviceModel}</div>
                                          <div className="flex justify-between items-end mt-4">
                                             {item.type === 'product' ? (
-                                                <div className="flex items-center bg-gray-100 rounded-lg p-1 gap-3">
-                                                    <button onClick={() => updateCartQty(item.id, -1)} className="w-8 h-8 flex items-center justify-center bg-white rounded shadow-sm"><Minus size={14}/></button>
-                                                    <span className="text-sm font-bold w-4 text-center">{item.qty}</span>
-                                                    <button onClick={() => updateCartQty(item.id, 1)} className="w-8 h-8 flex items-center justify-center bg-white rounded shadow-sm"><Plus size={14}/></button>
-                                                </div>
+                                                <div className="flex items-center bg-gray-100 rounded-lg p-1 gap-3"><button onClick={() => updateCartQty(item.id, -1)} className="w-8 h-8 flex items-center justify-center bg-white rounded shadow-sm"><Minus size={14}/></button><span className="text-sm font-bold w-4 text-center">{item.qty}</span><button onClick={() => updateCartQty(item.id, 1)} className="w-8 h-8 flex items-center justify-center bg-white rounded shadow-sm"><Plus size={14}/></button></div>
                                             ) : (
                                                 // 🔥 NEW: Edit Button for Phones
-                                                <button 
-                                                    onClick={() => handleEditCartItem(item)}
-                                                    className="text-xs font-bold bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-blue-100 transition"
-                                                >
-                                                    <Edit3 size={12}/> Edit Details
-                                                </button>
+                                                <button onClick={() => handleEditCartItem(item)} className="text-xs font-bold bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-blue-100 transition"><Edit3 size={12}/> Edit Details</button>
                                             )}
                                             <div className="text-right font-mono font-bold text-lg text-purple-700 ml-auto">{formatCurrency(item.total)}</div>
                                          </div>

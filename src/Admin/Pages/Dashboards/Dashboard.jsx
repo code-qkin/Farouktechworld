@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-    Banknote, Users, Wrench, LogOut, ArrowRight,
-    Package, TrendingUp, AlertTriangle,
+    Banknote, Users, Wrench, LogOut, Package, TrendingUp, AlertTriangle,
     ShoppingCart, Activity, Wallet, Smartphone, Settings,
-    XCircle, AlertCircle, CheckCircle, ChevronRight, ShieldAlert,
+    XCircle, AlertCircle, CheckCircle, ShieldAlert,
     TrendingDown, Image as ImageIcon, Trash2, X
 } from 'lucide-react';
 import { useAuth } from '../../AdminContext';
@@ -62,7 +61,7 @@ const MetricCard = ({ title, value, icon: Icon, color, subtext, onClick, isAlert
         </div>
         <div className="relative z-10">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{title}</p>
-            <h3 className={`text-3xl font-black mt-1 ${isAlert ? 'text-red-700' : 'text-slate-900'}`}>{value}</h3>
+            <h3 className={`text-2xl font-black mt-1 ${isAlert ? 'text-red-700' : 'text-slate-900'}`}>{value}</h3>
             <p className="text-sm font-medium text-slate-500 mt-1">{subtext}</p>
         </div>
     </div>
@@ -73,7 +72,7 @@ const Dashboard = () => {
     const navigate = useNavigate();
 
     // Stats State
-    const [stats, setStats] = useState({ netRevenue: 0, activeOrders: 0, inventoryCount: 0 });
+    const [stats, setStats] = useState({ netRevenue: 0, activeOrders: 0, activeDevices: 0, inventoryCount: 0 });
     const [recentOrders, setRecentOrders] = useState([]);
     const [inventoryData, setInventoryData] = useState({ critical: [], low: [], highValue: [], all: [] });
     const [alertTab, setAlertTab] = useState('critical');
@@ -81,7 +80,7 @@ const Dashboard = () => {
     const [chartData, setChartData] = useState([]);
     const [loading, setLoading] = useState(true);
     
-    // 🔥 NEW: Deletion Requests State
+    // Deletion Requests State
     const [deletionRequests, setDeletionRequests] = useState([]);
     const [toast, setToast] = useState({ message: '', type: '' });
 
@@ -102,7 +101,10 @@ const Dashboard = () => {
     useEffect(() => {
         const qOrders = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
         const unsubOrders = onSnapshot(qOrders, (snapshot) => {
-            let net = 0; let active = 0;
+            let net = 0; 
+            let activeTickets = 0;
+            let devicesInShop = 0; // 🔥 New Counter
+            
             const recent = [];
             const salesMap = {};
             const repairCounts = {};
@@ -110,9 +112,23 @@ const Dashboard = () => {
 
             snapshot.docs.forEach((doc) => {
                 const data = doc.data();
+                
+                // Financials
                 const paid = Number(data.amountPaid || 0);
                 net += paid;
-                if (data.status === 'In Progress' || data.status === 'Pending') active++;
+
+                // Active Tickets Count
+                if (['In Progress', 'Pending', 'Ready for Pickup'].includes(data.status)) {
+                    activeTickets++;
+                }
+
+                // 🔥 Active Devices Count (Detailed)
+                if (data.status !== 'Collected' && data.status !== 'Void') {
+                    const repairItems = data.items?.filter(i => i.type === 'repair' && !i.collected) || [];
+                    devicesInShop += repairItems.length;
+                }
+
+                // Recent Activity Feed
                 if (recent.length < 5) {
                     recent.push({
                         id: data.ticketId, docId: doc.id,
@@ -120,11 +136,15 @@ const Dashboard = () => {
                         status: data.status, customer: data.customer?.name || 'Guest', cost: data.totalCost
                     });
                 }
+
+                // Chart Data
                 if (data.createdAt && paid > 0) {
                     const date = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
                     const key = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
                     salesMap[key] = (salesMap[key] || 0) + paid;
                 }
+
+                // Intelligence Data
                 if (data.items) {
                     data.items.forEach(item => {
                         if (item.type === 'repair' && item.services) {
@@ -143,7 +163,8 @@ const Dashboard = () => {
 
             setIntelligence(prev => ({ ...prev, topRepairs: sortedRepairs, lowRepairs, topProducts: sortedProducts }));
             const sortedChart = Object.keys(salesMap).map(key => ({ name: key, sales: salesMap[key] })).slice(-7);
-            setStats(prev => ({ ...prev, netRevenue: net, activeOrders: active }));
+            
+            setStats(prev => ({ ...prev, netRevenue: net, activeOrders: activeTickets, activeDevices: devicesInShop }));
             setRecentOrders(recent);
             setChartData(sortedChart.length > 0 ? sortedChart : [{ name: 'Today', sales: 0 }]);
             setLoading(false);
@@ -205,7 +226,7 @@ const Dashboard = () => {
 
             <main className="p-6 max-w-[1600px] mx-auto space-y-8">
                 
-                {/* 🔥 PENDING DELETION REQUESTS (ADMIN ONLY) */}
+                {/* PENDING DELETION REQUESTS */}
                 {deletionRequests.length > 0 && (
                     <div className="bg-red-50 border border-red-200 rounded-2xl p-6 animate-in fade-in slide-in-from-top-4">
                         <div className="flex items-center gap-3 mb-4 text-red-800">
@@ -224,18 +245,8 @@ const Dashboard = () => {
                                         <p className="text-xs text-gray-500 italic bg-gray-50 p-2 rounded border border-gray-100">"{req.reason}"</p>
                                     </div>
                                     <div className="flex gap-2">
-                                        <button 
-                                            onClick={() => handleRejectDelete(req.id)}
-                                            className="flex-1 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center gap-1 transition"
-                                        >
-                                            <X size={14}/> Reject
-                                        </button>
-                                        <button 
-                                            onClick={() => handleApproveDelete(req)}
-                                            className="flex-1 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg flex items-center justify-center gap-1 transition shadow-sm"
-                                        >
-                                            <Trash2 size={14}/> Approve Delete
-                                        </button>
+                                        <button onClick={() => handleRejectDelete(req.id)} className="flex-1 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center justify-center gap-1 transition"><X size={14}/> Reject</button>
+                                        <button onClick={() => handleApproveDelete(req)} className="flex-1 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg flex items-center justify-center gap-1 transition shadow-sm"><Trash2 size={14}/> Delete</button>
                                     </div>
                                 </div>
                             ))}
@@ -245,35 +256,47 @@ const Dashboard = () => {
 
                 {/* 1. TOP METRICS & QUICK ACCESS */}
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
+                    
+                    {/* Financials */}
                     <MetricCard title="Net Revenue" value={formatCurrency(stats.netRevenue)} icon={Wallet} color="green" subtext="Total Cash In Hand" onClick={() => navigate('/admin/performance')} />
-                    <MetricCard title="Active Jobs" value={stats.activeOrders} icon={Wrench} color="purple" subtext="Repairs In Progress" onClick={() => navigate('/admin/orders')} />
-                    <MetricCard title="Portfolio" value="Manage" icon={ImageIcon} color="blue" subtext="Proof of Work Gallery" onClick={() => navigate('/admin/manage-proof-of-work')} />
+                    
+                    {/* Active Tickets */}
+                    <MetricCard title="Active Tickets" value={stats.activeOrders} icon={Wrench} color="purple" subtext="Open Orders" onClick={() => navigate('/admin/orders')} />
+                    
+                    {/* 🔥 NEW: Active Devices Manager */}
+                    <MetricCard title="Device Manager" value={stats.activeDevices} icon={Smartphone} color="blue" subtext="Devices Currently In Shop" onClick={() => navigate('/admin/devices')} />
 
+                    {/* Inventory Alert */}
                     {totalAlerts > 0 ? (
                         <MetricCard title="Inventory Alert" value={totalAlerts} icon={AlertTriangle} color="red" isAlert={true} subtext="Items Low or Out of Stock" onClick={() => navigate('/admin/store')} />
                     ) : (
                         <MetricCard title="Inventory Count" value={stats.inventoryCount} icon={Package} color="blue" subtext="Total Items in Stock" onClick={() => navigate('/admin/store')} />
                     )}
 
+                    {/* Quick Actions */}
                     <div className={`${CARD_STYLE} p-5 flex flex-col justify-between h-full bg-slate-900 border-slate-900 group hover:shadow-xl`}>
                         <div className="flex justify-between items-center mb-2">
                             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Quick Actions</span>
                             <Settings size={18} className="text-slate-500 group-hover:text-white transition-colors duration-500"/>
                         </div>
-                        <div className="grid grid-cols-3 gap-3 h-full items-center">
-                            <button onClick={() => navigate('/admin/users')} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-slate-800 rounded-xl hover:bg-purple-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-purple-500 hover:shadow-lg hover:-translate-y-1">
-                                <Users size={22}/> <span className="text-[10px] font-bold">Staff</span>
+                        <div className="grid grid-cols-2 gap-2 h-full items-center">
+                            <button onClick={() => navigate('/admin/users')} className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-purple-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-purple-500 hover:shadow-lg">
+                                <Users size={18}/> <span className="text-[10px] font-bold">Staff</span>
                             </button>
-                            <button onClick={() => navigate('/admin/payroll')} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-slate-800 rounded-xl hover:bg-green-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-green-500 hover:shadow-lg hover:-translate-y-1">
-                                <Banknote size={22}/> <span className="text-[10px] font-bold">Payroll</span>
+                            <button onClick={() => navigate('/admin/payroll')} className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-green-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-green-500 hover:shadow-lg">
+                                <Banknote size={18}/> <span className="text-[10px] font-bold">Payroll</span>
                             </button>
-                            <button onClick={() => navigate('/admin/pricing')} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-slate-800 rounded-xl hover:bg-blue-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-blue-500 hover:shadow-lg hover:-translate-y-1">
-                                <Smartphone size={22}/> <span className="text-[10px] font-bold">Services</span>
+                            <button onClick={() => navigate('/admin/pricing')} className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-blue-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-blue-500 hover:shadow-lg">
+                                <Smartphone size={18}/> <span className="text-[10px] font-bold">Services</span>
+                            </button>
+                            <button onClick={() => navigate('/admin/manage-proof-of-work')} className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-orange-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-orange-500 hover:shadow-lg">
+                                <ImageIcon size={18}/> <span className="text-[10px] font-bold">Portfolio</span>
                             </button>
                         </div>
                     </div>
                 </div>
 
+                {/* 2. BUSINESS INTELLIGENCE CARDS */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <div className={`${CARD_STYLE} p-5`}>
                         <div className="flex items-center gap-2 mb-4 border-b border-gray-50 pb-3">
@@ -344,6 +367,7 @@ const Dashboard = () => {
                     </div>
                 </div>
 
+                {/* 3. CHART & ACTIVITY */}
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                     <div className={`${CARD_STYLE} p-6 xl:col-span-2`}>
                         <div className="flex justify-between items-center mb-6">
