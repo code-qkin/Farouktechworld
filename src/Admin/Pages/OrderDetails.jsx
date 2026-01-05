@@ -24,9 +24,11 @@ const OrderDetails = () => {
     const [workers, setWorkers] = useState([]);
     const [isUpdating, setIsUpdating] = useState(false);
     
+    // UI State
     const [showReceipt, setShowReceipt] = useState(false);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     
+    // Payment State
     const [paymentInput, setPaymentInput] = useState('');
     const [paymentMethod, setPaymentMethod] = useState('POS'); 
     
@@ -34,6 +36,7 @@ const OrderDetails = () => {
     const [discountInput, setDiscountInput] = useState('');
     const [editingCondition, setEditingCondition] = useState({ index: -1, value: '' });
 
+    // Delete Request
     const [requestModalOpen, setRequestModalOpen] = useState(false);
     const [deleteReason, setDeleteReason] = useState('');
     const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
@@ -44,6 +47,7 @@ const OrderDetails = () => {
 
     useEffect(() => { if (toast.message) setTimeout(() => setToast({message:'', type:''}), 3000); }, [toast.message]);
 
+    // 1. FETCH ORDER
     useEffect(() => {
         const fetchData = async () => {
             let docId = id;
@@ -61,9 +65,12 @@ const OrderDetails = () => {
         fetchData();
     }, [id, navigate]);
 
+    // 2. FETCH WORKERS
     useEffect(() => {
         onSnapshot(collection(db, "Users"), (snap) => setWorkers(snap.docs.map(d => ({ value: d.data().name || d.data().email, label: d.data().name || d.data().email, isTechnician: d.data().isTechnician || d.data().role === 'worker' })).filter(u => u.isTechnician)));
     }, []);
+
+    // --- HANDLERS ---
 
     const isLocked = order?.status === 'Collected' || (order?.amountPaid >= order?.totalCost && order?.totalCost > 0) || order?.status === 'Void';
 
@@ -80,6 +87,7 @@ const OrderDetails = () => {
         navigate('/admin/orders', { state: { orderToEdit: safeOrder } });
     };
 
+    // Add Payment
     const handleAddPayment = async () => {
         const amt = Number(paymentInput);
         if(!amt) return;
@@ -109,7 +117,51 @@ const OrderDetails = () => {
         setIsUpdating(false); setShowPaymentModal(false); setPaymentInput('');
     };
 
-    
+    // 🔥 Remove Single Payment (History Item)
+    const handleRemovePayment = async (index) => {
+        setConfirmConfig({
+            isOpen: true, title: "Remove Entry?", message: "Delete this specific payment?", confirmText: "Delete", confirmColor: "bg-red-600",
+            action: async () => {
+                setIsUpdating(true);
+                try {
+                    await runTransaction(db, async (t) => {
+                        const ref = doc(db, "Orders", order.id);
+                        const docSnap = await t.get(ref);
+                        if (!docSnap.exists()) throw "Order not found";
+                        const data = docSnap.data();
+
+                        const newHistory = [...(data.paymentHistory || [])];
+                        newHistory.splice(index, 1); // Remove item
+
+                        const newPaid = newHistory.reduce((sum, p) => sum + Number(p.amount), 0);
+                        const newBalance = data.totalCost - newPaid;
+                        const newStatus = newBalance <= 0 && data.totalCost > 0 ? 'Paid' : (newPaid > 0 ? 'Part Payment' : 'Unpaid');
+
+                        t.update(ref, {
+                            paymentHistory: newHistory,
+                            amountPaid: newPaid,
+                            balance: newBalance,
+                            paymentStatus: newStatus,
+                            paid: newBalance <= 0
+                        });
+                    });
+                    setToast({ message: "Entry Removed", type: "success" });
+                } catch(e) { setToast({ message: "Failed", type: "error" }); }
+                setIsUpdating(false); setConfirmConfig({...confirmConfig, isOpen: false});
+            }
+        });
+    };
+
+    // 🔥 Reset ALL Payments
+    const handleResetPayment = async () => {
+         setIsUpdating(true);
+         await updateDoc(doc(db, "Orders", order.id), { amountPaid: 0, balance: order.totalCost, paymentStatus: 'Unpaid', paid: false, paymentHistory: [] });
+         setToast({ message: "All Payments Reset", type: "success" });
+         setIsUpdating(false);
+         setConfirmConfig({...confirmConfig, isOpen: false});
+    };
+
+
 
     const handleProcessRefund = async () => {
         const reason = prompt("Enter reason for refund:");
@@ -199,17 +251,33 @@ const OrderDetails = () => {
                 const newItems = JSON.parse(JSON.stringify(data.items));
                 const item = newItems[i];
                 if(item.returned) throw "Already returned";
+                
+                // Restock Inventory
                 if (item.productId) {
                     const invRef = doc(db, "Inventory", item.productId);
-                    const invSnap = await t.get(invRef);
-                    if(invSnap.exists()) t.update(invRef, { stock: increment(returnQty) });
+                    t.update(invRef, { stock: increment(returnQty) });
                 }
-                if (returnQty === item.qty) { newItems[i].returned = true; } else { newItems[i].qty -= returnQty; newItems[i].total = newItems[i].price * newItems[i].qty; newItems.push({ ...item, qty: returnQty, total: item.price * returnQty, returned: true }); }
+                
+                if (returnQty === item.qty) { 
+                    newItems[i].returned = true; 
+                } else { 
+                    newItems[i].qty -= returnQty; 
+                    newItems[i].total = newItems[i].price * newItems[i].qty; 
+                    newItems.push({ ...item, qty: returnQty, total: item.price * returnQty, returned: true }); 
+                }
+                
                 const deduction = item.price * returnQty;
                 const newTotalCost = Math.max(0, (data.totalCost) - deduction);
-                t.update(ref, { items: newItems, totalCost: newTotalCost, balance: newTotalCost - (data.amountPaid || 0) });
+                const newBalance = newTotalCost - (data.amountPaid || 0);
+
+                t.update(ref, { 
+                    items: newItems, 
+                    totalCost: newTotalCost, 
+                    balance: newBalance,
+                    paymentStatus: newBalance < 0 ? 'Refund Due' : (newBalance === 0 ? 'Paid' : 'Part Payment')
+                });
             });
-            setToast({message: "Item Returned", type: 'success'});
+            setToast({message: "Item Returned & Restocked", type: 'success'});
         } catch(e) { setToast({message: "Failed", type: 'error'}); }
         setIsUpdating(false);
     };
@@ -248,14 +316,6 @@ const OrderDetails = () => {
          setIsUpdating(true);
          try { await updateDoc(doc(db, "Orders", order.id), { status: 'Void', paymentStatus: 'Voided', balance: 0 }); navigate('/admin/orders'); } 
          catch(e) { setToast({message: "Void Failed", type: 'error'}); }
-         setIsUpdating(false);
-         setConfirmConfig({...confirmConfig, isOpen: false});
-    };
-
-    const handleResetPayment = async () => {
-         setIsUpdating(true);
-         await updateDoc(doc(db, "Orders", order.id), { amountPaid: 0, balance: order.totalCost, paymentStatus: 'Unpaid', paid: false });
-         setToast({ message: "Payment Reset", type: "success" });
          setIsUpdating(false);
          setConfirmConfig({...confirmConfig, isOpen: false});
     };
@@ -339,7 +399,8 @@ const OrderDetails = () => {
         <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
              <Toast message={toast.message} type={toast.type} onClose={() => setToast({message:'', type:''})} />
              <ConfirmModal isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmText={confirmConfig.confirmText} confirmColor={confirmConfig.confirmColor} onCancel={() => setConfirmConfig({...confirmConfig, isOpen: false})} onConfirm={() => confirmConfig.action && confirmConfig.action(true)} />
-             
+             <PromptModal isOpen={promptConfig.isOpen} title={promptConfig.title} message={promptConfig.message} max={promptConfig.max} onCancel={() => setPromptConfig({...promptConfig, isOpen: false})} onConfirm={promptConfig.action} />
+
              {/* HEADER */}
              <div className="max-w-7xl mx-auto mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <button onClick={() => navigate(-1)} className="flex items-center text-gray-600 hover:text-purple-700 transition bg-white px-4 py-2 rounded-lg shadow-sm border"><ArrowLeft size={20} className="mr-2"/> Back</button>
@@ -390,19 +451,20 @@ const OrderDetails = () => {
                                                         <div className="font-bold text-gray-900 text-base flex items-center gap-2">
                                                             {item.name || item.deviceModel}
                                                             {item.returned && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded border border-red-200">Returned</span>}
-                                                            {/* 🔥 COLLECTED BADGE */}
+                                                            {/* Collected Badge */}
                                                             {item.collected && (
                                                                 <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded border border-green-200 font-bold flex items-center gap-1">
                                                                     <CheckCircle size={10}/> Collected
                                                                 </span>
                                                             )}
-                                                            {/* 🔥 PARTIAL COLLECT TOGGLE */}
+                                                            {/* Partial Collect Toggle */}
                                                             {order.status !== 'Void' && !isReturn && !item.returned && (
                                                                 <button onClick={() => toggleItemCollected(i)} disabled={isUpdating} className={`ml-auto text-[10px] px-2 py-1 rounded border font-bold transition flex items-center gap-1 ${item.collected ? 'text-gray-400 border-gray-200 hover:bg-gray-100' : 'text-green-700 border-green-200 bg-green-50 hover:bg-green-100'}`}>
                                                                     {item.collected ? "Undo Collect" : "Mark Collected"}
                                                                 </button>
                                                             )}
-                                                            {item.type === 'product' && !item.returned && !isReturn && !isLocked && !item.collected && (
+                                                            {/* 🔥 RETURN BUTTON (Visible even if collected) */}
+                                                            {item.type === 'product' && !item.returned && !isReturn && (
                                                                 <button onClick={() => handleVoidProductTrigger(i)} disabled={isUpdating} className="text-red-500 hover:bg-red-50 p-1 rounded ml-2" title="Return Product"><RotateCcw size={16}/></button>
                                                             )}
                                                             {item.type === 'repair' && !isReturn && !item.returned && (item.collected || order.status === 'Completed' || order.status === 'Collected') && (
@@ -507,9 +569,22 @@ const OrderDetails = () => {
                             <div className="mb-6 bg-white p-3 rounded-lg border border-gray-200 text-xs">
                                 <p className="font-bold text-gray-400 uppercase mb-2">History</p>
                                 {order.paymentHistory.map((pay, idx) => (
-                                    <div key={idx} className="flex justify-between py-1 border-b border-gray-100 last:border-0">
-                                        <span>{pay.method} ({new Date(pay.date).toLocaleDateString()})</span>
-                                        <span className="font-bold text-green-600">+{formatCurrency(pay.amount)}</span>
+                                    <div key={idx} className="flex justify-between items-center py-1 border-b border-gray-100 last:border-0 group">
+                                        <div className="flex flex-col">
+                                            <span>{pay.method}</span>
+                                            <span className="text-[9px] text-gray-400">{new Date(pay.date).toLocaleDateString()}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-bold text-green-600">+{formatCurrency(pay.amount)}</span>
+                                            {/* 🔥 UNDO SINGLE PAYMENT */}
+                                            <button 
+                                                onClick={() => handleRemovePayment(idx)}
+                                                className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1"
+                                                title="Delete Payment"
+                                            >
+                                                <Trash2 size={14}/>
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -524,15 +599,16 @@ const OrderDetails = () => {
                                 <button onClick={() => setShowPaymentModal(true)} className="w-full bg-black text-white py-3 rounded-lg font-bold shadow-lg hover:bg-gray-800 transition flex items-center justify-center gap-2"><PlusCircle size={18}/> Record Payment</button>
                             )}
                             
+                            {/* 🔥 RESET PAYMENT (Undo All) */}
                             {order.amountPaid > 0 && order.status !== 'Void' && (
-                                <button onClick={() => setConfirmConfig({isOpen:true, title:"Reset Payment?", message:"Clear payment history?", confirmText:"Reset", action: handleResetPayment})} className="w-full text-gray-400 text-xs hover:text-red-600 py-2">Undo Payment</button>
+                                <button onClick={() => setConfirmConfig({isOpen:true, title:"Reset Payment?", message:"Clear payment history?", confirmText:"Reset", action: handleResetPayment})} className="w-full text-gray-400 text-xs hover:text-red-600 py-2">Undo All Payments</button>
                             )}
                         </div>
                     </div>
                 </div>
             </div>
 
-             {/* Payment Modal with Method */}
+             {/* Payment Modal */}
              {showPaymentModal && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl animate-fade-in-up">
