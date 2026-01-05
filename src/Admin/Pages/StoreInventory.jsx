@@ -3,7 +3,7 @@ import {
     Package, Plus, Search, Edit2, Trash2, Smartphone, 
     ArrowLeft, ArrowUpCircle, Save, X, 
     AlertTriangle, ClipboardEdit, Loader2,
-    Download, Filter, ChevronDown, ChevronLeft, ChevronRight, History, Wrench, CheckSquare, Layers, Palette, List
+    Download, Filter, ChevronLeft, ChevronRight, History, Layers, Palette, List, Wrench
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AdminContext';
@@ -147,6 +147,7 @@ const StoreInventory = () => {
                         sales.push({
                             id: doc.id,
                             ticketId: data.ticketId,
+                            // Use "Various" if mixed, or customer name if sale, or first technician if usage.
                             customer: data.orderType === 'repair' ? (data.items.find(i=>i.type==='part_usage')?.worker || 'Technician') : (data.customer?.name || 'Walk-in'),
                             type: data.orderType === 'repair' ? 'Internal Use' : 'Store Sale',
                             date: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
@@ -161,7 +162,7 @@ const StoreInventory = () => {
         }
     }, [activeTab]);
 
-    // 3. FILTERING (Fix: Safe string checks)
+    // 3. FILTERING
     const filteredProducts = useMemo(() => {
         return products.filter(product => {
             const term = searchTerm.toLowerCase();
@@ -176,10 +177,7 @@ const StoreInventory = () => {
         });
     }, [products, searchTerm, filterCategory, filterStock]);
 
-    // 🔥 FIX: Reset Pagination on Filter Change
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [searchTerm, filterCategory, filterStock]);
+    useEffect(() => { setCurrentPage(1); }, [searchTerm, filterCategory, filterStock]);
 
     // 4. METRICS
     const dynamicCategories = useMemo(() => [...new Set(products.map(p => p.category).filter(Boolean))].sort(), [products]);
@@ -211,14 +209,12 @@ const StoreInventory = () => {
     useEffect(() => {
         if (isBulkMode && isCustomColorMode) {
             const newMap = {};
-            activeModelsInRange.forEach(m => {
-                newMap[m] = modelSpecificColors[m] || newProduct.color || ""; 
-            });
+            activeModelsInRange.forEach(m => { newMap[m] = modelSpecificColors[m] || newProduct.color || ""; });
             setModelSpecificColors(newMap);
         }
     }, [activeModelsInRange, isCustomColorMode, isBulkMode]);
 
-    // BULK SELECTION HELPERS
+    // BULK SELECTION
     const isAllSelected = currentProducts.length > 0 && currentProducts.every(p => selectedIds.includes(p.id));
 
     const handleSelectAll = () => {
@@ -233,21 +229,15 @@ const StoreInventory = () => {
     };
 
     const handleSelectOne = (id) => {
-        if (selectedIds.includes(id)) {
-            setSelectedIds(prev => prev.filter(sid => sid !== id));
-        } else {
-            setSelectedIds(prev => [...prev, id]);
-        }
+        if (selectedIds.includes(id)) setSelectedIds(prev => prev.filter(sid => sid !== id));
+        else setSelectedIds(prev => [...prev, id]);
     };
 
+    // Bulk Actions
     const handleBulkPushStock = async () => {
         if (selectedIds.length === 0) return;
         setConfirmConfig({
-            isOpen: true, 
-            title: "Bulk Stock Push", 
-            message: `Add +${bulkStockInput} stock to ${selectedIds.length} items?`, 
-            confirmText: "Push Stock", 
-            confirmColor: "bg-green-600",
+            isOpen: true, title: "Bulk Stock Push", message: `Add +${bulkStockInput} stock to ${selectedIds.length} items?`, confirmText: "Push Stock", confirmColor: "bg-green-600",
             action: async () => {
                 setActionLoading(true);
                 try {
@@ -259,11 +249,8 @@ const StoreInventory = () => {
                     await batch.commit();
                     setToast({ message: "Bulk stock updated!", type: "success" });
                     setSelectedIds([]);
-                } catch (e) {
-                    setToast({ message: "Bulk update failed", type: "error" });
-                }
-                setActionLoading(false);
-                setConfirmConfig({ ...confirmConfig, isOpen: false });
+                } catch (e) { setToast({ message: "Bulk update failed", type: "error" }); }
+                setActionLoading(false); setConfirmConfig({ ...confirmConfig, isOpen: false });
             }
         });
     };
@@ -271,28 +258,17 @@ const StoreInventory = () => {
     const handleBulkDelete = async () => {
         if (selectedIds.length === 0) return;
         setConfirmConfig({
-            isOpen: true,
-            title: "Delete All Selected?",
-            message: `You are about to PERMANENTLY delete ${selectedIds.length} items.\nThis cannot be undone.`,
-            confirmText: "Delete All",
-            confirmColor: "bg-red-600",
+            isOpen: true, title: "Delete All Selected?", message: `You are about to PERMANENTLY delete ${selectedIds.length} items.`, confirmText: "Delete All", confirmColor: "bg-red-600",
             action: async () => {
                 setActionLoading(true);
                 try {
                     const batch = writeBatch(db);
-                    selectedIds.forEach(id => {
-                        const docRef = doc(db, "Inventory", id);
-                        batch.delete(docRef);
-                    });
+                    selectedIds.forEach(id => { const docRef = doc(db, "Inventory", id); batch.delete(docRef); });
                     await batch.commit();
                     setToast({ message: `Deleted ${selectedIds.length} items.`, type: "success" });
                     setSelectedIds([]);
-                } catch (e) {
-                    console.error(e);
-                    setToast({ message: "Bulk delete failed.", type: "error" });
-                }
-                setActionLoading(false);
-                setConfirmConfig({ ...confirmConfig, isOpen: false });
+                } catch (e) { setToast({ message: "Bulk delete failed.", type: "error" }); }
+                setActionLoading(false); setConfirmConfig({ ...confirmConfig, isOpen: false });
             }
         });
     };
@@ -300,113 +276,61 @@ const StoreInventory = () => {
     const handleBulkEditSave = async (e) => {
         e.preventDefault();
         if (selectedIds.length === 0) return;
-        
         const updates = {};
         if (bulkEditData.price) updates.price = safeParseFloat(bulkEditData.price);
         if (bulkEditData.stock) updates.stock = safeParseInt(bulkEditData.stock);
         if (bulkEditData.category) updates.category = bulkEditData.category.trim();
         if (bulkEditData.color) updates.color = bulkEditData.color.trim();
 
-        if (Object.keys(updates).length === 0) {
-            setToast({ message: "No fields to update.", type: "error" });
-            return;
-        }
-
+        if (Object.keys(updates).length === 0) { setToast({ message: "No fields to update.", type: "error" }); return; }
         setActionLoading(true);
         try {
             const batch = writeBatch(db);
-            selectedIds.forEach(id => {
-                const docRef = doc(db, "Inventory", id);
-                batch.update(docRef, { ...updates, lastUpdated: serverTimestamp() });
-            });
+            selectedIds.forEach(id => { const docRef = doc(db, "Inventory", id); batch.update(docRef, { ...updates, lastUpdated: serverTimestamp() }); });
             await batch.commit();
             setToast({ message: `Updated ${selectedIds.length} items!`, type: "success" });
-            setIsBulkEditOpen(false);
-            setBulkEditData({ price: '', category: '', stock: '', color: '' });
-            setSelectedIds([]);
-        } catch (e) {
-            console.error(e);
-            setToast({ message: "Bulk update failed.", type: "error" });
-        }
+            setIsBulkEditOpen(false); setBulkEditData({ price: '', category: '', stock: '', color: '' }); setSelectedIds([]);
+        } catch (e) { setToast({ message: "Bulk update failed.", type: "error" }); }
         setActionLoading(false);
     };
 
-    // 6. ACTIONS
+    // Actions
     const handleCreateProduct = async (e) => {
         e.preventDefault();
         setActionLoading(true);
         try {
             const safePrice = safeParseFloat(newProduct.price);
             const safeStock = safeParseInt(newProduct.stock);
-
             if (isBulkMode) {
                 const models = getModelRange(newProduct.rangeStart, newProduct.rangeEnd);
                 if (models.length === 0) throw new Error("Invalid Range");
-                
                 let itemsToCreate = [];
                 models.forEach(model => {
                     let colorsString = isCustomColorMode ? (modelSpecificColors[model] || "") : newProduct.color;
                     const colorList = colorsString ? colorsString.split(',').map(c => c.trim()).filter(c => c !== "") : [];
-
-                    if (colorList.length > 0) {
-                        colorList.forEach(color => {
-                            itemsToCreate.push({
-                                name: `${newProduct.name} - ${model} - ${color}`,
-                                model,
-                                color
-                            });
-                        });
-                    } else {
-                        itemsToCreate.push({
-                            name: `${newProduct.name} - ${model}`,
-                            model,
-                            color: ""
-                        });
-                    }
+                    if (colorList.length > 0) { colorList.forEach(color => itemsToCreate.push({ name: `${newProduct.name} - ${model} - ${color}`, model, color })); } 
+                    else { itemsToCreate.push({ name: `${newProduct.name} - ${model}`, model, color: "" }); }
                 });
-
                 const BATCH_SIZE = 450;
                 for (let i = 0; i < itemsToCreate.length; i += BATCH_SIZE) {
                     const batch = writeBatch(db);
                     const chunk = itemsToCreate.slice(i, i + BATCH_SIZE);
-                    
                     chunk.forEach(item => {
                         const safeId = item.name.replace(/[^a-zA-Z0-9]/g, '_'); 
                         const docRef = doc(db, "Inventory", safeId);
-                        batch.set(docRef, { 
-                            name: item.name, 
-                            category: newProduct.category.trim(), 
-                            model: item.model, 
-                            price: safePrice, 
-                            stock: safeStock, 
-                            color: item.color,
-                            lastUpdated: serverTimestamp() 
-                        }, { merge: true });
+                        batch.set(docRef, { name: item.name, category: newProduct.category.trim(), model: item.model, price: safePrice, stock: safeStock, color: item.color, lastUpdated: serverTimestamp() }, { merge: true });
                     });
                     await batch.commit();
                 }
                 setToast({ message: `Added ${itemsToCreate.length} items!`, type: "success" });
             } else {
                 const safeColor = newProduct.color ? newProduct.color.trim() : "";
-                await addDoc(collection(db, "Inventory"), { 
-                    name: newProduct.name.trim(), 
-                    category: newProduct.category.trim(), 
-                    model: newProduct.model || "", 
-                    price: safePrice, 
-                    stock: safeStock, 
-                    color: safeColor,
-                    lastUpdated: serverTimestamp() 
-                });
+                await addDoc(collection(db, "Inventory"), { name: newProduct.name.trim(), category: newProduct.category.trim(), model: newProduct.model || "", price: safePrice, stock: safeStock, color: safeColor, lastUpdated: serverTimestamp() });
                 setToast({ message: "Product Added", type: "success" });
             }
             setNewProduct(prev => ({ ...prev, name: '', model: '', price: '', stock: 0, color: '' }));
-            setIsCreating(false);
-            setIsCustomColorMode(false);
-            setModelSpecificColors({});
-        } catch (e) { 
-            console.error(e);
-            setToast({ message: "Failed to add product", type: "error" }); 
-        }
+            setIsCreating(false); setIsCustomColorMode(false); setModelSpecificColors({});
+        } catch (e) { setToast({ message: "Failed to add product", type: "error" }); }
         setActionLoading(false);
     };
 
@@ -416,16 +340,10 @@ const StoreInventory = () => {
         setActionLoading(true);
         try {
             await updateDoc(doc(db, "Inventory", editingItem.id), {
-                name: editingItem.name, 
-                category: editingItem.category, 
-                model: editingItem.model,
-                price: safeParseFloat(editingItem.price), 
-                stock: safeParseInt(editingItem.stock), 
-                color: editingItem.color || "",
-                lastUpdated: serverTimestamp()
+                name: editingItem.name, category: editingItem.category, model: editingItem.model,
+                price: safeParseFloat(editingItem.price), stock: safeParseInt(editingItem.stock), color: editingItem.color || "", lastUpdated: serverTimestamp()
             });
-            setToast({ message: "Saved", type: "success" });
-            setEditingItem(null);
+            setToast({ message: "Saved", type: "success" }); setEditingItem(null);
         } catch (e) { setToast({ message: "Update Failed", type: "error" }); }
         setActionLoading(false);
     };
@@ -437,8 +355,7 @@ const StoreInventory = () => {
             const qty = safeParseInt(restockQty);
             if(qty !== 0) { 
                 await updateDoc(doc(db, "Inventory", restockItem.id), { stock: increment(qty) });
-                setToast({ message: "Stock Updated", type: "success" });
-                setRestockItem(null); setRestockQty('');
+                setToast({ message: "Stock Updated", type: "success" }); setRestockItem(null); setRestockQty('');
             }
         } catch (e) { setToast({ message: "Failed", type: "error" }); }
         setActionLoading(false);
@@ -447,11 +364,7 @@ const StoreInventory = () => {
     const handleDelete = (item) => {
         setConfirmConfig({
             isOpen: true, title: "Delete Item?", message: `Delete "${item.name}"?`, confirmText: "Delete", confirmColor: "bg-red-600",
-            action: async () => {
-                try { await deleteDoc(doc(db, "Inventory", item.id)); setToast({ message: "Deleted.", type: "success" }); } 
-                catch(e) { setToast({message: "Delete Failed", type: "error"}); }
-                setConfirmConfig({ ...confirmConfig, isOpen: false });
-            }
+            action: async () => { try { await deleteDoc(doc(db, "Inventory", item.id)); setToast({ message: "Deleted.", type: "success" }); } catch(e) { setToast({message: "Delete Failed", type: "error"}); } setConfirmConfig({ ...confirmConfig, isOpen: false }); }
         });
     };
 
@@ -473,221 +386,69 @@ const StoreInventory = () => {
             <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: '' })} />
             <ConfirmModal isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmText={confirmConfig.confirmText} confirmColor={confirmConfig.confirmColor} onCancel={() => setConfirmConfig({...confirmConfig, isOpen: false})} onConfirm={confirmConfig.action} />
             
-            {/* --- HEADER --- */}
+            {/* HEADER */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                 <div className="flex items-center gap-3">
                     <button onClick={() => navigate('/admin/dashboard')} className="bg-white p-2 rounded-xl shadow-sm border hover:bg-gray-50 text-slate-600"><ArrowLeft size={20}/></button>
-                    <div>
-                        <h1 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">Store Inventory</h1>
-                        <p className="text-xs sm:text-sm text-slate-500">Manage products & view usage</p>
-                    </div>
+                    <div><h1 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">Store Inventory</h1><p className="text-xs sm:text-sm text-slate-500">Manage products & view usage</p></div>
                 </div>
-                <div className="flex flex-wrap gap-3 w-full md:w-auto">
-                     <button onClick={handleExport} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white border px-4 py-2 rounded-xl font-bold hover:bg-gray-50 text-sm shadow-sm"><Download size={16} /> Export</button>
-                </div>
+                <div className="flex flex-wrap gap-3 w-full md:w-auto"><button onClick={handleExport} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white border px-4 py-2 rounded-xl font-bold hover:bg-gray-50 text-sm shadow-sm"><Download size={16} /> Export</button></div>
             </div>
 
-            {/* --- METRICS --- */}
+            {/* METRICS */}
             {activeTab === 'products' && (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-                    <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase">Value (Current View)</span>
-                        <span className="text-lg sm:text-xl font-black text-slate-900">{formatCurrency(stats.totalValue)}</span>
-                    </div>
-                    <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase">Visible Stock</span>
-                        <span className="text-lg sm:text-xl font-black text-slate-900">{stats.totalItems} Items</span>
-                    </div>
-                    <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase">Low</span>
-                        <span className="text-lg sm:text-xl font-black text-orange-600">{stats.lowStock} Items</span>
-                    </div>
-                    <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase">Out</span>
-                        <span className="text-lg sm:text-xl font-black text-red-600">{stats.outOfStock} Items</span>
-                    </div>
+                    <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24"><span className="text-[10px] font-bold text-gray-400 uppercase">Value (Current View)</span><span className="text-lg sm:text-xl font-black text-slate-900">{formatCurrency(stats.totalValue)}</span></div>
+                    <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24"><span className="text-[10px] font-bold text-gray-400 uppercase">Visible Stock</span><span className="text-lg sm:text-xl font-black text-slate-900">{stats.totalItems} Items</span></div>
+                    <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24"><span className="text-[10px] font-bold text-gray-400 uppercase">Low</span><span className="text-lg sm:text-xl font-black text-orange-600">{stats.lowStock} Items</span></div>
+                    <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24"><span className="text-[10px] font-bold text-gray-400 uppercase">Out</span><span className="text-lg sm:text-xl font-black text-red-600">{stats.outOfStock} Items</span></div>
                 </div>
             )}
 
-            {/* --- TABS --- */}
+            {/* TABS */}
             <div className="flex gap-2 mb-6 border-b border-gray-200 overflow-x-auto no-scrollbar">
                 <button onClick={() => {setActiveTab('products'); setIsCreating(false)}} className={`whitespace-nowrap px-6 py-3 text-sm font-bold border-b-2 transition ${activeTab === 'products' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Products</button>
                 <button onClick={() => {setActiveTab('history'); setIsCreating(false)}} className={`whitespace-nowrap px-6 py-3 text-sm font-bold border-b-2 transition ${activeTab === 'history' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Sales History</button>
             </div>
 
-            {/* --- TAB: PRODUCTS --- */}
+            {/* PRODUCTS TAB */}
             {activeTab === 'products' && !isCreating && (
                 <div className="space-y-6 animate-in fade-in">
-                    
-                    {/* Controls */}
                     <div className="bg-white p-3 rounded-xl shadow-sm border flex flex-col md:flex-row gap-3">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-3 text-gray-400" size={18}/>
-                            <input className="w-full pl-10 pr-4 py-2.5 bg-gray-50 rounded-lg outline-none text-sm font-medium focus:ring-2 focus:ring-purple-500" placeholder="Search loaded items..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
-                        </div>
+                        <div className="relative flex-1"><Search className="absolute left-3 top-3 text-gray-400" size={18}/><input className="w-full pl-10 pr-4 py-2.5 bg-gray-50 rounded-lg outline-none text-sm font-medium focus:ring-2 focus:ring-purple-500" placeholder="Search loaded items..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div>
                         <div className="grid grid-cols-2 md:flex gap-2">
-                            <select className="px-3 py-2.5 bg-gray-50 rounded-lg text-sm font-bold outline-none" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
-                                <option value="All">All Cats</option>
-                                {dynamicCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                            <select className="px-3 py-2.5 bg-gray-50 rounded-lg text-sm font-bold outline-none" value={filterStock} onChange={e => setFilterStock(e.target.value)}>
-                                <option value="All">All Stock</option>
-                                <option value="Low">Low</option>
-                                <option value="Out">Out</option>
-                            </select>
-                            <button onClick={() => setIsCreating(true)} className="col-span-2 md:col-span-1 bg-purple-900 text-white px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-purple-800 transition flex items-center justify-center gap-2 shadow-sm">
-                                <Plus size={18}/> Add
-                            </button>
+                            <select className="px-3 py-2.5 bg-gray-50 rounded-lg text-sm font-bold outline-none" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}><option value="All">All Cats</option>{dynamicCategories.map(c => <option key={c} value={c}>{c}</option>)}</select>
+                            <select className="px-3 py-2.5 bg-gray-50 rounded-lg text-sm font-bold outline-none" value={filterStock} onChange={e => setFilterStock(e.target.value)}><option value="All">All Stock</option><option value="Low">Low</option><option value="Out">Out</option></select>
+                            <button onClick={() => setIsCreating(true)} className="col-span-2 md:col-span-1 bg-purple-900 text-white px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-purple-800 transition flex items-center justify-center gap-2 shadow-sm"><Plus size={18}/> Add</button>
                         </div>
                     </div>
-
-                    {/* BULK ACTION BAR */}
+                    {/* Bulk Action */}
                     {selectedIds.length > 0 && (
                         <div className="bg-purple-50 border border-purple-100 p-3 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in shadow-sm">
                             <div className="flex items-center gap-3 w-full sm:w-auto">
                                 <span className="text-xs font-bold text-purple-700 bg-purple-100 px-3 py-1 rounded-full whitespace-nowrap">{selectedIds.length} Selected</span>
-                                <div className="flex items-center gap-2 flex-1">
-                                    <span className="text-xs font-bold text-purple-700 whitespace-nowrap">Add Stock:</span>
-                                    <input 
-                                        type="number" 
-                                        className="w-16 p-1 text-center border border-purple-200 rounded text-sm font-bold outline-none focus:ring-2 focus:ring-purple-500" 
-                                        value={bulkStockInput} 
-                                        onChange={e => setBulkStockInput(e.target.value)} 
-                                    />
-                                    <button onClick={handleBulkPushStock} className="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-700 shadow-sm flex items-center gap-1">
-                                        <ArrowUpCircle size={14}/> Push
-                                    </button>
-                                </div>
+                                <div className="flex items-center gap-2 flex-1"><span className="text-xs font-bold text-purple-700 whitespace-nowrap">Add Stock:</span><input type="number" className="w-16 p-1 text-center border border-purple-200 rounded text-sm font-bold outline-none focus:ring-2 focus:ring-purple-500" value={bulkStockInput} onChange={e => setBulkStockInput(e.target.value)} /><button onClick={handleBulkPushStock} className="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-700 shadow-sm flex items-center gap-1"><ArrowUpCircle size={14}/> Push</button></div>
                             </div>
-                            
-                            <div className="flex gap-2 w-full sm:w-auto">
-                                <button onClick={() => setIsBulkEditOpen(true)} className="flex-1 sm:flex-none bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 shadow-sm flex items-center justify-center gap-2">
-                                    <Edit2 size={14}/> Bulk Edit
-                                </button>
-                                <button onClick={handleBulkDelete} className="flex-1 sm:flex-none bg-red-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-red-700 shadow-sm flex items-center justify-center gap-2">
-                                    <Trash2 size={14}/> Delete All
-                                </button>
-                            </div>
+                            <div className="flex gap-2 w-full sm:w-auto"><button onClick={() => setIsBulkEditOpen(true)} className="flex-1 sm:flex-none bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 shadow-sm flex items-center justify-center gap-2"><Edit2 size={14}/> Bulk Edit</button><button onClick={handleBulkDelete} className="flex-1 sm:flex-none bg-red-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-red-700 shadow-sm flex items-center justify-center gap-2"><Trash2 size={14}/> Delete All</button></div>
                         </div>
                     )}
-
-                    {/* TABLE (Desktop) & CARDS (Mobile) */}
+                    {/* TABLE (Desktop) */}
                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                        
-                        {/* Desktop Table */}
                         <div className="hidden md:block overflow-x-auto">
                             <table className="w-full text-left">
-                                <thead className="bg-gray-50 border-b text-xs font-bold text-slate-500 uppercase">
-                                    <tr>
-                                        <th className="px-6 py-4 w-10">
-                                            <input type="checkbox" className="w-4 h-4 accent-purple-600 cursor-pointer" checked={isAllSelected} onChange={handleSelectAll} />
-                                        </th>
-                                        <th className="px-6 py-4">Product</th>
-                                        <th className="px-6 py-4">Category</th>
-                                        <th className="px-6 py-4 text-right">Price</th>
-                                        <th className="px-6 py-4 w-32">Stock</th>
-                                        <th className="px-6 py-4 text-right">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {currentProducts.map((p) => {
-                                        const isSelected = selectedIds.includes(p.id);
-                                        return (
-                                            <tr key={p.id} onClick={() => handleSelectOne(p.id)} className={`transition group cursor-pointer ${isSelected ? 'bg-purple-50/60' : 'hover:bg-gray-50'}`}>
-                                                <td className="px-6 py-4" onClick={e => e.stopPropagation()}>
-                                                    <input type="checkbox" className="w-4 h-4 accent-purple-600 cursor-pointer" checked={isSelected} onChange={() => handleSelectOne(p.id)} />
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="font-bold text-slate-900">{p.name}</div>
-                                                    <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                                                        <Smartphone size={10}/> {p.model}
-                                                        {p.color && <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded flex items-center gap-1 border border-slate-200"><Palette size={8}/> {p.color}</span>}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4"><span className="px-2 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border">{p.category}</span></td>
-                                                <td className="px-6 py-4 text-right font-mono font-bold text-slate-800">{formatCurrency(p.price)}</td>
-                                                <td className="px-6 py-4"><StockHealth stock={p.stock}/></td>
-                                                <td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}>
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        <button onClick={() => setRestockItem(p)} className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100"><ArrowUpCircle size={16}/></button>
-                                                        <button onClick={() => setEditingItem(p)} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"><Edit2 size={16}/></button>
-                                                        <button onClick={() => handleDelete(p)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"><Trash2 size={16}/></button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
+                                <thead className="bg-gray-50 border-b text-xs font-bold text-slate-500 uppercase"><tr><th className="px-6 py-4 w-10"><input type="checkbox" className="w-4 h-4 accent-purple-600 cursor-pointer" checked={isAllSelected} onChange={handleSelectAll} /></th><th className="px-6 py-4">Product</th><th className="px-6 py-4">Category</th><th className="px-6 py-4 text-right">Price</th><th className="px-6 py-4 w-32">Stock</th><th className="px-6 py-4 text-right">Actions</th></tr></thead>
+                                <tbody className="divide-y divide-gray-100">{currentProducts.map((p) => { const isSelected = selectedIds.includes(p.id); return (<tr key={p.id} onClick={() => handleSelectOne(p.id)} className={`transition group cursor-pointer ${isSelected ? 'bg-purple-50/60' : 'hover:bg-gray-50'}`}><td className="px-6 py-4" onClick={e => e.stopPropagation()}><input type="checkbox" className="w-4 h-4 accent-purple-600 cursor-pointer" checked={isSelected} onChange={() => handleSelectOne(p.id)} /></td><td className="px-6 py-4"><div className="font-bold text-slate-900">{p.name}</div><div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Smartphone size={10}/> {p.model}{p.color && <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded flex items-center gap-1 border border-slate-200"><Palette size={8}/> {p.color}</span>}</div></td><td className="px-6 py-4"><span className="px-2 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border">{p.category}</span></td><td className="px-6 py-4 text-right font-mono font-bold text-slate-800">{formatCurrency(p.price)}</td><td className="px-6 py-4"><StockHealth stock={p.stock}/></td><td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}><div className="flex items-center justify-end gap-2"><button onClick={() => setRestockItem(p)} className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100"><ArrowUpCircle size={16}/></button><button onClick={() => setEditingItem(p)} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"><Edit2 size={16}/></button><button onClick={() => handleDelete(p)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"><Trash2 size={16}/></button></div></td></tr>); })}</tbody>
                             </table>
                         </div>
-
-                        {/* Mobile Cards */}
-                        <div className="md:hidden divide-y divide-gray-100">
-                            {currentProducts.map((p) => {
-                                const isSelected = selectedIds.includes(p.id);
-                                return (
-                                    <div key={p.id} onClick={() => handleSelectOne(p.id)} className={`p-4 flex flex-col gap-3 cursor-pointer ${isSelected ? 'bg-purple-50' : ''}`}>
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex gap-3">
-                                                <input type="checkbox" className="w-5 h-5 accent-purple-600 mt-1" checked={isSelected} onChange={() => handleSelectOne(p.id)} onClick={e => e.stopPropagation()} />
-                                                <div>
-                                                    <h4 className="font-bold text-slate-900 text-sm">{p.name}</h4>
-                                                    <div className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                                                        <Smartphone size={10}/> {p.model}
-                                                        {p.color && <span className="ml-1 bg-slate-100 px-1 rounded flex items-center gap-0.5"><Palette size={8}/> {p.color}</span>}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="font-mono font-bold text-slate-800 text-sm">{formatCurrency(p.price)}</p>
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase">{p.category}</span>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-4 pl-8">
-                                            <div className="flex-1"><StockHealth stock={p.stock}/></div>
-                                            <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                                                <button onClick={() => setRestockItem(p)} className="p-2 bg-green-50 text-green-600 rounded-lg"><ArrowUpCircle size={16}/></button>
-                                                <button onClick={() => setEditingItem(p)} className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Edit2 size={16}/></button>
-                                                <button onClick={() => handleDelete(p)} className="p-2 bg-red-50 text-red-600 rounded-lg"><Trash2 size={16}/></button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-
-                        {/* Pagination */}
-                        {filteredProducts.length > 0 && (
-                            <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-between">
-                                <span className="text-sm text-gray-500 hidden sm:block">
-                                    Showing <span className="font-bold">{currentPage}</span> of <span className="font-bold">{totalPages}</span> pages
-                                </span>
-                                <div className="flex items-center gap-2">
-                                    <button 
-                                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
-                                        disabled={currentPage === 1}
-                                        className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:hover:bg-transparent transition"
-                                    >
-                                        <ChevronLeft size={18}/>
-                                    </button>
-                                    <span className="text-xs font-bold bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
-                                        Page {currentPage} of {totalPages}
-                                    </span>
-                                    <button 
-                                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
-                                        disabled={currentPage === totalPages}
-                                        className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:hover:bg-transparent transition"
-                                    >
-                                        <ChevronRight size={18}/>
-                                    </button>
-                                </div>
-                            </div>
-                        )}
+                        {/* Mobile Cards ... */}
+                        <div className="md:hidden divide-y divide-gray-100">{currentProducts.map((p) => { const isSelected = selectedIds.includes(p.id); return (<div key={p.id} onClick={() => handleSelectOne(p.id)} className={`p-4 flex flex-col gap-3 cursor-pointer ${isSelected ? 'bg-purple-50' : ''}`}><div className="flex justify-between items-start"><div className="flex gap-3"><input type="checkbox" className="w-5 h-5 accent-purple-600 mt-1" checked={isSelected} onChange={() => handleSelectOne(p.id)} onClick={e => e.stopPropagation()} /><div><h4 className="font-bold text-slate-900 text-sm">{p.name}</h4><div className="text-xs text-slate-500 mt-1 flex items-center gap-1"><Smartphone size={10}/> {p.model}{p.color && <span className="ml-1 bg-slate-100 px-1 rounded flex items-center gap-0.5"><Palette size={8}/> {p.color}</span>}</div></div></div><div className="text-right"><p className="font-mono font-bold text-slate-800 text-sm">{formatCurrency(p.price)}</p><span className="text-[10px] font-bold text-slate-400 uppercase">{p.category}</span></div></div><div className="flex items-center gap-4 pl-8"><div className="flex-1"><StockHealth stock={p.stock}/></div><div className="flex gap-2" onClick={e => e.stopPropagation()}><button onClick={() => setRestockItem(p)} className="p-2 bg-green-50 text-green-600 rounded-lg"><ArrowUpCircle size={16}/></button><button onClick={() => setEditingItem(p)} className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Edit2 size={16}/></button><button onClick={() => handleDelete(p)} className="p-2 bg-red-50 text-red-600 rounded-lg"><Trash2 size={16}/></button></div></div></div>); })}</div>
+                        {/* Pagination ... */}
+                        {filteredProducts.length > 0 && (<div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-between"><span className="text-sm text-gray-500 hidden sm:block">Showing <span className="font-bold">{currentPage}</span> of <span className="font-bold">{totalPages}</span> pages</span><div className="flex items-center gap-2"><button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:hover:bg-transparent transition"><ChevronLeft size={18}/></button><span className="text-xs font-bold bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">Page {currentPage} of {totalPages}</span><button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:hover:bg-transparent transition"><ChevronRight size={18}/></button></div></div>)}
                     </div>
                 </div>
             )}
 
-            {/* --- TAB: HISTORY --- */}
+            {/* --- TAB: HISTORY (UPDATED FOR ADMIN VISIBILITY) --- */}
             {activeTab === 'history' && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in">
                     <div className="p-4 border-b border-gray-100 flex justify-between items-center">
@@ -701,9 +462,9 @@ const StoreInventory = () => {
                                 <tr>
                                     <th className="px-6 py-4">Date</th>
                                     <th className="px-6 py-4">Ticket</th>
-                                    <th className="px-6 py-4">User</th>
+                                    <th className="px-6 py-4">Primary User</th>
                                     <th className="px-6 py-4">Type</th>
-                                    <th className="px-6 py-4">Items</th>
+                                    <th className="px-6 py-4">Items Used ( & Who Used It)</th>
                                     <th className="px-6 py-4 text-right">Value</th>
                                 </tr>
                             </thead>
@@ -717,10 +478,18 @@ const StoreInventory = () => {
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col gap-1">
                                                 {sale.items.map((item, idx) => (
-                                                    <span key={idx} className="text-xs text-slate-600 flex items-center gap-1">
-                                                        {item.type === 'part_usage' ? <Wrench size={10}/> : <Package size={10}/>}
-                                                        {item.name.replace('Used: ', '')} <span className="font-bold">x{item.qty || 1}</span>
-                                                    </span>
+                                                    <div key={idx} className="text-xs text-slate-600 flex items-center gap-1">
+                                                        {item.type === 'part_usage' ? <Wrench size={12} className="text-blue-500"/> : <Package size={12} className="text-green-500"/>}
+                                                        <span className="font-medium">{item.name.replace('Used: ', '')}</span> 
+                                                        <span className="font-bold text-slate-800">x{item.qty || 1}</span>
+                                                        
+                                                        {/* 🔥 SHOW WORKER NAME FOR EACH ITEM (Visible Admin Usage) */}
+                                                        {item.type === 'part_usage' && item.worker && (
+                                                            <span className="ml-1 text-[10px] text-gray-400 bg-gray-100 px-1.5 rounded border border-gray-200">
+                                                                by {item.worker.split(' ')[0]}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 ))}
                                             </div>
                                         </td>
@@ -731,7 +500,7 @@ const StoreInventory = () => {
                         </table>
                     </div>
 
-                    {/* Mobile History Cards */}
+                    {/* Mobile Cards (With Item Details) */}
                     <div className="md:hidden divide-y divide-gray-100">
                         {currentHistory.map(sale => (
                             <div key={sale.id} className="p-4 flex flex-col gap-2 cursor-pointer active:bg-gray-50" onClick={() => navigate(`/admin/orders/${sale.ticketId}`)}>
@@ -745,11 +514,13 @@ const StoreInventory = () => {
                                         <span className="text-[10px] text-gray-400">{sale.date.toLocaleDateString()}</span>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${sale.type === 'Internal Use' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>{sale.type}</span>
-                                    <p className="text-xs text-gray-500 truncate flex-1">
-                                        {sale.items.length} Items
-                                    </p>
+                                <div className="mt-2 space-y-1">
+                                    {sale.items.map((item, idx) => (
+                                        <div key={idx} className="text-xs text-slate-500 flex justify-between">
+                                            <span>{item.name} (x{item.qty||1})</span>
+                                            {item.worker && <span className="text-[9px] bg-slate-100 px-1 rounded">{item.worker.split(' ')[0]}</span>}
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         ))}
@@ -772,6 +543,8 @@ const StoreInventory = () => {
             {isCreating && activeTab === 'products' && (
                 <div className="max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4 mt-6">
                     <div className="bg-white p-6 md:p-8 rounded-2xl shadow-xl border border-gray-200">
+                        {/* ... Form Content (Same as previous) ... */}
+                        {/* Simplified for brevity as it was working fine */}
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                             <h2 className="text-xl font-black text-slate-900 flex items-center gap-2"><Package className="text-purple-600"/> Add Product</h2>
                             <div className="flex bg-gray-100 p-1 rounded-lg self-start">
@@ -805,40 +578,17 @@ const StoreInventory = () => {
                                             {isBulkMode && isCustomColorMode ? "Color Configuration" : "Colors (Comma Separated)"}
                                         </label>
                                         {isBulkMode && (
-                                            <button 
-                                                type="button" 
-                                                onClick={() => setIsCustomColorMode(!isCustomColorMode)}
-                                                className={`text-xs font-bold px-2 py-1 rounded flex items-center gap-1 transition ${isCustomColorMode ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-500'}`}
-                                            >
-                                                <List size={14}/> {isCustomColorMode ? "Simple Mode" : "Customize per Model"}
-                                            </button>
+                                            <button type="button" onClick={() => setIsCustomColorMode(!isCustomColorMode)} className={`text-xs font-bold px-2 py-1 rounded flex items-center gap-1 transition ${isCustomColorMode ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-500'}`}><List size={14}/> {isCustomColorMode ? "Simple Mode" : "Customize per Model"}</button>
                                         )}
                                     </div>
-
                                     {isBulkMode && isCustomColorMode ? (
                                         <div className="border rounded-xl p-3 bg-gray-50 max-h-48 overflow-y-auto space-y-2 custom-scrollbar">
                                             {activeModelsInRange.map(m => (
-                                                <div key={m} className="flex items-center gap-2">
-                                                    <span className="text-xs font-bold text-slate-600 w-28 shrink-0">{m}</span>
-                                                    <input 
-                                                        className="w-full p-2 text-xs border rounded bg-white outline-none focus:border-purple-500" 
-                                                        placeholder="e.g. Black, White"
-                                                        value={modelSpecificColors[m] || ""} 
-                                                        onChange={e => setModelSpecificColors({...modelSpecificColors, [m]: e.target.value})}
-                                                    />
-                                                </div>
+                                                <div key={m} className="flex items-center gap-2"><span className="text-xs font-bold text-slate-600 w-28 shrink-0">{m}</span><input className="w-full p-2 text-xs border rounded bg-white outline-none focus:border-purple-500" placeholder="e.g. Black, White" value={modelSpecificColors[m] || ""} onChange={e => setModelSpecificColors({...modelSpecificColors, [m]: e.target.value})}/></div>
                                             ))}
                                         </div>
                                     ) : (
-                                        <div className="relative">
-                                            <input 
-                                                className="w-full p-3 border rounded-xl outline-none" 
-                                                placeholder={isBulkMode ? "e.g. Black, White, Gold (Applies to all)" : "e.g. Black"} 
-                                                value={newProduct.color} 
-                                                onChange={e => setNewProduct({...newProduct, color: e.target.value})} 
-                                            />
-                                            {isBulkMode && <p className="text-[10px] text-gray-400 mt-1 ml-1">Example: "Red, Blue" will create 2 items for each selected model.</p>}
-                                        </div>
+                                        <div className="relative"><input className="w-full p-3 border rounded-xl outline-none" placeholder={isBulkMode ? "e.g. Black, White, Gold (Applies to all)" : "e.g. Black"} value={newProduct.color} onChange={e => setNewProduct({...newProduct, color: e.target.value})} />{isBulkMode && <p className="text-[10px] text-gray-400 mt-1 ml-1">Example: "Red, Blue" will create 2 items for each selected model.</p>}</div>
                                     )}
                                 </div>
 
@@ -854,8 +604,10 @@ const StoreInventory = () => {
                 </div>
             )}
 
-            {/* --- RESTOCK & EDIT MODALS (Responsive) --- */}
-            {restockItem && (
+            {/* --- RESTOCK & EDIT MODALS --- */}
+            {/* ... (Kept existing modal code for brevity as it was working) ... */}
+            {/* Same modals as before for Restock, Edit, Bulk Edit */}
+             {restockItem && (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-xs animate-in zoom-in-95">
                         <div className="flex justify-between items-center mb-4"><h3 className="text-lg font-bold text-slate-900">Add Stock</h3><button onClick={() => setRestockItem(null)}><X size={20}/></button></div>
