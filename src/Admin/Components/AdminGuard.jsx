@@ -17,15 +17,14 @@ const AdminGuard = () => {
     // 2. Listen exclusively to the logged-in user's database record
     const userRef = doc(db, 'Users', user.uid);
     
-    console.log(`[AdminGuard] Listening for updates on: ${user.uid}`);
-
+   
     const unsubscribe = onSnapshot(userRef, (docSnap) => {
         if (docSnap.exists()) {
             const userData = docSnap.data();
 
             // A. Security Check: Immediate Suspension
             if (userData.status === 'suspended') {
-                console.warn("User suspended. Logging out.");
+            
                 auth.signOut();
                 alert("Session Terminated: Your account has been suspended.");
                 return;
@@ -37,7 +36,7 @@ const AdminGuard = () => {
                 // Compare Database Role (New) vs. App Role (Current)
                 // We use the 'role' variable from the hook, which is fresh thanks to the dependency array
                 if (userData.role !== role) {
-                    console.log(`[AdminGuard] Role Promotion Detected: ${role} -> ${userData.role}`);
+                  
                     
                     // 1. Update User Profile in Context
                     setUser(prev => ({ ...prev, ...userData }));
@@ -51,7 +50,7 @@ const AdminGuard = () => {
                 }
             } else {
                 // User has an invalid role (e.g. pending), kick them out
-                console.warn("Invalid role detected. Logging out.");
+              
                 auth.signOut();
             }
         } else {
@@ -59,7 +58,7 @@ const AdminGuard = () => {
             auth.signOut();
         }
     }, (error) => {
-        console.error("Profile Sync Error:", error);
+        
     });
 
     // Cleanup listener when component unmounts or user/role changes
