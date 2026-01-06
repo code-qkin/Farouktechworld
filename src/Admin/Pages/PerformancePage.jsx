@@ -20,7 +20,7 @@ const formatCurrency = (amount) =>
 const formatDate = (date) => 
     date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
 
-const StatCard = ({ title, value, subtext, icon: Icon, color, hideable }) => {
+const StatCard = ({ title, value, subtext, icon: Icon, color, hideable, onClick }) => {
     // 🔥 Default to hidden if the card is hideable
     const [hidden, setHidden] = useState(hideable ? true : false);
 
@@ -35,7 +35,11 @@ const StatCard = ({ title, value, subtext, icon: Icon, color, hideable }) => {
     const style = colorStyles[color] || colorStyles.blue;
 
     return (
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden group">
+        <div 
+            onClick={onClick}
+            className={`bg-white p-6 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden group transition-all duration-200 
+            ${onClick ? 'cursor-pointer hover:shadow-md hover:border-blue-200 active:scale-[0.98]' : ''}`}
+        >
             <div className="flex justify-between items-start z-10 relative">
                 <div>
                     <div className="flex items-center gap-2">
@@ -43,7 +47,7 @@ const StatCard = ({ title, value, subtext, icon: Icon, color, hideable }) => {
                         {hideable && (
                             <button 
                                 onClick={(e) => { e.stopPropagation(); setHidden(!hidden); }}
-                                className="text-slate-300 hover:text-purple-600 transition -mt-1"
+                                className="text-slate-300 hover:text-purple-600 transition -mt-1 p-1 rounded hover:bg-slate-50"
                             >
                                 {hidden ? <Eye size={14} /> : <EyeOff size={14} />}
                             </button>
@@ -251,14 +255,15 @@ const PerformanceReports = () => {
                         color={stats.netProfit >= 0 ? "purple" : "orange"} 
                         hideable={true}
                     />
-                    {/* 🔥 HIDDEN DEBT */}
+                    {/* 🔥 HIDDEN DEBT & CLICKABLE */}
                     <StatCard 
                         title="Outstanding Debt" 
                         value={formatCurrency(stats.debt)} 
-                        subtext="Unpaid Balances" 
+                        subtext="Unpaid Balances (Click to View)" 
                         icon={AlertCircle} 
                         color="blue" 
                         hideable={true}
+                        onClick={() => navigate('/admin/debt-analysis')} // Navigation to Debt Page
                     />
                 </div>
 

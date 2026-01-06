@@ -4,7 +4,7 @@ import {
     ShoppingBag, MinusCircle, Download, ArrowLeft, ShoppingCart, Menu,
     Filter, ChevronDown, CheckCircle, AlertCircle, Wrench, ArrowRight,
     RotateCcw, ChevronLeft, ChevronRight, Plus, Minus, AlertTriangle, Send,
-    DownloadCloud, Loader2, Users, Calendar, DollarSign, Edit3
+    DownloadCloud, Loader2, Users, Calendar, DollarSign, Edit3, Activity
 } from 'lucide-react';
 import { useAuth } from '../AdminContext.jsx'; 
 import { db } from '../../firebaseConfig.js';
@@ -12,7 +12,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { 
     collection, doc, onSnapshot, query, orderBy, getDocs, 
     serverTimestamp, runTransaction, Timestamp, addDoc, updateDoc, deleteDoc, 
-    arrayRemove, limit, where 
+    arrayRemove, limit, where, increment 
 } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { Toast, ConfirmModal } from '../Components/Feedback.jsx';
@@ -120,20 +120,54 @@ const OrdersManagement = () => {
         return ['All', ...Array.from(cats).sort()];
     }, [inventory]);
 
-    // 1. DATA FETCHING
+    // 1. DATA FETCHING (UPDATED FOR NAME SEARCH)
     useEffect(() => {
         setLoading(true);
-        let q;
+        let unsubOrders = () => {}; // Default empty unsubscribe
 
         if (searchTerm.length >= 3) {
-            const term = searchTerm.trim(); 
-            q = query(
-                collection(db, "Orders"),
-                where("ticketId", ">=", term),
-                where("ticketId", "<=", term + "\uf8ff"),
-                limit(50)
-            );
+            // 🔥 SEARCH MODE: Fetch Ticket ID OR Customer Name
+            const term = searchTerm.trim();
+            
+            const fetchSearchResults = async () => {
+                try {
+                    // Query 1: Ticket ID
+                    const qTicket = query(
+                        collection(db, "Orders"),
+                        where("ticketId", ">=", term),
+                        where("ticketId", "<=", term + "\uf8ff"),
+                        limit(50)
+                    );
+                    
+                    // Query 2: Customer Name
+                    const qName = query(
+                        collection(db, "Orders"),
+                        where("customer.name", ">=", term),
+                        where("customer.name", "<=", term + "\uf8ff"),
+                        limit(50)
+                    );
+
+                    const [ticketSnap, nameSnap] = await Promise.all([
+                        getDocs(qTicket),
+                        getDocs(qName)
+                    ]);
+
+                    // Merge results using a Map to remove duplicates
+                    const results = new Map();
+                    ticketSnap.docs.forEach(doc => results.set(doc.id, { id: doc.id, ...doc.data() }));
+                    nameSnap.docs.forEach(doc => results.set(doc.id, { id: doc.id, ...doc.data() }));
+
+                    setOrders(Array.from(results.values()));
+                    setLoading(false);
+                } catch (e) {
+                    console.error("Search error:", e);
+                    setLoading(false);
+                }
+            };
+            fetchSearchResults();
+
         } else {
+            // 🔥 DEFAULT MODE: Real-time listener based on time filter
             let startDate = new Date();
             startDate.setHours(0, 0, 0, 0);
 
@@ -141,15 +175,15 @@ const OrdersManagement = () => {
             else if (timeFilter === 'month') startDate.setMonth(startDate.getMonth() - 1);
             else startDate = null; // 'all'
 
-            q = startDate 
+            const q = startDate 
                 ? query(collection(db, "Orders"), where("createdAt", ">=", startDate), orderBy("createdAt", "desc"))
                 : query(collection(db, "Orders"), orderBy("createdAt", "desc"), limit(100));
+            
+            unsubOrders = onSnapshot(q, (snap) => {
+                setOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                setLoading(false);
+            });
         }
-        
-        const unsubOrders = onSnapshot(q, (snap) => {
-            setOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            setLoading(false);
-        });
         
         const unsubInventory = onSnapshot(query(collection(db, "Inventory"), orderBy("name")), (snap) => {
             setInventory(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -165,7 +199,11 @@ const OrdersManagement = () => {
         };
         fetchServices();
 
-        return () => { unsubOrders(); unsubInventory(); unsubCustomers(); };
+        return () => { 
+            unsubOrders(); 
+            unsubInventory(); 
+            unsubCustomers(); 
+        };
     }, [timeFilter, searchTerm]);
 
     // CHECK FOR EDIT MODE
@@ -312,7 +350,6 @@ const OrdersManagement = () => {
         if (isSubmitting) return;
         if (!customer.name || cart.length === 0) return setToast({message: "Fill details & add items!", type: "error"});
         setIsSubmitting(true);
-        
         try {
             await runTransaction(db, async (t) => {
                 if (!editOrderId) {
@@ -333,7 +370,7 @@ const OrdersManagement = () => {
                 const subtotal = cart.reduce((sum, item) => sum + item.total, 0);
                 const discountAmount = Number(discount) || 0;
                 let totalCost = Math.max(0, subtotal - discountAmount);
-                // VAT REMOVED HERE
+                // VAT REMOVED AS REQUESTED
 
                 const orderType = cart.some(i => i.type === 'repair') ? 'repair' : 'store_sale';
                 const processedItems = cart.map(item => ({ ...item, collected: item.collected || false }));
@@ -415,9 +452,16 @@ const OrdersManagement = () => {
                     const [iIdxStr, sIdxStr] = key.split('-');
                     const iIdx = parseInt(iIdxStr);
                     if (sIdxStr === 'product') {
-                        if (!newItems[iIdx].returned) {
-                            newItems[iIdx].returned = true;
-                            refundTotal += Number(newItems[iIdx].total || newItems[iIdx].cost || 0);
+                        const item = newItems[iIdx];
+                        if (!item.returned) {
+                            item.returned = true;
+                            refundTotal += Number(item.total || item.cost || 0);
+                            
+                            // 🔥 FIX: RESTOCK INVENTORY AUTOMATICALLY
+                            if (item.productId) {
+                                const invRef = doc(db, "Inventory", item.productId);
+                                t.update(invRef, { stock: increment(item.qty || 1) }); 
+                            }
                         }
                     } else {
                         const sIdx = parseInt(sIdxStr);
@@ -456,7 +500,6 @@ const OrdersManagement = () => {
                     <div><h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">Order Management</h1><p className="text-sm text-slate-500 font-medium">Manage repairs, sales, and warranties.</p></div>
                 </div>
                 <div className="flex gap-3">
-                    {/* <button onClick={() => navigate('/admin/customers')} className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-indigo-700 px-5 py-2.5 rounded-xl font-bold hover:bg-indigo-100 transition text-sm shadow-sm"><Users size={16} /> Customers</button> */}
                     <button onClick={handleExport} className="flex items-center gap-2 bg-white border border-gray-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition text-sm shadow-sm"><Download size={16} /> Export</button>
                     {(role === 'admin' || role === 'secretary') && <button onClick={() => { setEditOrderId(null); setShowPOS(true); }} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md shadow-purple-200 flex gap-2 items-center justify-center transition"><PlusCircle size={18}/> New Order</button>}
                 </div>
@@ -468,13 +511,32 @@ const OrdersManagement = () => {
                     <Search className="absolute left-3 top-3.5 text-gray-400" size={18}/>
                     <input 
                         className="w-full pl-10 pr-4 py-3 bg-transparent outline-none text-sm text-slate-700 placeholder-slate-400" 
-                        placeholder="Search Ticket ID (e.g. FTW-2024...) or Type 3+ chars" 
+                        placeholder="Search Ticket ID (e.g. FTW-2024...) or Type Customer Name" 
                         value={searchTerm} 
                         onChange={e => setSearchTerm(e.target.value)}
                     />
                 </div>
                 <div className="flex gap-2 overflow-x-auto p-1 lg:p-0">
                     
+                    {/* STATUS FILTER - NEW */}
+                    <div className="relative min-w-[140px]">
+                        <Activity className="absolute left-3 top-3.5 text-gray-400" size={16}/>
+                        <select 
+                            className="w-full pl-9 pr-8 py-3 bg-gray-50 rounded-xl border-none outline-none text-sm font-bold text-slate-600 cursor-pointer appearance-none" 
+                            value={filterStatus} 
+                            onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}
+                        >
+                            <option value="All">All Statuses</option>
+                            <option value="Pending">Pending</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Ready for Pickup">Ready for Pickup</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Collected">Collected</option>
+                            <option value="Void">Void</option>
+                        </select>
+                        <ChevronDown className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" size={14}/>
+                    </div>
+
                     {/* TIME FILTER */}
                     <div className="relative min-w-[120px]">
                         <Calendar className="absolute left-3 top-3.5 text-gray-400" size={16}/>
@@ -538,7 +600,7 @@ const OrdersManagement = () => {
                                     <td className="px-6 py-4 text-center"><PaymentBadge status={order.paymentStatus || (order.paid ? 'Paid' : 'Unpaid')} /></td>
                                 </tr>
                            ))}
-                           {currentOrders.length === 0 && <tr><td colSpan="6" className="p-8 text-center text-slate-400 italic">No orders found for this period.</td></tr>}
+                           {currentOrders.length === 0 && <tr><td colSpan="6" className="p-8 text-center text-slate-400 italic">No orders found matching your search.</td></tr>}
                         </tbody>
                     </table>
                 </div>
