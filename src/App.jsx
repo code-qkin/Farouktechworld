@@ -33,7 +33,7 @@ import ServicePrices from './Admin/Pages/ServicePrices';
 // import IssueReports from "./Admin/Pages/IssueReports";
 import ManageProofOfWork from "./Admin/Pages/ManageProofOfWork";
 import DeviceManager from "./Admin/Pages/DeviceManager";
-
+import DebtAnalysis from "./Admin/Pages/DebtAnalysis";
 
 const router = createBrowserRouter(
   createRoutesFromElements(
@@ -63,6 +63,7 @@ const router = createBrowserRouter(
           <Route path="pricing" element={<ServicePrices />} />
           <Route path="manage-proof-of-work" element={<ManageProofOfWork />} />
           <Route path="devices" element={<DeviceManager />} />
+          <Route path="debt-analysis" element={<DebtAnalysis />} />
           {/* <Route path="settings" element={<Settings/>} /> */}
         </Route>
       </Route>
