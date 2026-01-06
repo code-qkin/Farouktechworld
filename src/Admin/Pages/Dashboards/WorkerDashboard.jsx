@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     Wrench, CheckCircle, Clock, BoxSelect, LogOut, 
-    Search, X, Box, Briefcase, Layers, Undo2, Lock, Package, AlertTriangle, Bell, ShieldOff
+    Search, X, Box, Briefcase, Layers, Undo2, Lock, Package, AlertTriangle, Bell, ShieldOff, Filter
 } from 'lucide-react';
 import { useAuth } from '../../AdminContext.jsx';
 import { db, auth } from '../../../firebaseConfig.js';
@@ -66,8 +66,9 @@ const WorkerDashboard = ({ user: propUser }) => {
   const [selectedTask, setSelectedTask] = useState(null);
   const [selectedPart, setSelectedPart] = useState('');
   const [partSearch, setPartSearch] = useState(''); 
+  const [partCategoryFilter, setPartCategoryFilter] = useState('All'); // 🔥 New Filter
   
-  // 🔥 NEW: Track specific device context
+  // Device Context
   const [selectedDeviceIndex, setSelectedDeviceIndex] = useState(null);
   const [selectedDeviceName, setSelectedDeviceName] = useState('');
 
@@ -197,11 +198,10 @@ const WorkerDashboard = ({ user: propUser }) => {
   };
 
   const markServiceDone = (order, itemIndex, serviceIndex) => {
-      // 🔥 BLOCKER: Check if THIS specific device has a part logged (or 'no-part-log')
       const hasLoggedPartForDevice = order.items?.some(i => 
           i.type === 'part_usage' && 
           isMyJob(i.worker) && 
-          i.targetItemIndex === itemIndex // Must match this device
+          i.targetItemIndex === itemIndex 
       );
 
       if (!hasLoggedPartForDevice) {
@@ -244,7 +244,6 @@ const WorkerDashboard = ({ user: propUser }) => {
       });
   };
 
-  // 🔥 Log Real Part Usage
   const handleUsePart = async () => { 
     if (!selectedPart || selectedDeviceIndex === null) return;
     const part = inventory.find(i => i.id === selectedPart);
@@ -264,16 +263,15 @@ const WorkerDashboard = ({ user: propUser }) => {
                 cost: 0, 
                 partId: part.id, 
                 usedAt: new Date().toISOString(),
-                targetItemIndex: selectedDeviceIndex // Link to device
+                targetItemIndex: selectedDeviceIndex 
             };
             t.update(doc(db, "Orders", selectedTask.id), { items: arrayUnion(usageEntry) });
         });
-        setShowPartModal(false); setSelectedPart(''); setPartSearch('');
+        setShowPartModal(false); setSelectedPart(''); setPartSearch(''); setPartCategoryFilter('All');
         setToast({ message: `Logged usage: ${part.name}`, type: 'success' });
     } catch (e) { setToast({ message: `Error: ${e}`, type: 'error' }); }
   };
 
-  // 🔥 Log "No Part Needed"
   const handleLogNoPart = async () => {
     if (!selectedTask || selectedDeviceIndex === null) return;
     try {
@@ -285,7 +283,7 @@ const WorkerDashboard = ({ user: propUser }) => {
              cost: 0,
              partId: 'no-part-log',
              usedAt: new Date().toISOString(),
-             targetItemIndex: selectedDeviceIndex // Link to device
+             targetItemIndex: selectedDeviceIndex 
          };
          await updateDoc(doc(db, "Orders", selectedTask.id), { items: arrayUnion(usageEntry) });
          setShowPartModal(false);
@@ -318,6 +316,17 @@ const WorkerDashboard = ({ user: propUser }) => {
       });
   };
 
+  // --- FILTERS & DISPLAY ---
+  
+  // Extract Unique Categories for Filter
+  const categories = useMemo(() => ['All', ...new Set(inventory.map(i => i.category).filter(Boolean))].sort(), [inventory]);
+
+  const filteredInventory = inventory.filter(i => {
+      const matchesSearch = i.name.toLowerCase().includes(partSearch.toLowerCase()) || i.model?.toLowerCase().includes(partSearch.toLowerCase());
+      const matchesCategory = partCategoryFilter === 'All' || i.category === partCategoryFilter;
+      return matchesSearch && matchesCategory;
+  });
+
   const displayOrders = orders.map(order => {
       const matchesSearch = 
         order.ticketId.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -328,18 +337,15 @@ const WorkerDashboard = ({ user: propUser }) => {
 
       const visibleItems = order.items?.map((item, iIdx) => {
           if (item.type !== 'repair' || !item.services) return null;
-
           const visibleServices = item.services.map((svc, sIdx) => {
               if (svc.status === 'Void') return null;
               const mine = isMyJob(svc.worker);
               const isUnassigned = !svc.worker || svc.worker === 'Unassigned';
-
               if (activeTab === 'my-jobs') return (mine && svc.status !== 'Completed') ? { ...svc, sIdx } : null;
               if (activeTab === 'pool') return isUnassigned ? { ...svc, sIdx } : null;
               if (activeTab === 'history') return (mine && svc.status === 'Completed') ? { ...svc, sIdx } : null;
               return null;
           }).filter(Boolean);
-
           if (visibleServices.length === 0) return null;
           return { ...item, iIdx, visibleServices };
       }).filter(Boolean);
@@ -347,11 +353,6 @@ const WorkerDashboard = ({ user: propUser }) => {
       if (!visibleItems || visibleItems.length === 0) return null;
       return { ...order, visibleItems };
   }).filter(Boolean);
-
-  const filteredInventory = inventory.filter(i => 
-      i.name.toLowerCase().includes(partSearch.toLowerCase()) || 
-      i.model?.toLowerCase().includes(partSearch.toLowerCase())
-  );
 
   return (
     <div className="min-h-screen bg-gray-50/50 font-sans text-slate-800 pb-20 sm:pb-6">
@@ -361,6 +362,7 @@ const WorkerDashboard = ({ user: propUser }) => {
         onCancel={() => setConfirmConfig({...confirmConfig, isOpen: false})} onConfirm={confirmConfig.action}
       />
 
+      {/* HEADER */}
       <header className="bg-white sticky top-0 z-30 px-4 sm:px-6 py-3 border-b border-gray-200 shadow-sm flex justify-between items-center">
         <div className="flex items-center gap-3">
             <div className="bg-blue-600 p-2 rounded-lg text-white shadow-md">
@@ -383,7 +385,9 @@ const WorkerDashboard = ({ user: propUser }) => {
         </div>
       </header>
 
+      {/* BODY */}
       <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
+          {/* STATS */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
               <StatCard title="My Active" value={dashboardStats.myActive} icon={Briefcase} color="purple" />
               <StatCard title="Pool" value={dashboardStats.poolCount} icon={Layers} color="blue" />
@@ -393,6 +397,7 @@ const WorkerDashboard = ({ user: propUser }) => {
               </div>
           </div>
 
+          {/* MAIN CONTROLS */}
           <div className="flex flex-col gap-3">
               <div className="bg-white p-1 rounded-xl shadow-sm border border-gray-200 flex w-full overflow-hidden">
                   <button onClick={() => setActiveTab('my-jobs')} className={`flex-1 py-2.5 text-xs sm:text-sm font-bold transition flex items-center justify-center gap-1.5 rounded-lg ${activeTab === 'my-jobs' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><Wrench size={14}/> Work ({dashboardStats.myActive})</button>
@@ -405,6 +410,7 @@ const WorkerDashboard = ({ user: propUser }) => {
               </div>
           </div>
 
+          {/* LIST */}
           {loading ? <div className="text-center py-10 text-slate-400 text-sm">Loading...</div> : 
            displayOrders.length === 0 ? (
                <div className="bg-white rounded-2xl p-10 text-center border-2 border-dashed border-gray-200 mt-4">
@@ -430,7 +436,6 @@ const WorkerDashboard = ({ user: propUser }) => {
                                         {item.passcode && <div className="flex items-center gap-1 bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-100"><Lock size={10} className="text-yellow-600"/><span className="font-mono text-[10px] font-bold text-slate-800">{item.passcode}</span></div>}
                                         {item.condition && <div className="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200"><AlertTriangle size={10} className="text-orange-500"/><span className="text-[10px] font-medium text-gray-600 truncate max-w-[150px]">{item.condition}</span></div>}
                                     </div>
-
                                     <div className="space-y-3 pl-1">
                                         {item.visibleServices.map((svc, sIdxKey) => (
                                             <div key={sIdxKey} className="flex flex-col gap-2 border-l-2 border-gray-100 pl-3 py-1">
@@ -473,24 +478,45 @@ const WorkerDashboard = ({ user: propUser }) => {
           )}
       </div>
 
+      {/* PART MODAL */}
       {showPartModal && (
           <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
               <div className="bg-white p-5 rounded-2xl shadow-2xl w-full max-w-sm animate-in zoom-in-95 flex flex-col max-h-[80vh]">
+                  
                   <div className="flex justify-between items-center mb-4 shrink-0">
                       <h3 className="font-bold text-lg text-slate-800">Log Part Usage</h3>
                       <button onClick={() => setShowPartModal(false)} className="bg-gray-100 p-1.5 rounded-full text-gray-500"><X size={18}/></button>
                   </div>
                   
+                  {/* Search */}
                   <div className="relative mb-3 shrink-0">
                       <Search className="absolute left-3 top-2.5 text-gray-400" size={16}/>
                       <input autoFocus className="w-full pl-10 pr-4 py-2 border rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none text-sm" placeholder="Search part..." value={partSearch} onChange={e => setPartSearch(e.target.value)} />
                   </div>
 
-                  <div className="overflow-y-auto flex-1 border rounded-xl bg-gray-50 mb-4 divide-y divide-gray-200">
+                  {/* 🔥 CATEGORY FILTER */}
+                  <div className="mb-3 shrink-0 relative">
+                        <select 
+                            className="w-full p-2 pl-9 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-slate-700 outline-none appearance-none"
+                            value={partCategoryFilter}
+                            onChange={e => setPartCategoryFilter(e.target.value)}
+                        >
+                            <option value="All">All Categories</option>
+                            {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                        </select>
+                        <Filter className="absolute left-3 top-2.5 text-gray-400 pointer-events-none" size={14}/>
+                  </div>
+
+                  {/* List */}
+                  <div className="overflow-y-auto flex-1 border rounded-xl bg-gray-50 mb-4 divide-y divide-gray-200 custom-scrollbar">
                       {filteredInventory.length === 0 ? <div className="p-4 text-center text-xs text-gray-400">No parts found</div> : 
                           filteredInventory.map(part => (
                               <button key={part.id} disabled={part.stock < 1} onClick={() => setSelectedPart(part.id)} className={`w-full p-3 text-left text-sm flex justify-between items-center hover:bg-purple-50 transition active:bg-purple-100 ${selectedPart === part.id ? 'bg-purple-100 ring-1 ring-purple-500' : ''}`}>
-                                  <span className={`font-medium ${part.stock < 1 ? 'text-gray-400' : 'text-gray-700'}`}>{part.name}</span>
+                                  <div>
+                                      <div className={`font-medium ${part.stock < 1 ? 'text-gray-400' : 'text-gray-700'}`}>{part.name}</div>
+                                      {/* 🔥 Display Category Below Name */}
+                                      <div className="text-[10px] text-gray-400 uppercase font-bold mt-0.5">{part.category}</div>
+                                  </div>
                                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${part.stock < 1 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-700'}`}>{part.stock} left</span>
                               </button>
                           ))
