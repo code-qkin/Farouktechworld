@@ -110,7 +110,7 @@ const PricingPage = () => {
                 
                 {/* --- SIDEBAR (Desktop) --- */}
                 <div className="hidden lg:block w-72 shrink-0 space-y-2 sticky top-28 h-fit">
-                    <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2 px-2 uppercase text-xs tracking-wider text-slate-500">
+                    <h3 className="font-bold  mb-4 flex items-center gap-2 px-2 uppercase text-xs tracking-wider text-slate-500">
                         <Filter size={14}/> Categories
                     </h3>
                     
