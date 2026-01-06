@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     Banknote, Users, Wrench, LogOut, Package, TrendingUp, AlertTriangle,
     ShoppingCart, Activity, Wallet, Smartphone, Settings,
     XCircle, AlertCircle, CheckCircle, ShieldAlert,
-    TrendingDown, Image as ImageIcon, Trash2, X
+    TrendingDown, Image as ImageIcon, Trash2, X, Eye, EyeOff
 } from 'lucide-react';
 import { useAuth } from '../../AdminContext';
 import { signOut } from 'firebase/auth';
@@ -35,37 +35,54 @@ const StatusBadge = ({ status }) => {
     );
 };
 
-const MetricCard = ({ title, value, icon: Icon, color, subtext, onClick, isAlert }) => (
-    <div 
-        onClick={onClick} 
-        className={`${CARD_STYLE} p-6 cursor-pointer group relative
-        ${isAlert ? 'hover:border-red-200/60 ring-1 ring-red-50' : 
-          color === 'green' ? 'hover:border-green-200/60' : 
-          color === 'purple' ? 'hover:border-purple-200/60' : 
-          color === 'blue' ? 'hover:border-blue-200/60' : 
-          'hover:border-gray-200/60'}`}
-    >
-        <div className={`absolute top-0 right-0 p-3 opacity-[0.08] transform translate-x-2 -translate-y-2 group-hover:scale-110 transition duration-500 ${color === 'red' ? 'text-red-600' : color === 'green' ? 'text-green-600' : color === 'purple' ? 'text-purple-600' : 'text-blue-600'}`}>
-            <Icon size={100} />
-        </div>
-        <div className="flex items-center gap-4 mb-3 relative z-10">
-            <div className={`p-3 rounded-xl shadow-sm ${
-                color === 'green' ? 'bg-green-50 text-green-600' :
-                color === 'red' ? 'bg-red-50 text-red-600' :
-                color === 'blue' ? 'bg-blue-50 text-blue-600' :
-                'bg-purple-50 text-purple-600'
-            }`}>
-                <Icon size={24} />
+const MetricCard = ({ title, value, icon: Icon, color, subtext, onClick, isAlert, hideable }) => {
+    // 🔥 Default to hidden if hideable is true
+    const [hidden, setHidden] = useState(hideable ? true : false);
+
+    return (
+        <div 
+            onClick={onClick} 
+            className={`${CARD_STYLE} p-6 cursor-pointer group relative
+            ${isAlert ? 'hover:border-red-200/60 ring-1 ring-red-50' : 
+              color === 'green' ? 'hover:border-green-200/60' : 
+              color === 'purple' ? 'hover:border-purple-200/60' : 
+              color === 'blue' ? 'hover:border-blue-200/60' : 
+              'hover:border-gray-200/60'}`}
+        >
+            <div className={`absolute top-0 right-0 p-3 opacity-[0.08] transform translate-x-2 -translate-y-2 group-hover:scale-110 transition duration-500 ${color === 'red' ? 'text-red-600' : color === 'green' ? 'text-green-600' : color === 'purple' ? 'text-purple-600' : 'text-blue-600'}`}>
+                <Icon size={100} />
             </div>
-            {isAlert && <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-red-50 text-red-600 border border-red-100 animate-pulse">Action Required</span>}
+            <div className="flex items-center gap-4 mb-3 relative z-10">
+                <div className={`p-3 rounded-xl shadow-sm ${
+                    color === 'green' ? 'bg-green-50 text-green-600' :
+                    color === 'red' ? 'bg-red-50 text-red-600' :
+                    color === 'blue' ? 'bg-blue-50 text-blue-600' :
+                    'bg-purple-50 text-purple-600'
+                }`}>
+                    <Icon size={24} />
+                </div>
+                {isAlert && <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-red-50 text-red-600 border border-red-100 animate-pulse">Action Required</span>}
+            </div>
+            <div className="relative z-10">
+                <div className="flex justify-between items-center">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{title}</p>
+                    {hideable && (
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); setHidden(!hidden); }}
+                            className="text-slate-300 hover:text-purple-600 transition -mt-1"
+                        >
+                            {hidden ? <Eye size={16} /> : <EyeOff size={16} />}
+                        </button>
+                    )}
+                </div>
+                <h3 className={`text-2xl font-black mt-1 ${isAlert ? 'text-red-700' : 'text-slate-900'}`}>
+                    {hideable && hidden ? '****' : value}
+                </h3>
+                <p className="text-sm font-medium text-slate-500 mt-1">{subtext}</p>
+            </div>
         </div>
-        <div className="relative z-10">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{title}</p>
-            <h3 className={`text-2xl font-black mt-1 ${isAlert ? 'text-red-700' : 'text-slate-900'}`}>{value}</h3>
-            <p className="text-sm font-medium text-slate-500 mt-1">{subtext}</p>
-        </div>
-    </div>
-);
+    );
+};
 
 const Dashboard = () => {
     const { role } = useAuth();
@@ -103,7 +120,7 @@ const Dashboard = () => {
         const unsubOrders = onSnapshot(qOrders, (snapshot) => {
             let net = 0; 
             let activeTickets = 0;
-            let devicesInShop = 0; // 🔥 New Counter
+            let devicesInShop = 0; 
             
             const recent = [];
             const salesMap = {};
@@ -122,7 +139,7 @@ const Dashboard = () => {
                     activeTickets++;
                 }
 
-                // 🔥 Active Devices Count (Detailed)
+                // Active Devices Count (Detailed)
                 if (data.status !== 'Collected' && data.status !== 'Void') {
                     const repairItems = data.items?.filter(i => i.type === 'repair' && !i.collected) || [];
                     devicesInShop += repairItems.length;
@@ -257,13 +274,21 @@ const Dashboard = () => {
                 {/* 1. TOP METRICS & QUICK ACCESS */}
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
                     
-                    {/* Financials */}
-                    <MetricCard title="Net Revenue" value={formatCurrency(stats.netRevenue)} icon={Wallet} color="green" subtext="Total Cash In Hand" onClick={() => navigate('/admin/performance')} />
+                    {/* Financials (Hidden by Default) */}
+                    <MetricCard 
+                        title="Net Revenue" 
+                        value={formatCurrency(stats.netRevenue)} 
+                        icon={Wallet} 
+                        color="green" 
+                        subtext="Total Cash In Hand" 
+                        onClick={() => navigate('/admin/performance')}
+                        hideable={true} 
+                    />
                     
                     {/* Active Tickets */}
                     <MetricCard title="Active Tickets" value={stats.activeOrders} icon={Wrench} color="purple" subtext="Open Orders" onClick={() => navigate('/admin/orders')} />
                     
-                    {/* 🔥 NEW: Active Devices Manager */}
+                    {/* Active Devices Manager */}
                     <MetricCard title="Device Manager" value={stats.activeDevices} icon={Smartphone} color="blue" subtext="Devices Currently In Shop" onClick={() => navigate('/admin/devices')} />
 
                     {/* Inventory Alert */}
