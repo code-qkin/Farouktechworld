@@ -117,7 +117,7 @@ const OrderDetails = () => {
         setIsUpdating(false); setShowPaymentModal(false); setPaymentInput('');
     };
 
-    // 🔥 Remove Single Payment (History Item)
+    // Remove Single Payment
     const handleRemovePayment = async (index) => {
         setConfirmConfig({
             isOpen: true, title: "Remove Entry?", message: "Delete this specific payment?", confirmText: "Delete", confirmColor: "bg-red-600",
@@ -152,7 +152,7 @@ const OrderDetails = () => {
         });
     };
 
-    // 🔥 Reset ALL Payments
+    // Reset ALL Payments
     const handleResetPayment = async () => {
          setIsUpdating(true);
          await updateDoc(doc(db, "Orders", order.id), { amountPaid: 0, balance: order.totalCost, paymentStatus: 'Unpaid', paid: false, paymentHistory: [] });
@@ -161,7 +161,12 @@ const OrderDetails = () => {
          setConfirmConfig({...confirmConfig, isOpen: false});
     };
 
-
+    const handleEmailReceipt = () => {
+        if (!order.customer?.email) return setToast({ message: "No customer email found", type: "error" });
+        const subject = `Receipt for Ticket ${order.ticketId} - FaroukTechWorld`;
+        const body = `Dear ${order.customer.name},%0D%0A%0D%0AHere is your receipt:%0D%0ATicket ID: ${order.ticketId}%0D%0ATotal: ₦${order.totalCost.toLocaleString()}%0D%0APaid: ₦${order.amountPaid.toLocaleString()}%0D%0ABalance: ₦${order.balance.toLocaleString()}%0D%0A%0D%0AThank you!`;
+        window.open(`mailto:${order.customer.email}?subject=${subject}&body=${body}`);
+    };
 
     const handleProcessRefund = async () => {
         const reason = prompt("Enter reason for refund:");
@@ -320,12 +325,28 @@ const OrderDetails = () => {
          setConfirmConfig({...confirmConfig, isOpen: false});
     };
     
+    // 🔥 UPDATED: Auto-mark items collected when status is 'Collected'
     const handleStatusChange = async (e) => {
         const newStatus = e.target.value;
         if (newStatus === 'Void') { setConfirmConfig({ isOpen: true, title: "Void Order?", message: "Cancels order & zeros balance.", confirmText: "Void", confirmColor: "bg-red-600", action: handleVoidOrder }); return; }
+        
         setIsUpdating(true);
-        await updateDoc(doc(db, "Orders", order.id), { status: newStatus });
-        setToast({ message: "Status Updated", type: "success" });
+        try {
+            const updates = { status: newStatus };
+            
+            // If collected, update items to collected=true
+            if (newStatus === 'Collected' && order.items) {
+                updates.items = order.items.map(item => ({
+                    ...item,
+                    collected: true
+                }));
+            }
+
+            await updateDoc(doc(db, "Orders", order.id), updates);
+            setToast({ message: "Status Updated", type: "success" });
+        } catch(e) {
+            setToast({ message: "Update Failed", type: "error" });
+        }
         setIsUpdating(false);
     };
 
@@ -410,6 +431,7 @@ const OrderDetails = () => {
                             {role === 'secretary' ? <AlertTriangle size={16}/> : <Trash2 size={16}/>} {role === 'secretary' ? 'Request Delete' : 'Delete'}
                         </button>
                     )}
+                    <button onClick={handleEmailReceipt} className="flex items-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 px-4 py-2 rounded-lg hover:bg-blue-100 text-sm font-bold"><Mail size={16}/> Email Receipt</button>
                     <button onClick={() => setShowReceipt(true)} className="flex items-center gap-2 bg-purple-900 text-white px-4 py-2 rounded-lg hover:bg-purple-800 text-sm font-bold"><Printer size={16}/> Receipt</button>
                 </div>
             </div>
@@ -463,7 +485,7 @@ const OrderDetails = () => {
                                                                     {item.collected ? "Undo Collect" : "Mark Collected"}
                                                                 </button>
                                                             )}
-                                                            {/* 🔥 RETURN BUTTON (Visible even if collected) */}
+                                                            {/* Return Button */}
                                                             {item.type === 'product' && !item.returned && !isReturn && (
                                                                 <button onClick={() => handleVoidProductTrigger(i)} disabled={isUpdating} className="text-red-500 hover:bg-red-50 p-1 rounded ml-2" title="Return Product"><RotateCcw size={16}/></button>
                                                             )}
@@ -602,6 +624,11 @@ const OrderDetails = () => {
                             {/* 🔥 RESET PAYMENT (Undo All) */}
                             {order.amountPaid > 0 && order.status !== 'Void' && (
                                 <button onClick={() => setConfirmConfig({isOpen:true, title:"Reset Payment?", message:"Clear payment history?", confirmText:"Reset", action: handleResetPayment})} className="w-full text-gray-400 text-xs hover:text-red-600 py-2">Undo All Payments</button>
+                            )}
+                             
+                             {/* Refund Button */}
+                             {(order.balance < 0 || order.paymentStatus === 'Refund Due' || (order.amountPaid > 0 && order.status === 'Void')) && (
+                                <button onClick={() => setConfirmConfig({isOpen:true, title:"Process Refund?", message:`Refund ${formatCurrency(Math.abs(order.balance))}?`, confirmText:"Refund", confirmColor:"bg-red-600", action: handleProcessRefund})} disabled={isUpdating} className="w-full bg-red-600 text-white py-3 rounded-lg font-bold shadow-sm hover:bg-red-700 transition">Process Refund</button>
                             )}
                         </div>
                     </div>

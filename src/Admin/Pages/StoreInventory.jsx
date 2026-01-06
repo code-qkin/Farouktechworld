@@ -436,8 +436,37 @@ const StoreInventory = () => {
                             <button onClick={() => setIsCreating(true)} className="col-span-2 md:col-span-1 bg-purple-900 text-white px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-purple-800 transition flex items-center justify-center gap-2 shadow-sm"><Plus size={18}/> Add</button>
                         </div>
                     </div>
-                    {/* Bulk Action, Table, Pagination... (Standard) */}
-                    {/* ... (Existing table code preserved) ... */}
+                    
+                    {/* BULK ACTION BAR */}
+                    {selectedIds.length > 0 && (
+                        <div className="bg-purple-50 border border-purple-100 p-3 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in shadow-sm">
+                            <div className="flex items-center gap-3 w-full sm:w-auto">
+                                <span className="text-xs font-bold text-purple-700 bg-purple-100 px-3 py-1 rounded-full whitespace-nowrap">{selectedIds.length} Selected</span>
+                                <div className="flex items-center gap-2 flex-1">
+                                    <span className="text-xs font-bold text-purple-700 whitespace-nowrap">Add Stock:</span>
+                                    <input 
+                                        type="number" 
+                                        className="w-16 p-1 text-center border border-purple-200 rounded text-sm font-bold outline-none focus:ring-2 focus:ring-purple-500" 
+                                        value={bulkStockInput} 
+                                        onChange={e => setBulkStockInput(e.target.value)} 
+                                    />
+                                    <button onClick={handleBulkPushStock} className="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-700 shadow-sm flex items-center gap-1">
+                                        <ArrowUpCircle size={14}/> Push
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div className="flex gap-2 w-full sm:w-auto">
+                                <button onClick={() => setIsBulkEditOpen(true)} className="flex-1 sm:flex-none bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 shadow-sm flex items-center justify-center gap-2">
+                                    <Edit2 size={14}/> Bulk Edit
+                                </button>
+                                <button onClick={handleBulkDelete} className="flex-1 sm:flex-none bg-red-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-red-700 shadow-sm flex items-center justify-center gap-2">
+                                    <Trash2 size={14}/> Delete All
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {/* TABLE (Desktop) */}
                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                         <div className="hidden md:block overflow-x-auto">
