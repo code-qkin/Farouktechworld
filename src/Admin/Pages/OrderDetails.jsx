@@ -667,23 +667,31 @@ const OrderDetails = () => {
                 </div>
             )}
 
-            {/* Receipt Modal */}
+            {/* Receipt Modal - 🔥 FIXED STRUCTURE FOR PRINTING 🔥 */}
             {showReceipt && (
                 <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-md p-8 rounded shadow-2xl relative printable-receipt max-h-[90vh] overflow-y-auto">
-                        <button onClick={() => setShowReceipt(false)} className="absolute top-2 right-2 text-gray-400 print:hidden hover:text-gray-600"><X/></button>
-                        <div className="text-center border-b-2 border-black pb-4 mb-4">
-                            <h2 className="text-2xl font-extrabold uppercase tracking-tight">Farouk Techworld</h2>
-                            <p className="text-xs font-mono">Mokola Rd, Ibadan</p>
-                            <div className="mt-4 border-2 border-black inline-block px-4 py-1 font-bold text-sm">TICKET: {order.ticketId}</div>
+                    {/* Scroll Wrapper: This gets hidden during print via CSS. 
+                        The child .printable-receipt becomes fixed/absolute.
+                    */}
+                    <div className="max-h-[90vh] overflow-y-auto w-full max-w-md rounded-lg no-scrollbar-print">
+                        
+                        {/* Printable Content */}
+                        <div className="bg-white w-full p-8 rounded shadow-2xl relative printable-receipt">
+                            <button onClick={() => setShowReceipt(false)} className="absolute top-2 right-2 text-gray-400 print:hidden hover:text-gray-600"><X/></button>
+                            <div className="text-center border-b-2 border-black pb-4 mb-4">
+                                <h2 className="text-2xl font-extrabold uppercase tracking-tight">Farouk Techworld</h2>
+                                <p className="text-xs font-mono">Mokola Rd, Ibadan</p>
+                                <div className="mt-4 border-2 border-black inline-block px-4 py-1 font-bold text-sm">TICKET: {order.ticketId}</div>
+                            </div>
+                            <div className="flex justify-between text-xs mb-4 font-mono border-b border-dashed border-gray-300 pb-2"><span>{new Date().toLocaleDateString()}</span><span>{new Date().toLocaleTimeString()}</span></div>
+                            <div className="mb-6 text-sm font-bold uppercase border-b border-black pb-2">Customer: {order.customer.name}</div>
+                            <table className="w-full text-xs mb-6 font-mono"><tbody>{order.items.map((item, i) => { if(item.type==='part_usage') return null; return (<tr key={i}><td className="py-1 pr-2 align-top"><div className="font-bold">{item.name || item.deviceModel}</div></td><td className="text-right align-top whitespace-nowrap">{formatCurrency(item.total ?? item.cost ?? 0)}</td></tr>) })}</tbody></table>
+                            <div className="flex justify-between text-lg font-bold border-t-2 border-black pt-2 mb-1"><span>TOTAL:</span><span>{formatCurrency(order.totalCost)}</span></div>
+                            <div className="space-y-1 text-sm font-mono mb-6 border-b border-black pb-4"><div className="flex justify-between"><span>Paid:</span><span>{formatCurrency(order.amountPaid || 0)}</span></div><div className="flex justify-between font-bold"><span>Balance:</span><span>{formatCurrency(order.balance)}</span></div></div>
+                            <div className="text-center text-[10px] font-mono uppercase"><p>No Refund after payment</p><p>Warranty covers repair only</p><p className="mt-2 font-bold">Thank you!</p></div>
+                            <button onClick={() => window.print()} className="w-full mt-6 bg-black text-white py-3 font-bold uppercase rounded hover:bg-gray-800 print:hidden flex items-center justify-center gap-2"><Printer size={18}/> Print Now</button>
                         </div>
-                        <div className="flex justify-between text-xs mb-4 font-mono border-b border-dashed border-gray-300 pb-2"><span>{new Date().toLocaleDateString()}</span><span>{new Date().toLocaleTimeString()}</span></div>
-                        <div className="mb-6 text-sm font-bold uppercase border-b border-black pb-2">Customer: {order.customer.name}</div>
-                        <table className="w-full text-xs mb-6 font-mono"><tbody>{order.items.map((item, i) => { if(item.type==='part_usage') return null; return (<tr key={i}><td className="py-1 pr-2 align-top"><div className="font-bold">{item.name || item.deviceModel}</div></td><td className="text-right align-top whitespace-nowrap">{formatCurrency(item.total ?? item.cost ?? 0)}</td></tr>) })}</tbody></table>
-                        <div className="flex justify-between text-lg font-bold border-t-2 border-black pt-2 mb-1"><span>TOTAL:</span><span>{formatCurrency(order.totalCost)}</span></div>
-                        <div className="space-y-1 text-sm font-mono mb-6 border-b border-black pb-4"><div className="flex justify-between"><span>Paid:</span><span>{formatCurrency(order.amountPaid || 0)}</span></div><div className="flex justify-between font-bold"><span>Balance:</span><span>{formatCurrency(order.balance)}</span></div></div>
-                        <div className="text-center text-[10px] font-mono uppercase"><p>No Refund after payment</p><p>Warranty covers repair only</p><p className="mt-2 font-bold">Thank you!</p></div>
-                        <button onClick={() => window.print()} className="w-full mt-6 bg-black text-white py-3 font-bold uppercase rounded hover:bg-gray-800 print:hidden flex items-center justify-center gap-2"><Printer size={18}/> Print Now</button>
+
                     </div>
                 </div>
             )}

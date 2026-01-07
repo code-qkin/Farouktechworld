@@ -65,17 +65,18 @@ html {
         padding: 0 !important;
         box-shadow: none !important;
         border: none !important;
-    }
-
-    /* Force background colors to print (for headers/badges) */
-    * {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
+        background: white !important;
     }
 
     /* Ensure close buttons and other UI elements are hidden */
     .print\:hidden,
     button {
         display: none !important;
+    }
+    
+    /* Force color accuracy for badges/headers */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
     }
 }
