@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Search, Save, DollarSign, Filter, ChevronDown, 
     ArrowLeft, Smartphone, Loader2, ChevronLeft, ChevronRight, 
-    Plus, X, Wrench, Layers, Trash2 
+    Plus, X, Wrench, Layers, Trash2, Tablet, Watch
 } from 'lucide-react';
 import { db } from '../../firebaseConfig';
 import { 
@@ -15,25 +15,40 @@ import { Toast, ConfirmModal } from '../Components/Feedback';
 
 const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
 
-// --- MODEL LIST FOR RANGE GENERATION ---
-const ALL_MODELS = [
-    'iPhone 6', 'iPhone 6 Plus', 'iPhone 6s', 'iPhone 6s Plus', 
-    'iPhone 7', 'iPhone 7 Plus', 'iPhone 8', 'iPhone 8 Plus', 
-    'iPhone X', 'iPhone XR', 'iPhone XS', 'iPhone XS Max',
-    'iPhone 11', 'iPhone 11 Pro', 'iPhone 11 Pro Max',
-    'iPhone 12', 'iPhone 12 Mini', 'iPhone 12 Pro', 'iPhone 12 Pro Max',
-    'iPhone 13', 'iPhone 13 Mini', 'iPhone 13 Pro', 'iPhone 13 Pro Max',
-    'iPhone 14', 'iPhone 14 Plus', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
-    'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max',
-    'iPhone 16', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
-    'iPhone 17', 'iPhone 17 Plus', 'iPhone 17 Pro', 'iPhone 17 Pro Max'
-];
+// --- MODEL DATABASE ---
+const MODEL_DB = {
+    iPhone: [
+        'iPhone 6', 'iPhone 6 Plus', 'iPhone 6s', 'iPhone 6s Plus', 
+        'iPhone 7', 'iPhone 7 Plus', 'iPhone 8', 'iPhone 8 Plus', 
+        'iPhone X', 'iPhone XR', 'iPhone XS', 'iPhone XS Max',
+        'iPhone 11', 'iPhone 11 Pro', 'iPhone 11 Pro Max',
+        'iPhone 12', 'iPhone 12 Mini', 'iPhone 12 Pro', 'iPhone 12 Pro Max',
+        'iPhone 13', 'iPhone 13 Mini', 'iPhone 13 Pro', 'iPhone 13 Pro Max',
+        'iPhone 14', 'iPhone 14 Plus', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
+        'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max',
+        'iPhone 16', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
+        'iPhone 17', 'iPhone 17 Plus', 'iPhone 17 Pro', 'iPhone 17 Pro Max'
+    ],
+    iPad: [
+        'iPad (9th Gen)', 'iPad (10th Gen)', 'iPad (11th Gen)',
+        'iPad mini 5', 'iPad mini 6', 'iPad mini 7',
+        'iPad Air 3', 'iPad Air 4', 'iPad Air 5', 'iPad Air 11" (M2)', 'iPad Air 13" (M2)',
+        'iPad Pro 11" (1st Gen)', 'iPad Pro 11" (2nd Gen)', 'iPad Pro 11" (3rd Gen)', 'iPad Pro 11" (4th Gen)', 'iPad Pro 11" (M4)',
+        'iPad Pro 12.9" (3rd Gen)', 'iPad Pro 12.9" (4th Gen)', 'iPad Pro 12.9" (5th Gen)', 'iPad Pro 12.9" (6th Gen)', 'iPad Pro 13" (M4)'
+    ],
+    Watch: [
+        'Series 1', 'Series 2', 'Series 3', 'Series 4', 'Series 5', 'Series 6', 'Series 7', 'Series 8', 'Series 9', 'Series 10', 'Series 11',
+        'SE (1st Gen)', 'SE (2nd Gen)', 'SE (3rd Gen)',
+        'Ultra', 'Ultra 2', 'Ultra 3'
+    ]
+};
 
-const getModelRange = (start, end) => {
-    const sIdx = ALL_MODELS.indexOf(start);
-    const eIdx = ALL_MODELS.indexOf(end);
+const getModelRange = (type, start, end) => {
+    const list = MODEL_DB[type] || [];
+    const sIdx = list.indexOf(start);
+    const eIdx = list.indexOf(end);
     if (sIdx === -1 || eIdx === -1 || sIdx > eIdx) return [];
-    return ALL_MODELS.slice(sIdx, eIdx + 1);
+    return list.slice(sIdx, eIdx + 1);
 };
 
 const ServicePrices = () => {
@@ -47,6 +62,7 @@ const ServicePrices = () => {
     // --- Filter State ---
     const [searchTerm, setSearchTerm] = useState('');
     const [filterService, setFilterService] = useState('All');
+    const [filterDeviceType, setFilterDeviceType] = useState('All'); 
     
     // --- Pagination State ---
     const [currentPage, setCurrentPage] = useState(1);
@@ -65,13 +81,27 @@ const ServicePrices = () => {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isAdding, setIsAdding] = useState(false);
     const [activeTab, setActiveTab] = useState('single'); // 'single' or 'bulk'
+    
+    // Add Form State
+    const [deviceType, setDeviceType] = useState('iPhone');
     const [newServiceData, setNewServiceData] = useState({
         model: '',
-        startModel: 'iPhone X',
-        endModel: 'iPhone 14 Pro Max',
+        startModel: '',
+        endModel: '',
         service: '',
         price: ''
     });
+
+    // Reset range when device type changes in modal
+    useEffect(() => {
+        if(isAddModalOpen){
+             setNewServiceData(prev => ({
+                ...prev,
+                startModel: MODEL_DB[deviceType][0] || '',
+                endModel: MODEL_DB[deviceType][MODEL_DB[deviceType].length - 1] || ''
+            }));
+        }
+    }, [deviceType, isAddModalOpen]);
 
     // 1. Fetch Data
     useEffect(() => {
@@ -85,23 +115,29 @@ const ServicePrices = () => {
     }, []);
 
     // 2. Filters & Search
-    const uniqueServiceNames = useMemo(() => [...new Set(services.map(s => s.service))].sort(), [services]);
+    const uniqueServiceNames = useMemo(() => ['All', ...new Set(services.map(s => s.service))].sort(), [services]);
 
     const filteredList = useMemo(() => {
         return services.filter(item => {
             const model = item.model || '';
             const service = item.service || '';
+            // Handle legacy data where 'type' might be missing, or 'category' was used
+            const type = item.type || item.category || 'iPhone'; 
+
             const matchSearch = model.toLowerCase().includes(searchTerm.toLowerCase()) || 
                                 service.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchFilter = filterService === 'All' || service === filterService;
-            return matchSearch && matchFilter;
+            
+            const matchService = filterService === 'All' || service === filterService;
+            const matchDevice = filterDeviceType === 'All' || type === filterDeviceType;
+
+            return matchSearch && matchService && matchDevice;
         });
-    }, [services, searchTerm, filterService]);
+    }, [services, searchTerm, filterService, filterDeviceType]);
 
     // 3. Pagination Logic
     useEffect(() => {
         setCurrentPage(1); 
-    }, [searchTerm, filterService]);
+    }, [searchTerm, filterService, filterDeviceType]);
 
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -142,7 +178,7 @@ const ServicePrices = () => {
             const price = newServiceData.price ? Number(newServiceData.price) : 0;
 
             if (activeTab === 'bulk') {
-                const models = getModelRange(newServiceData.startModel, newServiceData.endModel);
+                const models = getModelRange(deviceType, newServiceData.startModel, newServiceData.endModel);
                 if (models.length === 0) throw new Error("Invalid Model Range selected.");
 
                 const batch = writeBatch(db);
@@ -154,6 +190,7 @@ const ServicePrices = () => {
                         model: model,
                         service: newServiceData.service,
                         price: price,
+                        type: deviceType, // 🔥 Saved as 'type'
                         active: true,
                         createdAt: serverTimestamp()
                     }, { merge: true });
@@ -168,6 +205,7 @@ const ServicePrices = () => {
                     model: newServiceData.model,
                     service: newServiceData.service,
                     price: price,
+                    type: deviceType, // 🔥 Saved as 'type'
                     active: true,
                     createdAt: serverTimestamp()
                 });
@@ -245,16 +283,37 @@ const ServicePrices = () => {
                         onChange={e => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="h-px sm:h-auto w-full sm:w-px bg-gray-200 mx-1"></div>
+                
+                {/* 🔥 DEVICE TYPE FILTER */}
+                <div className="relative min-w-[140px]">
+                    <div className="absolute left-3 top-3 text-gray-400 pointer-events-none">
+                        {filterDeviceType === 'iPhone' ? <Smartphone size={16}/> : 
+                         filterDeviceType === 'iPad' ? <Tablet size={16}/> : 
+                         filterDeviceType === 'Watch' ? <Watch size={16}/> : 
+                         <Filter size={16}/>}
+                    </div>
+                    <select 
+                        className="w-full pl-9 pr-8 py-2.5 bg-gray-50 rounded-lg border-none outline-none text-sm font-bold text-slate-600 cursor-pointer appearance-none"
+                        value={filterDeviceType}
+                        onChange={e => setFilterDeviceType(e.target.value)}
+                    >
+                        <option value="All">All Devices</option>
+                        <option value="iPhone">iPhone</option>
+                        <option value="iPad">iPad</option>
+                        <option value="Watch">Watch</option>
+                    </select>
+                    <ChevronDown className="absolute right-3 top-3 text-gray-400 pointer-events-none" size={14}/>
+                </div>
+
+                {/* SERVICE FILTER */}
                 <div className="relative min-w-[200px]">
-                    <Filter className="absolute left-3 top-3 text-gray-400" size={16}/>
+                    <Wrench className="absolute left-3 top-3 text-gray-400" size={16}/>
                     <select 
                         className="w-full pl-9 pr-8 py-2.5 bg-gray-50 rounded-lg border-none outline-none text-sm font-bold text-slate-600 cursor-pointer appearance-none"
                         value={filterService}
                         onChange={e => setFilterService(e.target.value)}
                     >
-                        <option value="All">All Services</option>
-                        {uniqueServiceNames.map(s => <option key={s} value={s}>{s}</option>)}
+                        {uniqueServiceNames.map(s => <option key={s} value={s}>{s === 'All' ? 'All Services' : s}</option>)}
                     </select>
                     <ChevronDown className="absolute right-3 top-3 text-gray-400 pointer-events-none" size={14}/>
                 </div>
@@ -270,6 +329,7 @@ const ServicePrices = () => {
                             <table className="w-full text-left text-sm">
                                 <thead className="bg-gray-50 text-slate-500 font-bold uppercase text-xs">
                                     <tr>
+                                        <th className="px-6 py-4">Type</th>
                                         <th className="px-6 py-4">Service</th>
                                         <th className="px-6 py-4">Model</th>
                                         <th className="px-6 py-4 text-right">Price (₦)</th>
@@ -279,10 +339,14 @@ const ServicePrices = () => {
                                 <tbody className="divide-y divide-gray-100">
                                     {currentItems.length > 0 ? currentItems.map(item => (
                                         <tr key={item.id} className="hover:bg-purple-50/50 transition">
-                                            <td className="px-6 py-3 font-medium text-slate-900">{item.service}</td>
-                                            <td className="px-6 py-3 flex items-center gap-2 text-slate-600">
-                                                <Smartphone size={14} className="text-slate-400"/> {item.model}
+                                            {/* 🔥 DEVICE TYPE ICON */}
+                                            <td className="px-6 py-3 text-slate-400">
+                                                {(item.type === 'iPad' || item.category === 'iPad') ? <Tablet size={16}/> : 
+                                                 (item.type === 'Watch' || item.category === 'Watch') ? <Watch size={16}/> : 
+                                                 <Smartphone size={16}/>}
                                             </td>
+                                            <td className="px-6 py-3 font-medium text-slate-900">{item.service}</td>
+                                            <td className="px-6 py-3 text-slate-600 font-bold">{item.model}</td>
                                             <td className="px-6 py-3 text-right font-mono font-bold text-slate-800">
                                                 {editingId === item.id ? (
                                                     <input 
@@ -316,7 +380,7 @@ const ServicePrices = () => {
                                             </td>
                                         </tr>
                                     )) : (
-                                        <tr><td colSpan="4" className="p-8 text-center text-slate-400">No services found.</td></tr>
+                                        <tr><td colSpan="5" className="p-8 text-center text-slate-400">No services found.</td></tr>
                                     )}
                                 </tbody>
                             </table>
@@ -370,6 +434,28 @@ const ServicePrices = () => {
 
                         <form onSubmit={handleAddService} className="p-6 space-y-4">
                             
+                            {/* 🔥 DEVICE TYPE SELECTOR */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Device Type</label>
+                                <div className="flex gap-2">
+                                    {['iPhone', 'iPad', 'Watch'].map(type => (
+                                        <button 
+                                            key={type} 
+                                            type="button"
+                                            onClick={() => setDeviceType(type)}
+                                            className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 border transition ${
+                                                deviceType === type 
+                                                ? 'bg-purple-50 border-purple-200 text-purple-700' 
+                                                : 'bg-white border-gray-200 text-slate-500 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            {type === 'iPhone' ? <Smartphone size={14}/> : type === 'iPad' ? <Tablet size={14}/> : <Watch size={14}/>}
+                                            {type}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
                             {/* Service Type with Datalist */}
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Service Type</label>
@@ -409,13 +495,15 @@ const ServicePrices = () => {
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Device Model</label>
                                     <input 
+                                        list="singleModelList"
                                         type="text" 
                                         name="model"
-                                        placeholder="e.g. iPhone 13 Pro Max"
+                                        placeholder="Select or Type Model..."
                                         value={newServiceData.model}
                                         onChange={handleNewServiceChange}
                                         className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium"
                                     />
+                                    <datalist id="singleModelList">{MODEL_DB[deviceType].map(m => <option key={m} value={m}/>)}</datalist>
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-2 gap-4">
@@ -427,7 +515,7 @@ const ServicePrices = () => {
                                             onChange={handleNewServiceChange}
                                             className="w-full px-3 py-2.5 border border-gray-200 bg-white rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium"
                                         >
-                                            {ALL_MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+                                            {MODEL_DB[deviceType].map(m => <option key={m} value={m}>{m}</option>)}
                                         </select>
                                     </div>
                                     <div>
@@ -438,7 +526,7 @@ const ServicePrices = () => {
                                             onChange={handleNewServiceChange}
                                             className="w-full px-3 py-2.5 border border-gray-200 bg-white rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium"
                                         >
-                                            {ALL_MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+                                            {MODEL_DB[deviceType].map(m => <option key={m} value={m}>{m}</option>)}
                                         </select>
                                     </div>
                                 </div>
@@ -448,7 +536,7 @@ const ServicePrices = () => {
                             {activeTab === 'bulk' && (
                                 <div className="text-xs text-center text-gray-500 bg-gray-50 p-2 rounded border border-gray-100 flex items-center justify-center gap-2">
                                     <Layers size={14} className="text-purple-500"/> 
-                                    Will generate entries for {getModelRange(newServiceData.startModel, newServiceData.endModel).length} models.
+                                    Will generate entries for {getModelRange(deviceType, newServiceData.startModel, newServiceData.endModel).length} models.
                                 </div>
                             )}
 

@@ -4,7 +4,7 @@ import {
     ArrowLeft, ArrowUpCircle, Save, X, 
     AlertTriangle, ClipboardEdit, Loader2,
     Download, Filter, ChevronLeft, ChevronRight, History, Layers, Palette, List, Wrench,
-    Eye, EyeOff
+    Eye, EyeOff, Tablet, Watch, ChevronDown
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AdminContext';
@@ -17,28 +17,51 @@ import * as XLSX from 'xlsx';
 
 const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
 
-// --- HELPER: Model List ---
-const ALL_MODELS = [
-    'iPhone 6', 'iPhone 6 Plus', 'iPhone 6s', 'iPhone 6s Plus', 
-    'iPhone 7', 'iPhone 7 Plus', 'iPhone 8', 'iPhone 8 Plus', 
-    'iPhone X', 'iPhone XR', 'iPhone XS', 'iPhone XS Max',
-    'iPhone 11', 'iPhone 11 Pro', 'iPhone 11 Pro Max',
-    'iPhone 12', 'iPhone 12 Mini', 'iPhone 12 Pro', 'iPhone 12 Pro Max',
-    'iPhone 13', 'iPhone 13 Mini', 'iPhone 13 Pro', 'iPhone 13 Pro Max',
-    'iPhone 14', 'iPhone 14 Plus', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
-    'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max',
-    'iPhone 16', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
-    'iPhone 17', 'iPhone 17 Plus', 'iPhone 17 Pro', 'iPhone 17 Pro Max'
-];
-
-const getModelRange = (start, end) => {
-    const sIdx = ALL_MODELS.indexOf(start);
-    const eIdx = ALL_MODELS.indexOf(end);
-    if (sIdx === -1 || eIdx === -1 || sIdx > eIdx) return [];
-    return ALL_MODELS.slice(sIdx, eIdx + 1);
+// --- HELPER: Smart Type Detection ---
+const getDeviceType = (item) => {
+    if (item.type) return item.type;
+    if (item.deviceType) return item.deviceType; 
+    const text = (item.name || item.model || '').toLowerCase();
+    if (text.includes('ipad')) return 'iPad';
+    if (text.includes('watch') || text.includes('series') || text.includes('ultra')) return 'Watch';
+    return 'iPhone';
 };
 
-// --- HELPER: Parsers ---
+const MODEL_DB = {
+    iPhone: [
+        'iPhone 6', 'iPhone 6 Plus', 'iPhone 6s', 'iPhone 6s Plus', 
+        'iPhone 7', 'iPhone 7 Plus', 'iPhone 8', 'iPhone 8 Plus', 
+        'iPhone X', 'iPhone XR', 'iPhone XS', 'iPhone XS Max',
+        'iPhone 11', 'iPhone 11 Pro', 'iPhone 11 Pro Max',
+        'iPhone 12', 'iPhone 12 Mini', 'iPhone 12 Pro', 'iPhone 12 Pro Max',
+        'iPhone 13', 'iPhone 13 Mini', 'iPhone 13 Pro', 'iPhone 13 Pro Max',
+        'iPhone 14', 'iPhone 14 Plus', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
+        'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max',
+        'iPhone 16', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
+        'iPhone 17', 'iPhone 17 Plus', 'iPhone 17 Pro', 'iPhone 17 Pro Max'
+    ],
+    iPad: [
+        'iPad (9th Gen)', 'iPad (10th Gen)', 'iPad (11th Gen)',
+        'iPad mini 5', 'iPad mini 6', 'iPad mini 7',
+        'iPad Air 3', 'iPad Air 4', 'iPad Air 5', 'iPad Air 11" (M2)', 'iPad Air 13" (M2)',
+        'iPad Pro 11" (1st Gen)', 'iPad Pro 11" (2nd Gen)', 'iPad Pro 11" (3rd Gen)', 'iPad Pro 11" (4th Gen)', 'iPad Pro 11" (M4)',
+        'iPad Pro 12.9" (3rd Gen)', 'iPad Pro 12.9" (4th Gen)', 'iPad Pro 12.9" (5th Gen)', 'iPad Pro 12.9" (6th Gen)', 'iPad Pro 13" (M4)'
+    ],
+    Watch: [
+        'Series 1', 'Series 2', 'Series 3', 'Series 4', 'Series 5', 'Series 6', 'Series 7', 'Series 8', 'Series 9', 'Series 10', 'Series 11',
+        'SE (1st Gen)', 'SE (2nd Gen)', 'SE (3rd Gen)',
+        'Ultra', 'Ultra 2', 'Ultra 3'
+    ]
+};
+
+const getModelRange = (type, start, end) => {
+    const list = MODEL_DB[type] || [];
+    const sIdx = list.indexOf(start);
+    const eIdx = list.indexOf(end);
+    if (sIdx === -1 || eIdx === -1 || sIdx > eIdx) return [];
+    return list.slice(sIdx, eIdx + 1);
+};
+
 const safeParseFloat = (val) => {
     if (val === undefined || val === null || val === '') return 0;
     const clean = String(val).replace(/[^0-9.-]/g, ''); 
@@ -82,7 +105,7 @@ const StoreInventory = () => {
     // UI State
     const [activeTab, setActiveTab] = useState('products'); 
     const [isCreating, setIsCreating] = useState(false); 
-    const [showValue, setShowValue] = useState(false); // Default to Hidden
+    const [showValue, setShowValue] = useState(false); 
 
     // Data State
     const [products, setProducts] = useState([]); 
@@ -94,6 +117,7 @@ const StoreInventory = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterCategory, setFilterCategory] = useState('All');
     const [filterStock, setFilterStock] = useState('All'); 
+    const [filterDeviceType, setFilterDeviceType] = useState('All'); 
 
     // Bulk Selection State
     const [selectedIds, setSelectedIds] = useState([]);
@@ -105,38 +129,46 @@ const StoreInventory = () => {
     const [isCustomColorMode, setIsCustomColorMode] = useState(false);
     const [modelSpecificColors, setModelSpecificColors] = useState({});
 
-    // Pagination (Client Side)
+    // Pagination
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 50;
-
     const [historyPage, setHistoryPage] = useState(1);
     const historyPerPage = 20;
 
-    // Modals & Forms
+    // Modals
     const [restockItem, setRestockItem] = useState(null); 
     const [restockQty, setRestockQty] = useState('');
     const [editingItem, setEditingItem] = useState(null); 
     const [isBulkMode, setIsBulkMode] = useState(false); 
+    const [deviceType, setDeviceType] = useState('iPhone');
+    
     const [newProduct, setNewProduct] = useState({ 
         name: '', category: '', type: '', model: '', price: '', stock: 0, color: '',
-        rangeStart: 'iPhone X', rangeEnd: 'iPhone 14 Pro Max' 
+        rangeStart: '', rangeEnd: '' 
     });
+
+    useEffect(() => {
+        setNewProduct(prev => ({
+            ...prev,
+            rangeStart: MODEL_DB[deviceType][0] || '',
+            rangeEnd: MODEL_DB[deviceType][MODEL_DB[deviceType].length - 1] || ''
+        }));
+    }, [deviceType]);
 
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
-    // 1. LIVE FETCH INVENTORY
+    // 1. DATA
     useEffect(() => {
         const q = query(collection(db, "Inventory"), orderBy("category"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const inventoryList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setProducts(inventoryList);
+            setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             setLoading(false);
         });
         return () => unsubscribe();
     }, []);
 
-    // 2. FETCH HISTORY
+    // 2. HISTORY
     useEffect(() => {
         if (activeTab === 'history') {
             const q = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
@@ -149,7 +181,6 @@ const StoreInventory = () => {
                         sales.push({
                             id: doc.id,
                             ticketId: data.ticketId,
-                            // Use "Various" if mixed, or customer name if sale, or first technician if usage.
                             customer: data.orderType === 'repair' ? (data.items.find(i=>i.type==='part_usage')?.worker || 'Technician') : (data.customer?.name || 'Walk-in'),
                             type: data.orderType === 'repair' ? 'Internal Use' : 'Store Sale',
                             date: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
@@ -171,15 +202,18 @@ const StoreInventory = () => {
             const pName = (product.name || '').toLowerCase();
             const pModel = (product.model || '').toLowerCase();
             const pColor = (product.color || '').toLowerCase();
+            const type = getDeviceType(product);
             
             const matchesSearch = pName.includes(term) || pModel.includes(term) || pColor.includes(term);
             const matchesCategory = filterCategory === 'All' || product.category === filterCategory;
             const matchesStock = filterStock === 'All' || (filterStock === 'Low' && product.stock < 5 && product.stock > 0) || (filterStock === 'Out' && product.stock <= 0);
-            return matchesSearch && matchesCategory && matchesStock;
-        });
-    }, [products, searchTerm, filterCategory, filterStock]);
+            const matchesDevice = filterDeviceType === 'All' || type === filterDeviceType;
 
-    useEffect(() => { setCurrentPage(1); }, [searchTerm, filterCategory, filterStock]);
+            return matchesSearch && matchesCategory && matchesStock && matchesDevice;
+        });
+    }, [products, searchTerm, filterCategory, filterStock, filterDeviceType]);
+
+    useEffect(() => { setCurrentPage(1); }, [searchTerm, filterCategory, filterStock, filterDeviceType]);
 
     // 4. METRICS
     const dynamicCategories = useMemo(() => [...new Set(products.map(p => p.category).filter(Boolean))].sort(), [products]);
@@ -205,18 +239,10 @@ const StoreInventory = () => {
     // Helpers for Bulk Models
     const activeModelsInRange = useMemo(() => {
         if (!isBulkMode) return [];
-        return getModelRange(newProduct.rangeStart, newProduct.rangeEnd);
-    }, [isBulkMode, newProduct.rangeStart, newProduct.rangeEnd]);
+        return getModelRange(deviceType, newProduct.rangeStart, newProduct.rangeEnd);
+    }, [isBulkMode, deviceType, newProduct.rangeStart, newProduct.rangeEnd]);
 
-    useEffect(() => {
-        if (isBulkMode && isCustomColorMode) {
-            const newMap = {};
-            activeModelsInRange.forEach(m => { newMap[m] = modelSpecificColors[m] || newProduct.color || ""; });
-            setModelSpecificColors(newMap);
-        }
-    }, [activeModelsInRange, isCustomColorMode, isBulkMode]);
-
-    // BULK SELECTION
+    // BULK SELECTION HANDLERS
     const isAllSelected = currentProducts.length > 0 && currentProducts.every(p => selectedIds.includes(p.id));
 
     const handleSelectAll = () => {
@@ -304,7 +330,7 @@ const StoreInventory = () => {
             const safePrice = safeParseFloat(newProduct.price);
             const safeStock = safeParseInt(newProduct.stock);
             if (isBulkMode) {
-                const models = getModelRange(newProduct.rangeStart, newProduct.rangeEnd);
+                const models = getModelRange(deviceType, newProduct.rangeStart, newProduct.rangeEnd);
                 if (models.length === 0) throw new Error("Invalid Range");
                 let itemsToCreate = [];
                 models.forEach(model => {
@@ -320,14 +346,32 @@ const StoreInventory = () => {
                     chunk.forEach(item => {
                         const safeId = item.name.replace(/[^a-zA-Z0-9]/g, '_'); 
                         const docRef = doc(db, "Inventory", safeId);
-                        batch.set(docRef, { name: item.name, category: newProduct.category.trim(), model: item.model, price: safePrice, stock: safeStock, color: item.color, lastUpdated: serverTimestamp() }, { merge: true });
+                        batch.set(docRef, { 
+                            name: item.name, 
+                            category: newProduct.category.trim(), 
+                            model: item.model, 
+                            price: safePrice, 
+                            stock: safeStock, 
+                            color: item.color, 
+                            type: deviceType,
+                            lastUpdated: serverTimestamp() 
+                        }, { merge: true });
                     });
                     await batch.commit();
                 }
                 setToast({ message: `Added ${itemsToCreate.length} items!`, type: "success" });
             } else {
                 const safeColor = newProduct.color ? newProduct.color.trim() : "";
-                await addDoc(collection(db, "Inventory"), { name: newProduct.name.trim(), category: newProduct.category.trim(), model: newProduct.model || "", price: safePrice, stock: safeStock, color: safeColor, lastUpdated: serverTimestamp() });
+                await addDoc(collection(db, "Inventory"), { 
+                    name: newProduct.name.trim(), 
+                    category: newProduct.category.trim(), 
+                    model: newProduct.model || "", 
+                    price: safePrice, 
+                    stock: safeStock, 
+                    color: safeColor, 
+                    type: deviceType, 
+                    lastUpdated: serverTimestamp() 
+                });
                 setToast({ message: "Product Added", type: "success" });
             }
             setNewProduct(prev => ({ ...prev, name: '', model: '', price: '', stock: 0, color: '' }));
@@ -400,12 +444,11 @@ const StoreInventory = () => {
             {/* METRICS */}
             {activeTab === 'products' && (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-                    {/* 🔥 HIDEABLE VALUE CARD */}
                     <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24">
                         <div className="flex justify-between items-center">
                             <span className="text-[10px] font-bold text-gray-400 uppercase">Value (Current View)</span>
-                            <button onClick={() => setShowValue(!showValue)} className="text-gray-400 hover:text-purple-600">
-                                {showValue ? <EyeOff size={14}/> : <Eye size={14}/>}
+                            <button onClick={() => setShowValue(!showValue)} className="text-gray-400 hover:text-purple-600 transition">
+                                {showValue ? <Eye size={14}/> : <EyeOff size={14}/>}
                             </button>
                         </div>
                         <span className="text-lg sm:text-xl font-black text-slate-900">
@@ -435,11 +478,31 @@ const StoreInventory = () => {
                             <select className="px-3 py-2.5 bg-gray-50 rounded-lg text-sm font-bold outline-none" value={filterStock} onChange={e => setFilterStock(e.target.value)}><option value="All">All Stock</option><option value="Low">Low</option><option value="Out">Out</option></select>
                             <button onClick={() => setIsCreating(true)} className="col-span-2 md:col-span-1 bg-purple-900 text-white px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-purple-800 transition flex items-center justify-center gap-2 shadow-sm"><Plus size={18}/> Add</button>
                         </div>
+                         {/* 🔥 DEVICE FILTER DROPDOWN */}
+                         <div className="relative min-w-[140px]">
+                            <div className="absolute left-3 top-3.5 text-gray-400 pointer-events-none">
+                                {filterDeviceType === 'iPhone' ? <Smartphone size={16}/> : 
+                                 filterDeviceType === 'iPad' ? <Tablet size={16}/> : 
+                                 filterDeviceType === 'Watch' ? <Watch size={16}/> : 
+                                 <Filter size={16}/>}
+                            </div>
+                            <select 
+                                className="w-full pl-9 pr-8 py-2.5 bg-gray-50 rounded-lg border-none outline-none text-sm font-bold text-slate-600 cursor-pointer appearance-none"
+                                value={filterDeviceType}
+                                onChange={e => setFilterDeviceType(e.target.value)}
+                            >
+                                <option value="All">All Devices</option>
+                                <option value="iPhone">iPhone</option>
+                                <option value="iPad">iPad</option>
+                                <option value="Watch">Watch</option>
+                            </select>
+                            <ChevronDown className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" size={14}/>
+                        </div>
                     </div>
                     
-                    {/* BULK ACTION BAR */}
+                    {/* 🔥🔥 RESTORED BULK ACTION BAR 🔥🔥 */}
                     {selectedIds.length > 0 && (
-                        <div className="bg-purple-50 border border-purple-100 p-3 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in shadow-sm">
+                        <div className="bg-purple-50 border border-purple-100 p-3 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in shadow-sm mb-4">
                             <div className="flex items-center gap-3 w-full sm:w-auto">
                                 <span className="text-xs font-bold text-purple-700 bg-purple-100 px-3 py-1 rounded-full whitespace-nowrap">{selectedIds.length} Selected</span>
                                 <div className="flex items-center gap-2 flex-1">
@@ -586,10 +649,33 @@ const StoreInventory = () => {
                             </div>
                         </div>
                         <form onSubmit={handleCreateProduct} className="space-y-6">
+                            
+                            {/* 🔥 DEVICE TYPE SELECTOR */}
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Device Type</label>
+                                <div className="flex gap-2">
+                                    {['iPhone', 'iPad', 'Watch'].map(type => (
+                                        <button 
+                                            key={type} 
+                                            type="button"
+                                            onClick={() => setDeviceType(type)}
+                                            className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 border transition ${
+                                                deviceType === type 
+                                                ? 'bg-purple-50 border-purple-200 text-purple-700' 
+                                                : 'bg-white border-gray-200 text-slate-500 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            {type === 'iPhone' ? <Smartphone size={14}/> : type === 'iPad' ? <Tablet size={14}/> : <Watch size={14}/>}
+                                            {type}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="col-span-1 md:col-span-2">
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">{isBulkMode ? "Base Name" : "Item Name"}</label>
-                                    <input className="w-full p-3 border rounded-xl font-bold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none" placeholder={isBulkMode ? "e.g. JCID Tag" : "e.g. iPhone 13 Screen"} value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
+                                    <input className="w-full p-3 border rounded-xl font-bold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none" placeholder={isBulkMode ? "e.g. JCID Tag" : "e.g. Screen"} value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
                                 </div>
                                 <div className={isBulkMode ? "col-span-1 md:col-span-2" : ""}>
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Category</label>
@@ -598,11 +684,27 @@ const StoreInventory = () => {
                                 </div>
                                 {isBulkMode ? (
                                     <>
-                                        <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Start</label><select className="w-full p-3 border rounded-xl" value={newProduct.rangeStart} onChange={e => setNewProduct({...newProduct, rangeStart: e.target.value})}>{ALL_MODELS.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
-                                        <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">End</label><select className="w-full p-3 border rounded-xl" value={newProduct.rangeEnd} onChange={e => setNewProduct({...newProduct, rangeEnd: e.target.value})}>{ALL_MODELS.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Start</label>
+                                            <select className="w-full p-3 border rounded-xl" value={newProduct.rangeStart} onChange={e => setNewProduct({...newProduct, rangeStart: e.target.value})}>
+                                                {MODEL_DB[deviceType].map(m => <option key={m} value={m}>{m}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">End</label>
+                                            <select className="w-full p-3 border rounded-xl" value={newProduct.rangeEnd} onChange={e => setNewProduct({...newProduct, rangeEnd: e.target.value})}>
+                                                {MODEL_DB[deviceType].map(m => <option key={m} value={m}>{m}</option>)}
+                                            </select>
+                                        </div>
                                     </>
                                 ) : (
-                                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Model</label><input className="w-full p-3 border rounded-xl" placeholder="e.g. A2638" value={newProduct.model} onChange={e => setNewProduct({...newProduct, model: e.target.value})} /></div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Model</label>
+                                        <input list="modelList" className="w-full p-3 border rounded-xl" placeholder={`e.g. ${MODEL_DB[deviceType][0]}`} value={newProduct.model} onChange={e => setNewProduct({...newProduct, model: e.target.value})} />
+                                        <datalist id="modelList">
+                                            {MODEL_DB[deviceType].map(m => <option key={m} value={m} />)}
+                                        </datalist>
+                                    </div>
                                 )}
                                 
                                 <div className="col-span-1 md:col-span-2">
@@ -638,7 +740,6 @@ const StoreInventory = () => {
             )}
 
             {/* --- RESTOCK & EDIT MODALS --- */}
-            {/* ... (Kept existing modal code for brevity as it was working) ... */}
             {/* Same modals as before for Restock, Edit, Bulk Edit */}
              {restockItem && (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
