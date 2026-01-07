@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-html{
+html {
     scroll-behavior: smooth;
 }
 
@@ -34,4 +34,48 @@ html{
 
 .animate-slide-in {
     animation: slideIn 0.4s ease-out forwards;
+}
+
+/* 🔥 PRINT STYLES - FIXES CUT OFF RECEIPTS 🔥 */
+@media print {
+    /* Hide everything by default */
+    body * {
+        visibility: hidden;
+    }
+
+    /* Make the receipt/payslip container visible */
+    .printable-receipt,
+    .printable-receipt *,
+    .printable-payslip,
+    .printable-payslip * {
+        visibility: visible;
+    }
+
+    /* Position the receipt at the very top left of the page */
+    .printable-receipt, .printable-payslip {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        border: none !important;
+    }
+
+    /* Force background colors to print (for headers/badges) */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* Ensure close buttons and other UI elements are hidden */
+    .print\:hidden,
+    button {
+        display: none !important;
+    }
 }

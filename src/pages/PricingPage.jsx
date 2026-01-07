@@ -110,7 +110,7 @@ const PricingPage = () => {
                 
                 {/* --- SIDEBAR (Desktop) --- */}
                 <div className="hidden lg:block w-72 shrink-0 space-y-2 sticky top-28 h-fit">
-                    <h3 className="font-bold  mb-4 flex items-center gap-2 px-2 uppercase text-xs tracking-wider text-slate-500">
+                    <h3 className="font-bold mb-4 flex items-center gap-2 px-2 uppercase text-xs tracking-wider text-slate-500">
                         <Filter size={14}/> Categories
                     </h3>
                     
@@ -219,40 +219,43 @@ const PricingPage = () => {
                                         </div>
                                     ) : (
                                         <div className="space-y-8">
-                                            {Object.entries(groupedData).map(([serviceName, items]) => (
-                                                <div key={serviceName} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                                                    <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-                                                        <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
-                                                            {getServiceIcon(serviceName)({ size: 18, className: "text-purple-600" })} 
-                                                            {serviceName}
-                                                        </h3>
-                                                        <span className="text-xs font-bold bg-white border border-gray-200 px-3 py-1 rounded-full text-slate-500">{items.length} Models</span>
-                                                    </div>
-                                                    <div className="divide-y divide-gray-50">
-                                                        {items.map((item, idx) => (
-                                                            <div key={idx} className="px-6 py-4 flex justify-between items-center hover:bg-purple-50/30 transition group">
-                                                                <span className="font-medium text-slate-700 flex items-center gap-2">
-                                                                    <Smartphone size={16} className="text-slate-300 group-hover:text-purple-500 transition"/> {item.model}
-                                                                </span>
-                                                                
-                                                                {/* 🔥 CONDITIONALLY RENDER PRICE OR CONTACT LINK */}
-                                                                {item.price > 0 ? (
-                                                                    <span className="font-mono font-bold text-slate-900 group-hover:text-purple-700 transition">
-                                                                        {formatCurrency(item.price)}
+                                            {Object.entries(groupedData).map(([serviceName, items]) => {
+                                                const ServiceIcon = getServiceIcon(serviceName); // 🔥 FIXED: Capitalized component for rendering
+                                                return (
+                                                    <div key={serviceName} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                                                        <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+                                                            <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
+                                                                <ServiceIcon size={18} className="text-purple-600" />
+                                                                {serviceName}
+                                                            </h3>
+                                                            <span className="text-xs font-bold bg-white border border-gray-200 px-3 py-1 rounded-full text-slate-500">{items.length} Models</span>
+                                                        </div>
+                                                        <div className="divide-y divide-gray-50">
+                                                            {items.map((item, idx) => (
+                                                                <div key={idx} className="px-6 py-4 flex justify-between items-center hover:bg-purple-50/30 transition group">
+                                                                    <span className="font-medium text-slate-700 flex items-center gap-2">
+                                                                        <Smartphone size={16} className="text-slate-300 group-hover:text-purple-500 transition"/> {item.model}
                                                                     </span>
-                                                                ) : (
-                                                                    <Link 
-                                                                        to="/#contact" 
-                                                                        className="text-xs font-bold bg-purple-100 text-purple-700 px-3 py-1.5 rounded-full hover:bg-purple-600 hover:text-white transition shadow-sm uppercase tracking-wide"
-                                                                    >
-                                                                        Contact Us
-                                                                    </Link>
-                                                                )}
-                                                            </div>
-                                                        ))}
+                                                                    
+                                                                    {/* 🔥 CONDITIONALLY RENDER PRICE OR CONTACT LINK */}
+                                                                    {item.price > 0 ? (
+                                                                        <span className="font-mono font-bold text-slate-900 group-hover:text-purple-700 transition">
+                                                                            {formatCurrency(item.price)}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <Link 
+                                                                            to="/#contact" 
+                                                                            className="text-xs font-bold bg-purple-100 text-purple-700 px-3 py-1.5 rounded-full hover:bg-purple-600 hover:text-white transition shadow-sm uppercase tracking-wide"
+                                                                        >
+                                                                            Contact Us
+                                                                        </Link>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </div>
