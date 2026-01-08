@@ -114,7 +114,7 @@ const OrdersManagement = () => {
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
-    // 🔥 DYNAMIC CATEGORIES (Inventory Based)
+    // 櫨 DYNAMIC CATEGORIES (Inventory Based)
     const dynamicCategories = useMemo(() => {
         const cats = new Set(inventory.map(i => i.category).filter(Boolean));
         return ['All', ...Array.from(cats).sort()];
@@ -126,7 +126,7 @@ const OrdersManagement = () => {
         let unsubOrders = () => {}; // Default empty unsubscribe
 
         if (searchTerm.length >= 3) {
-            // 🔥 SEARCH MODE: Fetch Ticket ID OR Customer Name
+            // 櫨 SEARCH MODE: Fetch Ticket ID OR Customer Name
             const term = searchTerm.trim();
             
             const fetchSearchResults = async () => {
@@ -167,7 +167,7 @@ const OrdersManagement = () => {
             fetchSearchResults();
 
         } else {
-            // 🔥 DEFAULT MODE: Real-time listener based on time filter
+            // 櫨 DEFAULT MODE: Real-time listener based on time filter
             let startDate = new Date();
             startDate.setHours(0, 0, 0, 0);
 
@@ -457,7 +457,7 @@ const OrdersManagement = () => {
                             item.returned = true;
                             refundTotal += Number(item.total || item.cost || 0);
                             
-                            // 🔥 FIX: RESTOCK INVENTORY AUTOMATICALLY
+                            // 櫨 FIX: RESTOCK INVENTORY AUTOMATICALLY
                             if (item.productId) {
                                 const invRef = doc(db, "Inventory", item.productId);
                                 t.update(invRef, { stock: increment(item.qty || 1) }); 
@@ -592,7 +592,16 @@ const OrdersManagement = () => {
                         <tbody className="divide-y divide-gray-100">
                            {currentOrders.map(order => (
                                 <tr key={order.id} className="hover:bg-purple-50/50 cursor-pointer transition group" onClick={() => navigate(`/admin/orders/${order.ticketId}`)}>
-                                    <td className="px-6 py-4"><div className="font-mono font-bold text-slate-800">{order.ticketId}</div><div className="text-xs text-slate-400 mt-0.5">{new Date(order.createdAt?.seconds*1000).toLocaleDateString()}</div></td>
+                                    <td className="px-6 py-4">
+                                        <div className="font-mono font-bold text-slate-800">{order.ticketId}</div>
+                                        <div className="text-xs text-slate-400 mt-0.5">
+                                            {/* 🔥 FORCE DATE TO LOCAL SYSTEM TIME FORMAT */}
+                                            {order.createdAt?.seconds 
+                                                ? new Date(order.createdAt.seconds * 1000).toLocaleDateString('en-GB') 
+                                                : 'N/A'
+                                            }
+                                        </div>
+                                    </td>
                                     <td className="px-6 py-4"><div className="font-bold text-slate-700">{order.customer?.name}</div></td>
                                     <td className="px-6 py-4"><span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 capitalize">{getOrderType(order)}</span></td>
                                     <td className="px-6 py-4 text-right font-mono font-bold text-slate-800">{formatCurrency(order.totalCost)}</td>
@@ -803,7 +812,7 @@ const OrdersManagement = () => {
                                             {item.type === 'product' ? (
                                                 <div className="flex items-center bg-gray-100 rounded-lg p-1 gap-3"><button onClick={() => updateCartQty(item.id, -1)} className="w-8 h-8 flex items-center justify-center bg-white rounded shadow-sm"><Minus size={14}/></button><span className="text-sm font-bold w-4 text-center">{item.qty}</span><button onClick={() => updateCartQty(item.id, 1)} className="w-8 h-8 flex items-center justify-center bg-white rounded shadow-sm"><Plus size={14}/></button></div>
                                             ) : (
-                                                // 🔥 NEW: Edit Button for Phones
+                                                // 櫨 NEW: Edit Button for Phones
                                                 <button onClick={() => handleEditCartItem(item)} className="text-xs font-bold bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-blue-100 transition"><Edit3 size={12}/> Edit Details</button>
                                             )}
                                             <div className="text-right font-mono font-bold text-lg text-purple-700 ml-auto">{formatCurrency(item.total)}</div>

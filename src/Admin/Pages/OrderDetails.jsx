@@ -180,6 +180,12 @@ const OrderDetails = () => {
     const toggleItemCollected = async (index) => {
         const item = order.items[index];
         const newStatus = !item.collected;
+
+        // 🔥 VALIDATION: Check if item services are completed before collection (Ignore Void)
+        if (newStatus && item.type === 'repair' && item.services?.some(s => s.status !== 'Completed' && s.status !== 'Void')) {
+            return setToast({ message: "Cannot collect: Repairs not completed!", type: "error" });
+        }
+
         setConfirmConfig({
             isOpen: true, title: newStatus ? "Mark Collected?" : "Undo Collection?",
             message: newStatus ? `Customer received "${item.name || item.deviceModel}"?` : "Mark as NOT collected?",
@@ -325,11 +331,24 @@ const OrderDetails = () => {
          setConfirmConfig({...confirmConfig, isOpen: false});
     };
     
-    // 🔥 UPDATED: Auto-mark items collected when status is 'Collected'
+    // 🔥 UPDATED: Strict Validation for Collection
     const handleStatusChange = async (e) => {
         const newStatus = e.target.value;
         if (newStatus === 'Void') { setConfirmConfig({ isOpen: true, title: "Void Order?", message: "Cancels order & zeros balance.", confirmText: "Void", confirmColor: "bg-red-600", action: handleVoidOrder }); return; }
         
+        // 🔥 BLOCK COLLECTION IF WORK NOT DONE
+        if (newStatus === 'Collected') {
+            const hasPendingRepairs = order.items?.some(item => 
+                item.type === 'repair' && 
+                item.services?.some(s => s.status !== 'Completed' && s.status !== 'Void')
+            );
+
+            if (hasPendingRepairs) {
+                setToast({ message: "Cannot collect: Repairs not completed!", type: "error" });
+                return;
+            }
+        }
+
         setIsUpdating(true);
         try {
             const updates = { status: newStatus };
@@ -409,7 +428,15 @@ const OrderDetails = () => {
     };
 
     const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
-    const dateStr = order?.createdAt?.seconds ? new Date(order.createdAt.seconds * 1000).toLocaleString() : 'N/A';
+    
+    // 🔥 FIXED DATE DISPLAY (DD/MM/YYYY)
+    const dateStr = order?.createdAt?.seconds 
+        ? new Date(order.createdAt.seconds * 1000).toLocaleDateString('en-GB', { 
+            day: '2-digit', month: '2-digit', year: 'numeric', 
+            hour: '2-digit', minute: '2-digit', hour12: true 
+          }) 
+        : 'N/A';
+        
     const isReturn = order?.orderType === 'return';
     const partsUsed = order?.items?.filter(i => i.type === 'part_usage') || [];
 
@@ -683,7 +710,7 @@ const OrderDetails = () => {
                                 <p className="text-xs font-mono">Mokola Rd, Ibadan</p>
                                 <div className="mt-4 border-2 border-black inline-block px-4 py-1 font-bold text-sm">TICKET: {order.ticketId}</div>
                             </div>
-                            <div className="flex justify-between text-xs mb-4 font-mono border-b border-dashed border-gray-300 pb-2"><span>{new Date().toLocaleDateString()}</span><span>{new Date().toLocaleTimeString()}</span></div>
+                            <div className="flex justify-between text-xs mb-4 font-mono border-b border-dashed border-gray-300 pb-2"><span>{new Date().toLocaleDateString('en-GB')}</span><span>{new Date().toLocaleTimeString()}</span></div>
                             <div className="mb-6 text-sm font-bold uppercase border-b border-black pb-2">Customer: {order.customer.name}</div>
                             <table className="w-full text-xs mb-6 font-mono"><tbody>{order.items.map((item, i) => { if(item.type==='part_usage') return null; return (<tr key={i}><td className="py-1 pr-2 align-top"><div className="font-bold">{item.name || item.deviceModel}</div></td><td className="text-right align-top whitespace-nowrap">{formatCurrency(item.total ?? item.cost ?? 0)}</td></tr>) })}</tbody></table>
                             <div className="flex justify-between text-lg font-bold border-t-2 border-black pt-2 mb-1"><span>TOTAL:</span><span>{formatCurrency(order.totalCost)}</span></div>

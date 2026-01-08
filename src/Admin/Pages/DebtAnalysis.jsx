@@ -2,9 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     CreditCard, TrendingDown, Users, Search, ArrowLeft, 
     AlertCircle, Clock, AlertTriangle, CheckCircle2, Download,
-    Eye, EyeOff, ChevronLeft, ChevronRight
+    Eye, EyeOff, ChevronLeft, ChevronRight, RotateCcw, Wallet
 } from 'lucide-react';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, updateDoc, doc, serverTimestamp, runTransaction } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -12,6 +12,7 @@ import {
     PieChart, Pie, Legend
 } from 'recharts';
 import * as XLSX from 'xlsx';
+import { Toast, ConfirmModal } from '../Components/Feedback';
 
 const formatCurrency = (amount) => 
     new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', minimumFractionDigits: 0 }).format(amount);
@@ -30,6 +31,7 @@ const DebtStatCard = ({ title, value, subtext, color, hideable }) => {
         red: { border: 'border-red-100', text: 'text-red-600', bg: 'bg-red-50', label: 'text-red-400' },
         orange: { border: 'border-orange-100', text: 'text-orange-600', bg: 'bg-orange-50', label: 'text-orange-400' },
         blue: { border: 'border-blue-100', text: 'text-slate-900', bg: 'bg-blue-50', label: 'text-blue-400' },
+        green: { border: 'border-green-100', text: 'text-green-600', bg: 'bg-green-50', label: 'text-green-400' },
     };
 
     const t = theme[color] || theme.blue;
@@ -63,11 +65,15 @@ const DebtAnalysis = () => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterRisk, setFilterRisk] = useState('All'); // All, High, Medium, Low
+    const [filterRisk, setFilterRisk] = useState('All'); // All, High, Medium, Low, Overpaid
 
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
+
+    // Feedback
+    const [toast, setToast] = useState({ message: '', type: '' });
+    const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
     // 1. FETCH DATA
     useEffect(() => {
@@ -78,12 +84,13 @@ const DebtAnalysis = () => {
                 id: d.id, 
                 date: d.data().createdAt?.toDate() || new Date() 
             }));
-            // Filter only unpaid/part-paid orders that aren't void
+            
+            // 🔥 Filter: Unpaid, Part Payment, OR Negative Balance (Overpaid)
             const debtData = data.filter(o => 
-                (o.paymentStatus === 'Unpaid' || o.paymentStatus === 'Part Payment') && 
-                o.status !== 'Void' &&
-                (o.balance > 0)
+                o.status !== 'Void' && 
+                (o.balance > 0 || o.balance < 0)
             );
+            
             setOrders(debtData);
             setLoading(false);
         });
@@ -93,9 +100,11 @@ const DebtAnalysis = () => {
     // 2. ANALYTICS ENGINE
     const analysis = useMemo(() => {
         let totalDebt = 0;
+        let totalOverpaid = 0;
         let highRiskTotal = 0; // > 30 days
         let partPaymentCount = 0;
         let unpaidCount = 0;
+        let overpaidCount = 0;
 
         const agingBuckets = {
             '0-7 Days': 0,
@@ -105,27 +114,32 @@ const DebtAnalysis = () => {
         };
 
         orders.forEach(order => {
-            const debt = Number(order.balance) || 0;
+            const balance = Number(order.balance) || 0;
             const daysOld = getTimeDifference(order.date);
             
-            totalDebt += debt;
+            if (balance > 0) {
+                totalDebt += balance;
+                if (order.paymentStatus === 'Part Payment') partPaymentCount++;
+                else unpaidCount++;
 
-            // Counts
-            if (order.paymentStatus === 'Part Payment') partPaymentCount++;
-            else unpaidCount++;
-
-            // Aging
-            if (daysOld <= 7) agingBuckets['0-7 Days'] += debt;
-            else if (daysOld <= 14) agingBuckets['8-14 Days'] += debt;
-            else if (daysOld <= 30) agingBuckets['15-30 Days'] += debt;
-            else {
-                agingBuckets['30+ Days'] += debt;
-                highRiskTotal += debt;
+                // Aging for Debts
+                if (daysOld <= 7) agingBuckets['0-7 Days'] += balance;
+                else if (daysOld <= 14) agingBuckets['8-14 Days'] += balance;
+                else if (daysOld <= 30) agingBuckets['15-30 Days'] += balance;
+                else {
+                    agingBuckets['30+ Days'] += balance;
+                    highRiskTotal += balance;
+                }
+                
+                order.riskLevel = daysOld > 30 ? 'High' : daysOld > 14 ? 'Medium' : 'Low';
+            } else {
+                // Overpayment
+                totalOverpaid += Math.abs(balance);
+                overpaidCount++;
+                order.riskLevel = 'Overpaid';
             }
-
-            // Risk Tagging for List
+            
             order.daysOld = daysOld;
-            order.riskLevel = daysOld > 30 ? 'High' : daysOld > 14 ? 'Medium' : 'Low';
         });
 
         const chartData = Object.keys(agingBuckets).map(key => ({
@@ -135,10 +149,11 @@ const DebtAnalysis = () => {
 
         const pieData = [
             { name: 'Partly Paid', value: partPaymentCount, color: '#f59e0b' },
-            { name: 'Unpaid', value: unpaidCount, color: '#ef4444' }
+            { name: 'Unpaid', value: unpaidCount, color: '#ef4444' },
+            { name: 'Overpaid', value: overpaidCount, color: '#10b981' }
         ];
 
-        return { totalDebt, highRiskTotal, chartData, pieData, debtorsCount: orders.length };
+        return { totalDebt, totalOverpaid, highRiskTotal, chartData, pieData, debtorsCount: orders.length };
     }, [orders]);
 
     // 3. FILTER LIST
@@ -147,14 +162,16 @@ const DebtAnalysis = () => {
             const matchesSearch = 
                 o.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
                 o.ticketId?.toLowerCase().includes(searchTerm.toLowerCase());
+            
             const matchesRisk = filterRisk === 'All' || o.riskLevel === filterRisk;
+            
             return matchesSearch && matchesRisk;
         });
     }, [orders, searchTerm, filterRisk]);
 
     // 4. PAGINATION LOGIC
     useEffect(() => {
-        setCurrentPage(1); // Reset on filter change
+        setCurrentPage(1); 
     }, [searchTerm, filterRisk]);
 
     const indexOfLastItem = currentPage * itemsPerPage;
@@ -171,18 +188,81 @@ const DebtAnalysis = () => {
             "Days Overdue": o.daysOld,
             "Total Cost": o.totalCost,
             "Paid": o.amountPaid,
-            "Balance Due": o.balance,
-            "Status": o.paymentStatus
+            "Balance": o.balance,
+            "Type": o.balance < 0 ? 'Overpaid' : 'Debt'
         }));
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "Debtors");
-        XLSX.writeFile(wb, "Debt_Report.xlsx");
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "Balances");
+        XLSX.writeFile(wb, "Balance_Report.xlsx");
+    };
+
+    // 🔥 SMART REFUND ACTION
+    const handleProcessRefund = (order) => {
+        const isOverpayment = order.balance < 0;
+        const excessAmount = Math.abs(order.balance);
+        const paidAmount = order.amountPaid || 0;
+
+        const title = isOverpayment ? "Refund Excess?" : "Process Full Refund?";
+        const message = isOverpayment 
+            ? `Customer paid more than required.\nRefund excess: ₦${excessAmount.toLocaleString()}?`
+            : `Refund entire payment of ₦${paidAmount.toLocaleString()}? \nThis will clear the debt and void the payment.`;
+        
+        const confirmText = isOverpayment ? "Refund Excess" : "Refund All";
+
+        setConfirmConfig({
+            isOpen: true,
+            title: title,
+            message: message,
+            confirmText: confirmText,
+            confirmColor: "bg-blue-600",
+            action: async () => {
+                try {
+                    await runTransaction(db, async (t) => {
+                        const ref = doc(db, "Orders", order.id);
+                        const docSnap = await t.get(ref);
+                        if (!docSnap.exists()) throw "Order missing";
+                        
+                        const data = docSnap.data();
+                        
+                        if (isOverpayment) {
+                            // 🔥 Refund ONLY the excess amount
+                            const newPaid = data.amountPaid - excessAmount;
+                            t.update(ref, {
+                                amountPaid: newPaid,
+                                balance: 0,
+                                paymentStatus: 'Paid',
+                                refundedAmount: (data.refundedAmount || 0) + excessAmount,
+                                refundReason: 'Overpayment Correction',
+                                lastUpdated: serverTimestamp()
+                            });
+                        } else {
+                            // 🔥 Refund EVERYTHING (Debt Cancellation)
+                            t.update(ref, {
+                                amountPaid: 0,
+                                refundedAmount: (data.refundedAmount || 0) + paidAmount,
+                                paymentStatus: 'Refunded',
+                                balance: 0,
+                                refundReason: 'Debt Clearance/Cancellation',
+                                lastUpdated: serverTimestamp()
+                            });
+                        }
+                    });
+                    setToast({ message: "Refund Processed Successfully", type: "success" });
+                } catch (e) {
+                    console.error(e);
+                    setToast({ message: "Action failed", type: "error" });
+                }
+                setConfirmConfig({ ...confirmConfig, isOpen: false });
+            }
+        });
     };
 
     if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-purple-700"></div></div>;
 
     return (
         <div className="min-h-screen bg-slate-50 p-6 lg:p-10 font-sans text-slate-800 pb-20">
+            <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: '' })} />
+            <ConfirmModal isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmText={confirmConfig.confirmText} confirmColor={confirmConfig.confirmColor} onCancel={() => setConfirmConfig({...confirmConfig, isOpen: false})} onConfirm={confirmConfig.action} />
             
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
@@ -190,9 +270,9 @@ const DebtAnalysis = () => {
                     <button onClick={() => navigate('/admin/performance')} className="bg-white p-2 rounded-xl shadow-sm border border-gray-200 hover:bg-gray-50 text-slate-600"><ArrowLeft size={20}/></button>
                     <div>
                         <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
-                            <AlertCircle className="text-red-600" /> Debt Analysis
+                            <Wallet className="text-red-600" /> Balance Analysis
                         </h1>
-                        <p className="text-sm text-slate-500 font-medium">Tracking outstanding balances & aging.</p>
+                        <p className="text-sm text-slate-500 font-medium">Debts, Overpayments & Aging.</p>
                     </div>
                 </div>
                 <button onClick={handleExport} className="bg-white border border-gray-200 text-slate-700 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-gray-50 shadow-sm">
@@ -200,24 +280,25 @@ const DebtAnalysis = () => {
                 </button>
             </div>
 
-            {/* KPI Cards (Hideable) */}
+            {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <DebtStatCard 
-                    title="Total Outstanding" 
+                    title="Total Debt (In)" 
                     value={formatCurrency(analysis.totalDebt)} 
                     color="red" 
                     hideable={true}
                 />
                 <DebtStatCard 
-                    title="High Risk (>30 Days)" 
-                    value={formatCurrency(analysis.highRiskTotal)} 
-                    color="orange" 
+                    title="Total Overpaid (Out)" 
+                    value={formatCurrency(analysis.totalOverpaid)} 
+                    color="green" 
+                    subtext="Refunds due to customers"
                     hideable={true}
                 />
                 <DebtStatCard 
-                    title="Active Debtors" 
+                    title="Active Accounts" 
                     value={analysis.debtorsCount} 
-                    subtext="Customers owing money"
+                    subtext="Files with balance"
                     color="blue" 
                     hideable={false}
                 />
@@ -247,7 +328,7 @@ const DebtAnalysis = () => {
 
                 {/* Composition Pie */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-[350px] flex flex-col">
-                    <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2"><Users size={18} className="text-blue-600"/> Debtor Status</h3>
+                    <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2"><Users size={18} className="text-blue-600"/> Balance Status</h3>
                     <div className="flex-1 relative">
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
@@ -268,14 +349,14 @@ const DebtAnalysis = () => {
                             </PieChart>
                         </ResponsiveContainer>
                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-8">
-                            <span className="text-xs text-slate-400 font-bold uppercase">Debtors</span>
+                            <span className="text-xs text-slate-400 font-bold uppercase">Files</span>
                             <span className="text-2xl font-black text-slate-800">{analysis.debtorsCount}</span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Detailed List with Pagination */}
+            {/* Detailed List */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
                     <div className="relative w-full sm:w-72">
@@ -288,13 +369,13 @@ const DebtAnalysis = () => {
                         />
                     </div>
                     <div className="flex gap-2">
-                        {['All', 'High', 'Medium', 'Low'].map(r => (
+                        {['All', 'High', 'Medium', 'Low', 'Overpaid'].map(r => (
                             <button 
                                 key={r} 
                                 onClick={() => setFilterRisk(r)}
                                 className={`px-4 py-1.5 rounded-lg text-xs font-bold transition ${filterRisk === r ? 'bg-slate-800 text-white' : 'bg-white border text-slate-600 hover:bg-gray-50'}`}
                             >
-                                {r === 'All' ? 'All Risks' : r}
+                                {r === 'All' ? 'All' : r}
                             </button>
                         ))}
                     </div>
@@ -307,7 +388,7 @@ const DebtAnalysis = () => {
                                 <th className="px-6 py-4">Customer</th>
                                 <th className="px-6 py-4">Ticket</th>
                                 <th className="px-6 py-4">Date</th>
-                                <th className="px-6 py-4 text-center">Aging</th>
+                                <th className="px-6 py-4 text-center">Status</th>
                                 <th className="px-6 py-4 text-right">Balance</th>
                                 <th className="px-6 py-4 text-center">Action</th>
                             </tr>
@@ -325,28 +406,40 @@ const DebtAnalysis = () => {
                                     <td className="px-6 py-4 text-slate-500">{order.date.toLocaleDateString()}</td>
                                     <td className="px-6 py-4 text-center">
                                         <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
+                                            order.balance < 0 ? 'bg-green-100 text-green-700' :
                                             order.riskLevel === 'High' ? 'bg-red-100 text-red-700' : 
                                             order.riskLevel === 'Medium' ? 'bg-orange-100 text-orange-700' : 
                                             'bg-blue-100 text-blue-700'
                                         }`}>
-                                            {order.daysOld} Days
+                                            {order.balance < 0 ? 'Overpaid' : `${order.daysOld} Days`}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 text-right font-black text-red-600">
-                                        {formatCurrency(order.balance)}
+                                    <td className={`px-6 py-4 text-right font-black ${order.balance < 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {order.balance < 0 ? '+' : ''}{formatCurrency(Math.abs(order.balance))}
                                     </td>
-                                    <td className="px-6 py-4 text-center">
+                                    <td className="px-6 py-4 text-center flex items-center justify-center gap-2">
                                         <button 
                                             onClick={() => navigate(`/admin/orders/${order.ticketId}`)} 
                                             className="text-purple-600 hover:text-purple-800 text-xs font-bold hover:underline"
                                         >
-                                            View Order
+                                            View
                                         </button>
+                                        
+                                        {/* 🔥 SMART REFUND BUTTON */}
+                                        {(order.amountPaid > 0 || order.balance < 0) && (
+                                            <button 
+                                                onClick={() => handleProcessRefund(order)} 
+                                                className={`p-1.5 rounded-lg transition ${order.balance < 0 ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+                                                title={order.balance < 0 ? "Refund Excess" : "Refund All"}
+                                            >
+                                                <RotateCcw size={14}/>
+                                            </button>
+                                        )}
                                     </td>
                                 </tr>
                             ))}
                             {filteredList.length === 0 && (
-                                <tr><td colSpan="6" className="p-12 text-center text-slate-400">No matching debts found.</td></tr>
+                                <tr><td colSpan="6" className="p-12 text-center text-slate-400">No records found.</td></tr>
                             )}
                         </tbody>
                     </table>
@@ -355,25 +448,9 @@ const DebtAnalysis = () => {
                 {/* Pagination Controls */}
                 {filteredList.length > itemsPerPage && (
                     <div className="flex justify-between items-center bg-gray-50 border-t border-gray-200 px-6 py-4">
-                        <button 
-                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
-                            disabled={currentPage === 1}
-                            className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-300 disabled:opacity-30 disabled:hover:bg-transparent transition"
-                        >
-                            <ChevronLeft size={18} className="text-slate-600"/>
-                        </button>
-                        
-                        <span className="text-xs font-bold text-slate-500">
-                            Page {currentPage} of {totalPages}
-                        </span>
-                        
-                        <button 
-                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
-                            disabled={currentPage === totalPages}
-                            className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-300 disabled:opacity-30 disabled:hover:bg-transparent transition"
-                        >
-                            <ChevronRight size={18} className="text-slate-600"/>
-                        </button>
+                        <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-300 disabled:opacity-30 disabled:hover:bg-transparent transition"><ChevronLeft size={18} className="text-slate-600"/></button>
+                        <span className="text-xs font-bold text-slate-500">Page {currentPage} of {totalPages}</span>
+                        <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-300 disabled:opacity-30 disabled:hover:bg-transparent transition"><ChevronRight size={18} className="text-slate-600"/></button>
                     </div>
                 )}
             </div>

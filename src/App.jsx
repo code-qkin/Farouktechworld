@@ -34,6 +34,7 @@ import ServicePrices from './Admin/Pages/ServicePrices';
 import ManageProofOfWork from "./Admin/Pages/ManageProofOfWork";
 import DeviceManager from "./Admin/Pages/DeviceManager";
 import DebtAnalysis from "./Admin/Pages/DebtAnalysis";
+import PaymentRegister from "./Admin/Pages/PaymentRegister";
 
 const router = createBrowserRouter(
   createRoutesFromElements(
@@ -64,6 +65,7 @@ const router = createBrowserRouter(
           <Route path="manage-proof-of-work" element={<ManageProofOfWork />} />
           <Route path="devices" element={<DeviceManager />} />
           <Route path="debt-analysis" element={<DebtAnalysis />} />
+          <Route path="payments" element={<PaymentRegister />} />
           {/* <Route path="settings" element={<Settings/>} /> */}
         </Route>
       </Route>

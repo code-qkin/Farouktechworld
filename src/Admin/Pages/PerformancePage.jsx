@@ -1,23 +1,23 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-    TrendingUp, Banknote, AlertCircle, ArrowDownLeft, 
+import {
+    TrendingUp, Banknote, AlertCircle, ArrowDownLeft,
     Calendar, Filter, Download, PieChart as PieIcon, ArrowLeft, CheckCircle, Wallet,
     ChevronDown, FileText, Activity, Plus, Trash2, Eye, EyeOff
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
-import { 
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-    PieChart, Pie, Cell, Legend, AreaChart, Area 
+import {
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+    PieChart, Pie, Cell, Legend, AreaChart, Area
 } from 'recharts';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../AdminContext';
 import { useNavigate, Navigate } from 'react-router-dom';
 
-const formatCurrency = (amount) => 
+const formatCurrency = (amount) =>
     new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', minimumFractionDigits: 0 }).format(amount);
 
-const formatDate = (date) => 
+const formatDate = (date) =>
     date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
 
 const StatCard = ({ title, value, subtext, icon: Icon, color, hideable, onClick }) => {
@@ -35,7 +35,7 @@ const StatCard = ({ title, value, subtext, icon: Icon, color, hideable, onClick 
     const style = colorStyles[color] || colorStyles.blue;
 
     return (
-        <div 
+        <div
             onClick={onClick}
             className={`bg-white p-6 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden group transition-all duration-200 
             ${onClick ? 'cursor-pointer hover:shadow-md hover:border-blue-200 active:scale-[0.98]' : ''}`}
@@ -45,7 +45,7 @@ const StatCard = ({ title, value, subtext, icon: Icon, color, hideable, onClick 
                     <div className="flex items-center gap-2">
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{title}</p>
                         {hideable && (
-                            <button 
+                            <button
                                 onClick={(e) => { e.stopPropagation(); setHidden(!hidden); }}
                                 className="text-slate-300 hover:text-purple-600 transition -mt-1 p-1 rounded hover:bg-slate-50"
                             >
@@ -61,7 +61,7 @@ const StatCard = ({ title, value, subtext, icon: Icon, color, hideable, onClick 
                     <Icon size={20} strokeWidth={2.5} />
                 </div>
             </div>
-            
+
             <div className="mt-4 flex items-center gap-2">
                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${style.bg} ${style.text}`}>
                     {subtext}
@@ -89,15 +89,15 @@ const CustomTooltip = ({ active, payload, label }) => {
 const PerformanceReports = () => {
     const { role } = useAuth();
     const navigate = useNavigate();
-    
+
     // Data State
     const [orders, setOrders] = useState([]);
-    const [expenses, setExpenses] = useState([]); 
-    
+    const [expenses, setExpenses] = useState([]);
+
     // Filters & UI
     const [filterRange, setFilterRange] = useState('this_month');
     const [loading, setLoading] = useState(true);
-    
+
     // Expense Modal
     const [showExpenseModal, setShowExpenseModal] = useState(false);
     const [newExpense, setNewExpense] = useState({ desc: '', amount: '' });
@@ -109,14 +109,14 @@ const PerformanceReports = () => {
         const qOrders = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
         const qExpenses = query(collection(db, "Expenses"), orderBy("date", "desc"));
 
-        const unsubOrders = onSnapshot(qOrders, 
+        const unsubOrders = onSnapshot(qOrders,
             (snap) => {
                 setOrders(snap.docs.map(d => ({ ...d.data(), id: d.id, date: d.data().createdAt?.toDate() || new Date() })));
             },
             (error) => console.error("Orders access denied:", error)
         );
-        
-        const unsubExpenses = onSnapshot(qExpenses, 
+
+        const unsubExpenses = onSnapshot(qExpenses,
             (snap) => {
                 setExpenses(snap.docs.map(d => ({ ...d.data(), id: d.id, date: d.data().date?.toDate() || new Date() })));
                 setLoading(false);
@@ -135,12 +135,12 @@ const PerformanceReports = () => {
     const getFilterDate = () => {
         const now = new Date();
         const start = new Date();
-        start.setHours(0,0,0,0); 
+        start.setHours(0, 0, 0, 0);
 
         if (filterRange === '7_days') start.setDate(now.getDate() - 7);
-        else if (filterRange === 'this_month') start.setDate(1); 
+        else if (filterRange === 'this_month') start.setDate(1);
         else if (filterRange === 'last_3_months') start.setMonth(now.getMonth() - 3);
-        else if (filterRange === 'all') start.setFullYear(2000); 
+        else if (filterRange === 'all') start.setFullYear(2000);
 
         return start;
     };
@@ -157,7 +157,7 @@ const PerformanceReports = () => {
         filteredOrders.forEach(o => {
             const paid = Number(o.amountPaid) || 0;
             netRevenue += paid;
-            
+
             if (Number(o.refundedAmount) > 0) refunds += Number(o.refundedAmount);
             if (o.status !== 'Void') debt += (Number(o.balance) || 0);
 
@@ -170,8 +170,8 @@ const PerformanceReports = () => {
 
         filteredExpenses.forEach(e => totalExpenses += (Number(e.amount) || 0));
 
-        const netProfit = netRevenue - totalExpenses; 
-        
+        const netProfit = netRevenue - totalExpenses;
+
         const chartData = Object.keys(dailyMap)
             .map(key => ({ name: key, amount: dailyMap[key] }))
             .reverse();
@@ -182,7 +182,7 @@ const PerformanceReports = () => {
     // 4. ACTIONS
     const handleAddExpense = async (e) => {
         e.preventDefault();
-        if(!newExpense.desc || !newExpense.amount) return;
+        if (!newExpense.desc || !newExpense.amount) return;
         try {
             await addDoc(collection(db, "Expenses"), {
                 description: newExpense.desc,
@@ -194,9 +194,9 @@ const PerformanceReports = () => {
     };
 
     const handleDeleteExpense = async (id) => {
-        if(window.confirm("Delete this expense?")) {
+        if (window.confirm("Delete this expense?")) {
             try { await deleteDoc(doc(db, "Expenses", id)); }
-            catch(e) { alert("Error deleting expense."); }
+            catch (e) { alert("Error deleting expense."); }
         }
     };
 
@@ -216,10 +216,13 @@ const PerformanceReports = () => {
             {/* --- HEADER SECTION --- */}
             <div className="bg-white border-b border-slate-200 sticky top-0 z-20 px-6 py-4 flex justify-between items-center">
                 <div className="flex items-center gap-4">
-                    <button onClick={() => navigate('/admin/dashboard')} className="p-2 bg-slate-100 rounded-xl"><ArrowLeft size={20}/></button>
+                    <button onClick={() => navigate('/admin/dashboard')} className="p-2 bg-slate-100 rounded-xl"><ArrowLeft size={20} /></button>
                     <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
-                        <Activity className="text-purple-600"/> Financial Performance
+                        <Activity className="text-purple-600" /> Financial Performance
                     </h1>
+                    <button onClick={() => navigate('/admin/payments')} className="text-xs font-bold text-blue-600 hover:underline mt-1">
+                        View Full Payment Register →
+                    </button>
                 </div>
                 <div className="flex bg-slate-100 p-1 rounded-xl">
                     {['today', '7_days', 'this_month', 'all'].map(tab => (
@@ -232,36 +235,36 @@ const PerformanceReports = () => {
 
                 {/* --- 1. KEY METRICS --- */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <StatCard 
-                        title="Net Revenue" 
-                        value={formatCurrency(stats.netRevenue)} 
-                        subtext="Total Income" 
-                        icon={Wallet} 
-                        color="green" 
-                        hideable={true} 
+                    <StatCard
+                        title="Net Revenue"
+                        value={formatCurrency(stats.netRevenue)}
+                        subtext="Total Income"
+                        icon={Wallet}
+                        color="green"
+                        hideable={true}
                     />
-                    <StatCard 
-                        title="Operational Costs" 
-                        value={`-${formatCurrency(stats.totalExpenses)}`} 
-                        subtext="Expenses" 
-                        icon={ArrowDownLeft} 
-                        color="red" 
+                    <StatCard
+                        title="Operational Costs"
+                        value={`-${formatCurrency(stats.totalExpenses)}`}
+                        subtext="Expenses"
+                        icon={ArrowDownLeft}
+                        color="red"
                     />
-                    <StatCard 
-                        title="Net Profit" 
-                        value={formatCurrency(stats.netProfit)} 
-                        subtext="Revenue - Expenses" 
-                        icon={Banknote} 
-                        color={stats.netProfit >= 0 ? "purple" : "orange"} 
+                    <StatCard
+                        title="Net Profit"
+                        value={formatCurrency(stats.netProfit)}
+                        subtext="Revenue - Expenses"
+                        icon={Banknote}
+                        color={stats.netProfit >= 0 ? "purple" : "orange"}
                         hideable={true}
                     />
                     {/* 🔥 HIDDEN DEBT & CLICKABLE */}
-                    <StatCard 
-                        title="Outstanding Debt" 
-                        value={formatCurrency(stats.debt)} 
-                        subtext="Unpaid Balances (Click to View)" 
-                        icon={AlertCircle} 
-                        color="blue" 
+                    <StatCard
+                        title="Outstanding Debt"
+                        value={formatCurrency(stats.debt)}
+                        subtext="Unpaid Balances (Click to View)"
+                        icon={AlertCircle}
+                        color="blue"
                         hideable={true}
                         onClick={() => navigate('/admin/debt-analysis')} // Navigation to Debt Page
                     />
@@ -273,10 +276,10 @@ const PerformanceReports = () => {
                         <h3 className="font-bold text-gray-800 mb-4">Revenue Trend</h3>
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={stats.chartData}>
-                                <defs><linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.1}/><stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/></linearGradient></defs>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
-                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10}} dy={10}/>
-                                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} tickFormatter={(val)=>`₦${val/1000}k`}/>
+                                <defs><linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.1} /><stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} /></linearGradient></defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} dy={10} />
+                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} tickFormatter={(val) => `₦${val / 1000}k`} />
                                 <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#8b5cf6', strokeWidth: 1, strokeDasharray: '5 5' }} />
                                 <Area type="monotone" dataKey="amount" stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorRev)" />
                             </AreaChart>
@@ -288,11 +291,11 @@ const PerformanceReports = () => {
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                                 <Pie data={[{ name: 'Repairs', value: stats.repairRev }, { name: 'Sales', value: stats.storeRev }]} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                                    <Cell fill="#8b5cf6" /> 
-                                    <Cell fill="#10b981" /> 
+                                    <Cell fill="#8b5cf6" />
+                                    <Cell fill="#10b981" />
                                 </Pie>
                                 <Tooltip formatter={(value) => formatCurrency(value)} />
-                                <Legend verticalAlign="bottom" height={36}/>
+                                <Legend verticalAlign="bottom" height={36} />
                             </PieChart>
                         </ResponsiveContainer>
                     </div>
@@ -301,10 +304,10 @@ const PerformanceReports = () => {
                 {/* --- 3. EXPENSES TABLE --- */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                     <div className="flex justify-between items-center mb-6">
-                        <h3 className="font-bold text-slate-800 flex items-center gap-2"><FileText className="text-orange-500"/> Expenses Log</h3>
+                        <h3 className="font-bold text-slate-800 flex items-center gap-2"><FileText className="text-orange-500" /> Expenses Log</h3>
                         <div className="flex gap-2">
-                            <button onClick={handleExport} className="bg-white border border-gray-200 text-slate-700 px-3 py-2 rounded-lg hover:bg-gray-50"><Download size={16}/></button>
-                            <button onClick={() => setShowExpenseModal(true)} className="bg-orange-100 text-orange-700 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-orange-200"><Plus size={16}/> Add Expense</button>
+                            <button onClick={handleExport} className="bg-white border border-gray-200 text-slate-700 px-3 py-2 rounded-lg hover:bg-gray-50"><Download size={16} /></button>
+                            <button onClick={() => setShowExpenseModal(true)} className="bg-orange-100 text-orange-700 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-orange-200"><Plus size={16} /> Add Expense</button>
                         </div>
                     </div>
                     <div className="overflow-x-auto">
@@ -318,7 +321,7 @@ const PerformanceReports = () => {
                                         <td className="p-3 text-slate-500">{formatDate(exp.date)}</td>
                                         <td className="p-3 font-medium text-slate-800">{exp.description}</td>
                                         <td className="p-3 text-right font-bold text-red-500">-{formatCurrency(exp.amount)}</td>
-                                        <td className="p-3 text-right"><button onClick={() => handleDeleteExpense(exp.id)} className="text-slate-400 hover:text-red-600 transition"><Trash2 size={16}/></button></td>
+                                        <td className="p-3 text-right"><button onClick={() => handleDeleteExpense(exp.id)} className="text-slate-400 hover:text-red-600 transition"><Trash2 size={16} /></button></td>
                                     </tr>
                                 ))}
                                 {filteredExpenses.length === 0 && <tr><td colSpan="4" className="p-12 text-center text-slate-400 font-medium">No expenses recorded.</td></tr>}
@@ -334,8 +337,8 @@ const PerformanceReports = () => {
                     <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
                         <h3 className="font-bold text-lg mb-4 text-slate-900">Record New Expense</h3>
                         <form onSubmit={handleAddExpense} className="space-y-4">
-                            <div><label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Description</label><input className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500" placeholder="e.g. Fuel" value={newExpense.desc} onChange={e => setNewExpense({...newExpense, desc: e.target.value})} autoFocus/></div>
-                            <div><label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Amount (₦)</label><input type="number" className="w-full p-3 border rounded-xl font-bold outline-none focus:ring-2 focus:ring-purple-500" placeholder="0" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: e.target.value})}/></div>
+                            <div><label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Description</label><input className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500" placeholder="e.g. Fuel" value={newExpense.desc} onChange={e => setNewExpense({ ...newExpense, desc: e.target.value })} autoFocus /></div>
+                            <div><label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Amount (₦)</label><input type="number" className="w-full p-3 border rounded-xl font-bold outline-none focus:ring-2 focus:ring-purple-500" placeholder="0" value={newExpense.amount} onChange={e => setNewExpense({ ...newExpense, amount: e.target.value })} /></div>
                             <div className="flex gap-2 pt-2"><button type="button" onClick={() => setShowExpenseModal(false)} className="flex-1 py-3 text-slate-500 font-bold bg-slate-100 rounded-xl hover:bg-slate-200 transition">Cancel</button><button type="submit" className="flex-1 py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition shadow-lg">Save Record</button></div>
                         </form>
                     </div>
