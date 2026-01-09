@@ -9,7 +9,7 @@ import {
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebaseConfig';
 
-const ALLOWED_DASHBOARD_ROLES = ['admin', 'secretary', 'worker'];
+const ALLOWED_DASHBOARD_ROLES = ['admin', 'secretary', 'worker', 'ceo'];
 const googleProvider = new GoogleAuthProvider();
 
 const LoginPage = () => {

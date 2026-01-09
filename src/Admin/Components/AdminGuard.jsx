@@ -4,7 +4,8 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig'; 
 import { useAuth } from '../AdminContext'; 
 
-const ALLOWED_DASHBOARD_ROLES = ['admin', 'secretary', 'worker'];
+// 🔥 ADDED 'ceo' TO ALLOWED LIST
+const ALLOWED_DASHBOARD_ROLES = ['admin', 'secretary', 'worker', 'ceo'];
 
 const AdminGuard = () => {
   // Get current state from Context

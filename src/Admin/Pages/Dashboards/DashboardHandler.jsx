@@ -11,12 +11,12 @@ const DashboardHandler = () => {
     const { user, role, viewRole, setViewRole } = useAuth();
 
     // 1. Check if user has "Double Role" capabilities
-    const canSwitch = (role === 'admin' || role === 'secretary') && user?.isTechnician;
+    const canSwitch = (role === 'admin' || role === 'secretary' || role === 'ceo') && user?.isTechnician;
 
     // 2. Handle The Switch
     const toggleView = () => {
         if (viewRole === 'worker') {
-            setViewRole(role); // Go back to Main Role (Admin/Secretary)
+            setViewRole(role); // Go back to Main Role (Admin/Secretary/CEO)
         } else {
             setViewRole('worker'); // Go to Technician Mode
         }
@@ -26,6 +26,7 @@ const DashboardHandler = () => {
     let DashboardComponent;
     switch (viewRole) {
         case 'admin':
+        case 'ceo': // 🔥 CEO gets the Admin Dashboard
             DashboardComponent = <AdminDashboard user={user} />;
             break;
         case 'secretary':
@@ -38,7 +39,10 @@ const DashboardHandler = () => {
         default:
             DashboardComponent = (
                 <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                    <p className="text-gray-500">Unknown Role</p>
+                    <div className="text-center">
+                        <h2 className="text-2xl font-bold text-gray-800">Unknown Role</h2>
+                        <p className="text-gray-500">Your role "{viewRole}" is not recognized.</p>
+                    </div>
                 </div>
             );
     }
