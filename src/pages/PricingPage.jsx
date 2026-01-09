@@ -264,8 +264,6 @@ const PricingPage = () => {
                     )}
                 </div>
             </div>
-
-            <Footer />
         </div>
     );
 };
