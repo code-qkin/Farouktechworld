@@ -71,8 +71,8 @@ const OrdersManagement = () => {
     const [hasMore, setHasMore] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Filters State
-    const [timeFilter, setTimeFilter] = useState('week'); 
+    // Filters State - DEFAULT IS 'day' (Today)
+    const [timeFilter, setTimeFilter] = useState('day'); 
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterType, setFilterType] = useState('All');
     const [filterPayment, setFilterPayment] = useState('All'); 
@@ -120,17 +120,34 @@ const OrdersManagement = () => {
         return ['All', ...Array.from(cats).sort()];
     }, [inventory]);
 
-    // 1. DATA FETCHING (UPDATED)
+    // 1. DATA FETCHING (SMART LOAD)
     useEffect(() => {
         setLoading(true);
         let unsubOrders = () => {}; 
 
+        // 🔥 CALCULATE START DATE FOR BOTH SEARCH AND DEFAULT MODES
+        let startDate = new Date();
+        startDate.setHours(0, 0, 0, 0); // Default to Today 00:00
+
+        if (timeFilter === 'day') {
+            // Today: Already set to 00:00 today
+        } else if (timeFilter === 'week') {
+            // This Week: Set to Sunday of current week
+            startDate.setDate(startDate.getDate() - startDate.getDay());
+        } else if (timeFilter === 'month') {
+            // This Month: Set to 1st of current month
+            startDate.setDate(1);
+        } else {
+            startDate = null; // 'all' - Fetch Everything
+        }
+
+        // 🔥 SEARCH MODE: Direct DB Query + Client-Side Date Filter
         if (searchTerm.length >= 3) {
-            // SEARCH MODE
             const term = searchTerm.trim();
             
             const fetchSearchResults = async () => {
                 try {
+                    // Query 1: Ticket ID
                     const qTicket = query(
                         collection(db, "Orders"),
                         where("ticketId", ">=", term),
@@ -138,6 +155,7 @@ const OrdersManagement = () => {
                         limit(50)
                     );
                     
+                    // Query 2: Customer Name
                     const qName = query(
                         collection(db, "Orders"),
                         where("customer.name", ">=", term),
@@ -150,11 +168,22 @@ const OrdersManagement = () => {
                         getDocs(qName)
                     ]);
 
+                    // Merge Results
                     const results = new Map();
                     ticketSnap.docs.forEach(doc => results.set(doc.id, { id: doc.id, ...doc.data() }));
                     nameSnap.docs.forEach(doc => results.set(doc.id, { id: doc.id, ...doc.data() }));
 
-                    setOrders(Array.from(results.values()));
+                    const rawResults = Array.from(results.values());
+
+                    // 🔥 APPLY TIME FILTER TO SEARCH RESULTS
+                    const filteredResults = startDate 
+                        ? rawResults.filter(o => {
+                            const d = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt);
+                            return d >= startDate;
+                        })
+                        : rawResults;
+
+                    setOrders(filteredResults);
                     setLoading(false);
                 } catch (e) {
                     console.error("Search error:", e);
@@ -164,24 +193,10 @@ const OrdersManagement = () => {
             fetchSearchResults();
 
         } else {
-            // DEFAULT MODE (Time Filter)
-            let startDate = new Date();
-            startDate.setHours(0, 0, 0, 0); // Start of Today
-
-            // 🔥 FIXED: Explicitly handle 'day' (Today) filter
-            if (timeFilter === 'day') {
-                // startDate stays as Today 00:00
-            } else if (timeFilter === 'week') {
-                startDate.setDate(startDate.getDate() - 7);
-            } else if (timeFilter === 'month') {
-                startDate.setMonth(startDate.getMonth() - 1);
-            } else {
-                startDate = null; // 'all'
-            }
-
+            // 🔥 DEFAULT MODE: Load based on Time Filter
             const q = startDate 
                 ? query(collection(db, "Orders"), where("createdAt", ">=", startDate), orderBy("createdAt", "desc"))
-                : query(collection(db, "Orders"), orderBy("createdAt", "desc"), limit(100));
+                : query(collection(db, "Orders"), orderBy("createdAt", "desc")); // No limit for 'All Time'
             
             unsubOrders = onSnapshot(q, (snap) => {
                 setOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -208,7 +223,7 @@ const OrdersManagement = () => {
             unsubInventory(); 
             unsubCustomers(); 
         };
-    }, [timeFilter, searchTerm]);
+    }, [timeFilter, searchTerm]); // 🔥 Re-runs when filter or search changes
 
     // CHECK FOR EDIT MODE
     useEffect(() => {
@@ -230,9 +245,10 @@ const OrdersManagement = () => {
         return 'store_sale';
     };
 
-    // 2. FILTERING
+    // 2. FILTERING (Client-Side Refinement)
     const filteredOrders = useMemo(() => {
         return orders.filter(o => {
+            // Search is handled by DB query, but we keep this for small list refinement
             const term = searchTerm.toLowerCase();
             const matchSearch = (o.ticketId || '').toLowerCase().includes(term) || (o.customer?.name || '').toLowerCase().includes(term);
             const matchStatus = filterStatus === 'All' || o.status === filterStatus;
