@@ -114,24 +114,23 @@ const OrdersManagement = () => {
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
-    // 櫨 DYNAMIC CATEGORIES (Inventory Based)
+    // DYNAMIC CATEGORIES (Inventory Based)
     const dynamicCategories = useMemo(() => {
         const cats = new Set(inventory.map(i => i.category).filter(Boolean));
         return ['All', ...Array.from(cats).sort()];
     }, [inventory]);
 
-    // 1. DATA FETCHING (UPDATED FOR NAME SEARCH)
+    // 1. DATA FETCHING (UPDATED)
     useEffect(() => {
         setLoading(true);
-        let unsubOrders = () => {}; // Default empty unsubscribe
+        let unsubOrders = () => {}; 
 
         if (searchTerm.length >= 3) {
-            // 櫨 SEARCH MODE: Fetch Ticket ID OR Customer Name
+            // SEARCH MODE
             const term = searchTerm.trim();
             
             const fetchSearchResults = async () => {
                 try {
-                    // Query 1: Ticket ID
                     const qTicket = query(
                         collection(db, "Orders"),
                         where("ticketId", ">=", term),
@@ -139,7 +138,6 @@ const OrdersManagement = () => {
                         limit(50)
                     );
                     
-                    // Query 2: Customer Name
                     const qName = query(
                         collection(db, "Orders"),
                         where("customer.name", ">=", term),
@@ -152,7 +150,6 @@ const OrdersManagement = () => {
                         getDocs(qName)
                     ]);
 
-                    // Merge results using a Map to remove duplicates
                     const results = new Map();
                     ticketSnap.docs.forEach(doc => results.set(doc.id, { id: doc.id, ...doc.data() }));
                     nameSnap.docs.forEach(doc => results.set(doc.id, { id: doc.id, ...doc.data() }));
@@ -167,13 +164,20 @@ const OrdersManagement = () => {
             fetchSearchResults();
 
         } else {
-            // 櫨 DEFAULT MODE: Real-time listener based on time filter
+            // DEFAULT MODE (Time Filter)
             let startDate = new Date();
-            startDate.setHours(0, 0, 0, 0);
+            startDate.setHours(0, 0, 0, 0); // Start of Today
 
-            if (timeFilter === 'week') startDate.setDate(startDate.getDate() - 7);
-            else if (timeFilter === 'month') startDate.setMonth(startDate.getMonth() - 1);
-            else startDate = null; // 'all'
+            // 🔥 FIXED: Explicitly handle 'day' (Today) filter
+            if (timeFilter === 'day') {
+                // startDate stays as Today 00:00
+            } else if (timeFilter === 'week') {
+                startDate.setDate(startDate.getDate() - 7);
+            } else if (timeFilter === 'month') {
+                startDate.setMonth(startDate.getMonth() - 1);
+            } else {
+                startDate = null; // 'all'
+            }
 
             const q = startDate 
                 ? query(collection(db, "Orders"), where("createdAt", ">=", startDate), orderBy("createdAt", "desc"))

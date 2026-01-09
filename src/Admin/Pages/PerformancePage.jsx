@@ -21,7 +21,6 @@ const formatDate = (date) =>
     date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
 
 const StatCard = ({ title, value, subtext, icon: Icon, color, hideable, onClick }) => {
-    // 🔥 Default to hidden if the card is hideable
     const [hidden, setHidden] = useState(hideable ? true : false);
 
     const colorStyles = {
@@ -214,27 +213,33 @@ const PerformanceReports = () => {
     return (
         <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-20">
             {/* --- HEADER SECTION --- */}
-            <div className="bg-white border-b border-slate-200 sticky top-0 z-20 px-6 py-4 flex justify-between items-center">
-                <div className="flex items-center gap-4">
-                    <button onClick={() => navigate('/admin/dashboard')} className="p-2 bg-slate-100 rounded-xl"><ArrowLeft size={20} /></button>
-                    <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
-                        <Activity className="text-purple-600" /> Financial Performance
-                    </h1>
-                    <button onClick={() => navigate('/admin/payments')} className="text-xs font-bold text-blue-600 hover:underline mt-1">
-                        View Full Payment Register →
-                    </button>
+            <div className="bg-white border-b border-slate-200 sticky top-0 z-20 px-4 sm:px-6 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]">
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                    <button onClick={() => navigate('/admin/dashboard')} className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition"><ArrowLeft size={20} /></button>
+                    <div>
+                        <h1 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2">
+                            <Activity className="text-purple-600" /> Financial Performance
+                        </h1>
+                        <button onClick={() => navigate('/admin/payments')} className="text-xs font-bold text-blue-600 hover:underline mt-0.5">
+                            View Full Payment Register →
+                        </button>
+                    </div>
                 </div>
-                <div className="flex bg-slate-100 p-1 rounded-xl">
-                    {['today', '7_days', 'this_month', 'all'].map(tab => (
-                        <button key={tab} onClick={() => setFilterRange(tab)} className={`px-4 py-2 rounded-lg text-xs font-bold capitalize ${filterRange === tab ? 'bg-white shadow text-purple-700' : 'text-slate-500'}`}>{tab.replace('_', ' ')}</button>
-                    ))}
+                
+                {/* Scrollable Filters on Mobile */}
+                <div className="w-full md:w-auto overflow-x-auto no-scrollbar">
+                    <div className="flex bg-slate-100 p-1 rounded-xl min-w-max">
+                        {['today', '7_days', 'this_month', 'all'].map(tab => (
+                            <button key={tab} onClick={() => setFilterRange(tab)} className={`px-4 py-2 rounded-lg text-xs font-bold capitalize whitespace-nowrap transition-all ${filterRange === tab ? 'bg-white shadow text-purple-700' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>{tab.replace('_', ' ')}</button>
+                        ))}
+                    </div>
                 </div>
             </div>
 
-            <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+            <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
 
                 {/* --- 1. KEY METRICS --- */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                     <StatCard
                         title="Net Revenue"
                         value={formatCurrency(stats.netRevenue)}
@@ -272,8 +277,8 @@ const PerformanceReports = () => {
 
                 {/* --- 2. VISUALIZATION --- */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-[350px]">
-                        <h3 className="font-bold text-gray-800 mb-4">Revenue Trend</h3>
+                    <div className="lg:col-span-2 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 h-[300px] sm:h-[350px]">
+                        <h3 className="font-bold text-gray-800 mb-4 text-sm sm:text-base">Revenue Trend</h3>
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={stats.chartData}>
                                 <defs><linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.1} /><stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} /></linearGradient></defs>
@@ -286,8 +291,8 @@ const PerformanceReports = () => {
                         </ResponsiveContainer>
                     </div>
 
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-[350px]">
-                        <h3 className="font-bold text-gray-800 mb-4">Revenue Source</h3>
+                    <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 h-[300px] sm:h-[350px]">
+                        <h3 className="font-bold text-gray-800 mb-4 text-sm sm:text-base">Revenue Source</h3>
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                                 <Pie data={[{ name: 'Repairs', value: stats.repairRev }, { name: 'Sales', value: stats.storeRev }]} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
@@ -302,23 +307,23 @@ const PerformanceReports = () => {
                 </div>
 
                 {/* --- 3. EXPENSES TABLE --- */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="font-bold text-slate-800 flex items-center gap-2"><FileText className="text-orange-500" /> Expenses Log</h3>
-                        <div className="flex gap-2">
-                            <button onClick={handleExport} className="bg-white border border-gray-200 text-slate-700 px-3 py-2 rounded-lg hover:bg-gray-50"><Download size={16} /></button>
-                            <button onClick={() => setShowExpenseModal(true)} className="bg-orange-100 text-orange-700 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-orange-200"><Plus size={16} /> Add Expense</button>
+                <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                        <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm sm:text-base"><FileText className="text-orange-500" /> Expenses Log</h3>
+                        <div className="flex gap-2 w-full sm:w-auto">
+                            <button onClick={handleExport} className="flex-1 sm:flex-none justify-center bg-white border border-gray-200 text-slate-700 px-3 py-2 rounded-lg hover:bg-gray-50 flex items-center gap-2 text-xs font-bold transition"><Download size={14} /> Export</button>
+                            <button onClick={() => setShowExpenseModal(true)} className="flex-1 sm:flex-none justify-center bg-orange-100 text-orange-700 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-orange-200 transition"><Plus size={14} /> Add Expense</button>
                         </div>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left">
                             <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                                <tr><th className="p-3">Date</th><th className="p-3">Description</th><th className="p-3 text-right">Amount</th><th className="p-3 text-right">Action</th></tr>
+                                <tr><th className="p-3 whitespace-nowrap">Date</th><th className="p-3">Description</th><th className="p-3 text-right">Amount</th><th className="p-3 text-right">Action</th></tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {filteredExpenses.slice(0, 50).map((exp) => (
                                     <tr key={exp.id} className="hover:bg-slate-50/80 transition">
-                                        <td className="p-3 text-slate-500">{formatDate(exp.date)}</td>
+                                        <td className="p-3 text-slate-500 whitespace-nowrap">{formatDate(exp.date)}</td>
                                         <td className="p-3 font-medium text-slate-800">{exp.description}</td>
                                         <td className="p-3 text-right font-bold text-red-500">-{formatCurrency(exp.amount)}</td>
                                         <td className="p-3 text-right"><button onClick={() => handleDeleteExpense(exp.id)} className="text-slate-400 hover:text-red-600 transition"><Trash2 size={16} /></button></td>
