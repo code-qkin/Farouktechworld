@@ -101,7 +101,7 @@ const PerformanceReports = () => {
     const [showExpenseModal, setShowExpenseModal] = useState(false);
     const [newExpense, setNewExpense] = useState({ desc: '', amount: '' });
 
-    if (role !== 'admin') return <Navigate to="/admin/dashboard" replace />;
+    if (role !== 'admin' && role !== 'ceo') return <Navigate to="/admin/dashboard" replace />;
 
     // 1. FETCH DATA
     useEffect(() => {
