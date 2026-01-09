@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     ClipboardList, ShoppingBag, Search, DollarSign, Clock, 
     CheckCircle, LogOut, Bell, User, Phone, Calendar, 
-    ArrowRight, TrendingUp, Layers
+    ArrowRight, TrendingUp, Layers, Eye, EyeOff
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
@@ -26,30 +26,46 @@ const getTimeAgo = (timestamp) => {
 };
 
 // --- COMPONENTS ---
-const StatCard = ({ title, value, icon: Icon, color, subtext }) => (
-    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-start justify-between transition-all hover:shadow-md h-full">
-        <div>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">{title}</p>
-            <h3 className="text-2xl font-black text-gray-900">{value}</h3>
-            {subtext && <p className={`text-xs mt-1 font-medium ${
-                color === 'green' ? 'text-green-600' : 
-                color === 'indigo' ? 'text-indigo-600' :
-                color === 'orange' ? 'text-orange-600' :
-                color === 'purple' ? 'text-purple-600' :
-                'text-blue-600'
-            }`}>{subtext}</p>}
+const StatCard = ({ title, value, icon: Icon, color, subtext, hideable }) => {
+    const [hidden, setHidden] = useState(hideable ? true : false);
+
+    return (
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-start justify-between transition-all hover:shadow-md h-full">
+            <div>
+                <div className="flex items-center gap-2 mb-1">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">{title}</p>
+                    {hideable && (
+                        <button 
+                            onClick={() => setHidden(!hidden)} 
+                            className="text-slate-300 hover:text-slate-500 transition p-0.5"
+                        >
+                            {hidden ? <Eye size={14}/> : <EyeOff size={14}/>}
+                        </button>
+                    )}
+                </div>
+                <h3 className="text-2xl font-black text-gray-900">
+                    {hideable && hidden ? '****' : value}
+                </h3>
+                {subtext && <p className={`text-xs mt-1 font-medium ${
+                    color === 'green' ? 'text-green-600' : 
+                    color === 'indigo' ? 'text-indigo-600' :
+                    color === 'orange' ? 'text-orange-600' :
+                    color === 'purple' ? 'text-purple-600' :
+                    'text-blue-600'
+                }`}>{subtext}</p>}
+            </div>
+            <div className={`p-3 rounded-xl ${
+                color === 'purple' ? 'bg-purple-50 text-purple-600' :
+                color === 'green' ? 'bg-green-50 text-green-600' :
+                color === 'orange' ? 'bg-orange-50 text-orange-600' :
+                color === 'indigo' ? 'bg-indigo-50 text-indigo-600' :
+                'bg-blue-50 text-blue-600'
+            }`}>
+                <Icon size={22} />
+            </div>
         </div>
-        <div className={`p-3 rounded-xl ${
-            color === 'purple' ? 'bg-purple-50 text-purple-600' :
-            color === 'green' ? 'bg-green-50 text-green-600' :
-            color === 'orange' ? 'bg-orange-50 text-orange-600' :
-            color === 'indigo' ? 'bg-indigo-50 text-indigo-600' :
-            'bg-blue-50 text-blue-600'
-        }`}>
-            <Icon size={22} />
-        </div>
-    </div>
-);
+    );
+};
 
 const SecretaryDashboard = ({ user }) => {
   const navigate = useNavigate();
@@ -125,7 +141,7 @@ const SecretaryDashboard = ({ user }) => {
           readyForPickup, 
           recentIntake, 
           chartData,
-          totalOrders: orders.length // 🔥 New Metric: Total Orders
+          totalOrders: orders.length // 櫨 New Metric: Total Orders
       };
   }, [orders]);
 
@@ -163,10 +179,8 @@ const SecretaryDashboard = ({ user }) => {
       <main className="max-w-[1600px] mx-auto p-6 space-y-6">
 
         {/* --- 1. METRICS ROW --- */}
-        {/* Updated grid to xl:grid-cols-5 to fit the new card */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             
-            {/* 🔥 NEW CARD: All Time Orders */}
             <StatCard 
                 title="All Time Orders" 
                 value={dashboardData.totalOrders} 
@@ -175,7 +189,16 @@ const SecretaryDashboard = ({ user }) => {
                 subtext="Total Lifetime Volume" 
             />
 
-            <StatCard title="Cash Collected (Today)" value={formatCurrency(dashboardData.cashToday)} icon={DollarSign} color="green" subtext="Daily Revenue" />
+            {/* 🔥 HIDDEN BY DEFAULT */}
+            <StatCard 
+                title="Cash Collected (Today)" 
+                value={formatCurrency(dashboardData.cashToday)} 
+                icon={DollarSign} 
+                color="green" 
+                subtext="Daily Revenue" 
+                hideable={true} 
+            />
+            
             <StatCard title="Ready for Pickup" value={dashboardData.readyForPickup.length} icon={Bell} color="orange" subtext="Awaiting Customer" />
             <StatCard title="Active Jobs" value={dashboardData.activeJobs} icon={Clock} color="blue" subtext="In Workshop" />
             <StatCard title="Total Intake (7 Days)" value={dashboardData.chartData.reduce((a,b)=>a+b.intake,0)} icon={ClipboardList} color="purple" subtext="Weekly Volume" />
@@ -187,12 +210,11 @@ const SecretaryDashboard = ({ user }) => {
             {/* LEFT: ACTIONS & PICKUP LIST */}
             <div className="lg:col-span-2 space-y-6">
                 
-                {/* Quick Actions Bar - REMOVED CHECK INVENTORY */}
+                {/* Quick Actions Bar */}
                 <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col sm:flex-row gap-3 items-center">
                     <button onClick={() => navigate('/admin/orders')} className="flex-1 w-full bg-purple-900 text-white h-12 rounded-lg font-bold hover:bg-purple-800 transition flex items-center justify-center gap-2 shadow-md">
                         <ClipboardList size={18}/> New Repair Order
                     </button>
-                    {/* Inventory Button Removed Here */}
                     <div className="relative flex-1 w-full">
                         <Search className="absolute left-3 top-3.5 text-gray-400" size={16}/>
                         <input 
@@ -307,7 +329,8 @@ const SecretaryDashboard = ({ user }) => {
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-bold text-slate-700 truncate">{order.customer.name}</p>
                                     <p className="text-xs text-slate-400 flex items-center gap-1">
-                                        {order.orderType === 'repair' ? <WrenchIcon/> : <BagIcon/>} 
+                                        {/* Simple Logic for Icon since we removed sub-components for compactness */}
+                                        {order.orderType === 'repair' ? "🔧" : "🛍️"} 
                                         {order.ticketId}
                                     </p>
                                 </div>
@@ -329,9 +352,5 @@ const SecretaryDashboard = ({ user }) => {
     </div>
   );
 };
-
-// Mini Icons for list
-const WrenchIcon = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg>;
-const BagIcon = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 0 0-8 0v4M5 9h14l1 12H4L5 9z" /></svg>;
 
 export default SecretaryDashboard;
