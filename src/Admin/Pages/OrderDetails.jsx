@@ -1,37 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-    ArrowLeft, Printer, DollarSign, CheckCircle, Wrench, Ban, PlusCircle, 
+import {
+    ArrowLeft, Printer, DollarSign, CheckCircle, Wrench, Ban, PlusCircle,
     X, RotateCcw, RefreshCw, Lock, Smartphone, Edit2, Trash2, AlertTriangle, Package,
     Loader2, Calendar, User, Mail
 } from 'lucide-react';
-import { 
-    collection, query, where, getDocs, doc, 
-    updateDoc, runTransaction, addDoc, serverTimestamp, Timestamp, onSnapshot, deleteDoc, arrayRemove, increment, arrayUnion 
-} from 'firebase/firestore'; 
+import {
+    collection, query, where, getDocs, doc,
+    updateDoc, runTransaction, addDoc, serverTimestamp, Timestamp, onSnapshot, deleteDoc, arrayRemove, increment, arrayUnion
+} from 'firebase/firestore';
 import { db } from '../../firebaseConfig.js';
 import { useAuth } from '../AdminContext';
 import { Toast, ConfirmModal, PromptModal } from '../Components/Feedback.jsx';
 
 const OrderDetails = () => {
-    const { orderId } = useParams(); 
+    const { orderId } = useParams();
     const id = orderId;
     const navigate = useNavigate();
     const { role, user } = useAuth();
-    
+
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
     const [workers, setWorkers] = useState([]);
     const [isUpdating, setIsUpdating] = useState(false);
-    
+
     // UI State
     const [showReceipt, setShowReceipt] = useState(false);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
-    
+
     // Payment State
     const [paymentInput, setPaymentInput] = useState('');
-    const [paymentMethod, setPaymentMethod] = useState('POS'); 
-    
+    const [paymentMethod, setPaymentMethod] = useState('POS');
+
     const [showDiscountModal, setShowDiscountModal] = useState(false);
     const [discountInput, setDiscountInput] = useState('');
     const [editingCondition, setEditingCondition] = useState({ index: -1, value: '' });
@@ -45,7 +45,7 @@ const OrderDetails = () => {
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
     const [promptConfig, setPromptConfig] = useState({ isOpen: false, title: '', message: '', max: 1, action: null });
 
-    useEffect(() => { if (toast.message) setTimeout(() => setToast({message:'', type:''}), 3000); }, [toast.message]);
+    useEffect(() => { if (toast.message) setTimeout(() => setToast({ message: '', type: '' }), 3000); }, [toast.message]);
 
     // 1. FETCH ORDER
     useEffect(() => {
@@ -81,7 +81,7 @@ const OrderDetails = () => {
             customer: { ...order.customer },
             items: (order.items || []).filter(i => i.type === 'repair' || i.type === 'product').map(item => ({
                 ...item, qty: Number(item.qty || 1), total: Number(item.total || 0), price: Number(item.price || 0),
-                collected: item.collected || false, services: item.services ? item.services.map(s => ({...s})) : []
+                collected: item.collected || false, services: item.services ? item.services.map(s => ({ ...s })) : []
             }))
         };
         navigate('/admin/orders', { state: { orderToEdit: safeOrder } });
@@ -90,7 +90,7 @@ const OrderDetails = () => {
     // Add Payment
     const handleAddPayment = async () => {
         const amt = Number(paymentInput);
-        if(!amt) return;
+        if (!amt) return;
         setIsUpdating(true);
         try {
             await runTransaction(db, async (t) => {
@@ -98,7 +98,7 @@ const OrderDetails = () => {
                 const data = (await t.get(ref)).data();
                 const newPaid = (data.amountPaid || 0) + amt;
                 const newBal = data.totalCost - newPaid;
-                
+
                 const paymentRecord = {
                     amount: amt,
                     method: paymentMethod,
@@ -106,14 +106,14 @@ const OrderDetails = () => {
                     receivedBy: user?.name || "Admin"
                 };
 
-                t.update(ref, { 
-                    amountPaid: newPaid, balance: newBal, 
+                t.update(ref, {
+                    amountPaid: newPaid, balance: newBal,
                     paymentStatus: newBal <= 0 ? 'Paid' : 'Part Payment', paid: newBal <= 0,
-                    paymentHistory: arrayUnion(paymentRecord) 
+                    paymentHistory: arrayUnion(paymentRecord)
                 });
             });
-            setToast({ message: "Payment Recorded", type: "success" }); 
-        } catch(e) { setToast({ message: "Failed", type: "error" }); }
+            setToast({ message: "Payment Recorded", type: "success" });
+        } catch (e) { setToast({ message: "Failed", type: "error" }); }
         setIsUpdating(false); setShowPaymentModal(false); setPaymentInput('');
     };
 
@@ -146,27 +146,22 @@ const OrderDetails = () => {
                         });
                     });
                     setToast({ message: "Entry Removed", type: "success" });
-                } catch(e) { setToast({ message: "Failed", type: "error" }); }
-                setIsUpdating(false); setConfirmConfig({...confirmConfig, isOpen: false});
+                } catch (e) { setToast({ message: "Failed", type: "error" }); }
+                setIsUpdating(false); setConfirmConfig({ ...confirmConfig, isOpen: false });
             }
         });
     };
 
     // Reset ALL Payments
     const handleResetPayment = async () => {
-         setIsUpdating(true);
-         await updateDoc(doc(db, "Orders", order.id), { amountPaid: 0, balance: order.totalCost, paymentStatus: 'Unpaid', paid: false, paymentHistory: [] });
-         setToast({ message: "All Payments Reset", type: "success" });
-         setIsUpdating(false);
-         setConfirmConfig({...confirmConfig, isOpen: false});
+        setIsUpdating(true);
+        await updateDoc(doc(db, "Orders", order.id), { amountPaid: 0, balance: order.totalCost, paymentStatus: 'Unpaid', paid: false, paymentHistory: [] });
+        setToast({ message: "All Payments Reset", type: "success" });
+        setIsUpdating(false);
+        setConfirmConfig({ ...confirmConfig, isOpen: false });
     };
 
-    const handleEmailReceipt = () => {
-        if (!order.customer?.email) return setToast({ message: "No customer email found", type: "error" });
-        const subject = `Receipt for Ticket ${order.ticketId} - FaroukTechWorld`;
-        const body = `Dear ${order.customer.name},%0D%0A%0D%0AHere is your receipt:%0D%0ATicket ID: ${order.ticketId}%0D%0ATotal: ₦${order.totalCost.toLocaleString()}%0D%0APaid: ₦${order.amountPaid.toLocaleString()}%0D%0ABalance: ₦${order.balance.toLocaleString()}%0D%0A%0D%0AThank you!`;
-        window.open(`mailto:${order.customer.email}?subject=${subject}&body=${body}`);
-    };
+
 
     const handleProcessRefund = async () => {
         const reason = prompt("Enter reason for refund:");
@@ -174,7 +169,7 @@ const OrderDetails = () => {
         setIsUpdating(true);
         await updateDoc(doc(db, "Orders", order.id), { amountPaid: 0, refundedAmount: order.amountPaid, paymentStatus: 'Refunded', balance: 0, refundReason: reason });
         setToast({ message: "Refund Processed", type: "success" });
-        setIsUpdating(false); setConfirmConfig({...confirmConfig, isOpen: false});
+        setIsUpdating(false); setConfirmConfig({ ...confirmConfig, isOpen: false });
     };
 
     const toggleItemCollected = async (index) => {
@@ -215,8 +210,8 @@ const OrderDetails = () => {
             newItems[i].services[s].status = newStatus;
             let newOrderStatus = order.status === 'Pending' && newStatus === 'In Progress' ? 'In Progress' : order.status;
             await updateDoc(doc(db, "Orders", order.id), { items: newItems, status: newOrderStatus });
-            setToast({message: `Assigned to ${newWorker}`, type: 'success'});
-        } catch(e) { setToast({message: "Failed", type: 'error'}); }
+            setToast({ message: `Assigned to ${newWorker}`, type: 'success' });
+        } catch (e) { setToast({ message: "Failed", type: 'error' }); }
         setIsUpdating(false);
     };
 
@@ -252,8 +247,8 @@ const OrderDetails = () => {
     };
 
     const executeVoidProduct = async (i, returnQty) => {
-        setConfirmConfig({...confirmConfig, isOpen: false});
-        setPromptConfig({...promptConfig, isOpen: false});
+        setConfirmConfig({ ...confirmConfig, isOpen: false });
+        setPromptConfig({ ...promptConfig, isOpen: false });
         setIsUpdating(true);
         try {
             await runTransaction(db, async (t) => {
@@ -261,35 +256,35 @@ const OrderDetails = () => {
                 const data = (await t.get(ref)).data();
                 const newItems = JSON.parse(JSON.stringify(data.items));
                 const item = newItems[i];
-                if(item.returned) throw "Already returned";
-                
+                if (item.returned) throw "Already returned";
+
                 // Restock Inventory
                 if (item.productId) {
                     const invRef = doc(db, "Inventory", item.productId);
                     t.update(invRef, { stock: increment(returnQty) });
                 }
-                
-                if (returnQty === item.qty) { 
-                    newItems[i].returned = true; 
-                } else { 
-                    newItems[i].qty -= returnQty; 
-                    newItems[i].total = newItems[i].price * newItems[i].qty; 
-                    newItems.push({ ...item, qty: returnQty, total: item.price * returnQty, returned: true }); 
+
+                if (returnQty === item.qty) {
+                    newItems[i].returned = true;
+                } else {
+                    newItems[i].qty -= returnQty;
+                    newItems[i].total = newItems[i].price * newItems[i].qty;
+                    newItems.push({ ...item, qty: returnQty, total: item.price * returnQty, returned: true });
                 }
-                
+
                 const deduction = item.price * returnQty;
                 const newTotalCost = Math.max(0, (data.totalCost) - deduction);
                 const newBalance = newTotalCost - (data.amountPaid || 0);
 
-                t.update(ref, { 
-                    items: newItems, 
-                    totalCost: newTotalCost, 
+                t.update(ref, {
+                    items: newItems,
+                    totalCost: newTotalCost,
                     balance: newBalance,
                     paymentStatus: newBalance < 0 ? 'Refund Due' : (newBalance === 0 ? 'Paid' : 'Part Payment')
                 });
             });
-            setToast({message: "Item Returned & Restocked", type: 'success'});
-        } catch(e) { setToast({message: "Failed", type: 'error'}); }
+            setToast({ message: "Item Returned & Restocked", type: 'success' });
+        } catch (e) { setToast({ message: "Failed", type: 'error' }); }
         setIsUpdating(false);
     };
 
@@ -303,7 +298,7 @@ const OrderDetails = () => {
                         const ref = doc(db, "Orders", order.id);
                         const data = (await t.get(ref)).data();
                         const newItems = JSON.parse(JSON.stringify(data.items));
-                        newItems[i].services[s].status = 'Void'; 
+                        newItems[i].services[s].status = 'Void';
                         newItems[i].services[s].worker = 'Unassigned';
                         if (newItems[i].type === 'repair') newItems[i].total = newItems[i].services.reduce((acc, curr) => acc + (curr.status !== 'Void' ? Number(curr.cost || 0) : 0), 0);
                         const newSubtotal = newItems.reduce((acc, item) => acc + (Number(item.total) || 0), 0);
@@ -315,31 +310,31 @@ const OrderDetails = () => {
                         const newBalance = newTotalCost - newAmountPaid;
                         t.update(ref, { items: newItems, subtotal: newSubtotal, totalCost: newTotalCost, amountPaid: newAmountPaid, refundedAmount: newRefundedAmount, balance: newBalance });
                     });
-                    setToast({message: "Service Voided", type: 'success'});
-                } catch(e) { setToast({message: "Failed", type: 'error'}); }
+                    setToast({ message: "Service Voided", type: 'success' });
+                } catch (e) { setToast({ message: "Failed", type: 'error' }); }
                 setIsUpdating(false);
-                setConfirmConfig({...confirmConfig, isOpen: false});
+                setConfirmConfig({ ...confirmConfig, isOpen: false });
             }
         });
     };
 
     const handleVoidOrder = async () => {
-         setIsUpdating(true);
-         try { await updateDoc(doc(db, "Orders", order.id), { status: 'Void', paymentStatus: 'Voided', balance: 0 }); navigate('/admin/orders'); } 
-         catch(e) { setToast({message: "Void Failed", type: 'error'}); }
-         setIsUpdating(false);
-         setConfirmConfig({...confirmConfig, isOpen: false});
+        setIsUpdating(true);
+        try { await updateDoc(doc(db, "Orders", order.id), { status: 'Void', paymentStatus: 'Voided', balance: 0 }); navigate('/admin/orders'); }
+        catch (e) { setToast({ message: "Void Failed", type: 'error' }); }
+        setIsUpdating(false);
+        setConfirmConfig({ ...confirmConfig, isOpen: false });
     };
-    
+
     // 🔥 UPDATED: Strict Validation for Collection
     const handleStatusChange = async (e) => {
         const newStatus = e.target.value;
         if (newStatus === 'Void') { setConfirmConfig({ isOpen: true, title: "Void Order?", message: "Cancels order & zeros balance.", confirmText: "Void", confirmColor: "bg-red-600", action: handleVoidOrder }); return; }
-        
+
         // 🔥 BLOCK COLLECTION IF WORK NOT DONE
         if (newStatus === 'Collected') {
-            const hasPendingRepairs = order.items?.some(item => 
-                item.type === 'repair' && 
+            const hasPendingRepairs = order.items?.some(item =>
+                item.type === 'repair' &&
                 item.services?.some(s => s.status !== 'Completed' && s.status !== 'Void')
             );
 
@@ -352,7 +347,7 @@ const OrderDetails = () => {
         setIsUpdating(true);
         try {
             const updates = { status: newStatus };
-            
+
             // If collected, update items to collected=true
             if (newStatus === 'Collected' && order.items) {
                 updates.items = order.items.map(item => ({
@@ -363,7 +358,7 @@ const OrderDetails = () => {
 
             await updateDoc(doc(db, "Orders", order.id), updates);
             setToast({ message: "Status Updated", type: "success" });
-        } catch(e) {
+        } catch (e) {
             setToast({ message: "Update Failed", type: "error" });
         }
         setIsUpdating(false);
@@ -384,7 +379,7 @@ const OrderDetails = () => {
                         t.update(doc(db, "Orders", order.id), { items: arrayRemove(partItem) });
                     });
                     setToast({ message: "Part Removed", type: "success" });
-                } catch (e) { setToast({ message: "Failed", type: "error" }); } 
+                } catch (e) { setToast({ message: "Failed", type: "error" }); }
                 finally { setIsUpdating(false); setConfirmConfig({ ...confirmConfig, isOpen: false }); }
             }
         });
@@ -397,8 +392,8 @@ const OrderDetails = () => {
             newItems[itemIndex].condition = editingCondition.value;
             await updateDoc(doc(db, "Orders", order.id), { items: newItems });
             setToast({ message: "Condition updated", type: "success" });
-            setEditingCondition({ index: -1, value: '' }); 
-        } catch(e) { setToast({ message: "Failed", type: "error" }); } 
+            setEditingCondition({ index: -1, value: '' });
+        } catch (e) { setToast({ message: "Failed", type: "error" }); }
         finally { setIsUpdating(false); }
     };
 
@@ -428,38 +423,37 @@ const OrderDetails = () => {
     };
 
     const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
-    
+
     // 🔥 FIXED DATE DISPLAY (DD/MM/YYYY)
-    const dateStr = order?.createdAt?.seconds 
-        ? new Date(order.createdAt.seconds * 1000).toLocaleDateString('en-GB', { 
-            day: '2-digit', month: '2-digit', year: 'numeric', 
-            hour: '2-digit', minute: '2-digit', hour12: true 
-          }) 
+    const dateStr = order?.createdAt?.seconds
+        ? new Date(order.createdAt.seconds * 1000).toLocaleDateString('en-GB', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', hour12: true
+        })
         : 'N/A';
-        
+
     const isReturn = order?.orderType === 'return';
     const partsUsed = order?.items?.filter(i => i.type === 'part_usage') || [];
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin"/></div>;
+    if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
     if (!order) return <div className="p-10 text-center font-bold">Order not found.</div>;
 
     return (
         <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
-             <Toast message={toast.message} type={toast.type} onClose={() => setToast({message:'', type:''})} />
-             <ConfirmModal isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmText={confirmConfig.confirmText} confirmColor={confirmConfig.confirmColor} onCancel={() => setConfirmConfig({...confirmConfig, isOpen: false})} onConfirm={() => confirmConfig.action && confirmConfig.action(true)} />
-             <PromptModal isOpen={promptConfig.isOpen} title={promptConfig.title} message={promptConfig.message} max={promptConfig.max} onCancel={() => setPromptConfig({...promptConfig, isOpen: false})} onConfirm={promptConfig.action} />
+            <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: '' })} />
+            <ConfirmModal isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmText={confirmConfig.confirmText} confirmColor={confirmConfig.confirmColor} onCancel={() => setConfirmConfig({ ...confirmConfig, isOpen: false })} onConfirm={() => confirmConfig.action && confirmConfig.action(true)} />
+            <PromptModal isOpen={promptConfig.isOpen} title={promptConfig.title} message={promptConfig.message} max={promptConfig.max} onCancel={() => setPromptConfig({ ...promptConfig, isOpen: false })} onConfirm={promptConfig.action} />
 
-             {/* HEADER */}
-             <div className="max-w-7xl mx-auto mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <button onClick={() => navigate(-1)} className="flex items-center text-gray-600 hover:text-purple-700 transition bg-white px-4 py-2 rounded-lg shadow-sm border"><ArrowLeft size={20} className="mr-2"/> Back</button>
+            {/* HEADER */}
+            <div className="max-w-7xl mx-auto mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <button onClick={() => navigate(-1)} className="flex items-center text-gray-600 hover:text-purple-700 transition bg-white px-4 py-2 rounded-lg shadow-sm border"><ArrowLeft size={20} className="mr-2" /> Back</button>
                 <div className="flex flex-wrap gap-2 no-print">
                     {(role === 'admin' || role === 'secretary') && (
                         <button onClick={handleDeleteClick} disabled={isUpdating} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold border transition ${role === 'secretary' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
-                            {role === 'secretary' ? <AlertTriangle size={16}/> : <Trash2 size={16}/>} {role === 'secretary' ? 'Request Delete' : 'Delete'}
+                            {role === 'secretary' ? <AlertTriangle size={16} /> : <Trash2 size={16} />} {role === 'secretary' ? 'Request Delete' : 'Delete'}
                         </button>
                     )}
-                    <button onClick={handleEmailReceipt} className="flex items-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 px-4 py-2 rounded-lg hover:bg-blue-100 text-sm font-bold"><Mail size={16}/> Email Receipt</button>
-                    <button onClick={() => setShowReceipt(true)} className="flex items-center gap-2 bg-purple-900 text-white px-4 py-2 rounded-lg hover:bg-purple-800 text-sm font-bold"><Printer size={16}/> Receipt</button>
+                    <button onClick={() => setShowReceipt(true)} className="flex items-center gap-2 bg-purple-900 text-white px-4 py-2 rounded-lg hover:bg-purple-800 text-sm font-bold"><Printer size={16} /> Receipt</button>
                 </div>
             </div>
 
@@ -469,10 +463,10 @@ const OrderDetails = () => {
                     <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
                         {/* Status Bar */}
                         <div className="bg-slate-900 p-6 sm:p-8 text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
-                            <div><h1 className="text-3xl font-mono font-black tracking-tight">{order.ticketId}</h1><p className="text-slate-400 text-sm mt-1 flex items-center gap-2"><Calendar size={14}/> {dateStr}</p></div>
+                            <div><h1 className="text-3xl font-mono font-black tracking-tight">{order.ticketId}</h1><p className="text-slate-400 text-sm mt-1 flex items-center gap-2"><Calendar size={14} /> {dateStr}</p></div>
                             <div className="bg-white/20 px-3 py-1 rounded-lg backdrop-blur-sm">
                                 <select value={order.status} onChange={handleStatusChange} disabled={isUpdating || order.status === 'Void'} className="bg-transparent text-white font-bold outline-none cursor-pointer disabled:opacity-80">
-                                    {['Pending','In Progress','Ready for Pickup','Completed','Collected','Void'].map(s=><option key={s} className="text-black">{s}</option>)}
+                                    {['Pending', 'In Progress', 'Ready for Pickup', 'Completed', 'Collected', 'Void'].map(s => <option key={s} className="text-black">{s}</option>)}
                                 </select>
                             </div>
                         </div>
@@ -480,7 +474,7 @@ const OrderDetails = () => {
                             <h3 className="text-xs font-bold text-gray-500 uppercase">Items & Services</h3>
                             {!isLocked && (
                                 <button onClick={handleEditOrder} className="bg-purple-100 text-purple-700 px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-200 transition flex items-center gap-1">
-                                    <Edit2 size={14}/> Edit Order
+                                    <Edit2 size={14} /> Edit Order
                                 </button>
                             )}
                         </div>
@@ -503,7 +497,7 @@ const OrderDetails = () => {
                                                             {/* Collected Badge */}
                                                             {item.collected && (
                                                                 <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded border border-green-200 font-bold flex items-center gap-1">
-                                                                    <CheckCircle size={10}/> Collected
+                                                                    <CheckCircle size={10} /> Collected
                                                                 </span>
                                                             )}
                                                             {/* Partial Collect Toggle */}
@@ -514,43 +508,43 @@ const OrderDetails = () => {
                                                             )}
                                                             {/* Return Button */}
                                                             {item.type === 'product' && !item.returned && !isReturn && (
-                                                                <button onClick={() => handleVoidProductTrigger(i)} disabled={isUpdating} className="text-red-500 hover:bg-red-50 p-1 rounded ml-2" title="Return Product"><RotateCcw size={16}/></button>
+                                                                <button onClick={() => handleVoidProductTrigger(i)} disabled={isUpdating} className="text-red-500 hover:bg-red-50 p-1 rounded ml-2" title="Return Product"><RotateCcw size={16} /></button>
                                                             )}
                                                             {item.type === 'repair' && !isReturn && !item.returned && (item.collected || order.status === 'Completed' || order.status === 'Collected') && (
-                                                                <div className="ml-2"><button onClick={() => handleWarrantyReturn(item)} className="bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded border border-orange-200 flex items-center gap-1 w-fit"><RefreshCw size={10}/> Warranty</button></div>
+                                                                <div className="ml-2"><button onClick={() => handleWarrantyReturn(item)} className="bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded border border-orange-200 flex items-center gap-1 w-fit"><RefreshCw size={10} /> Warranty</button></div>
                                                             )}
                                                         </div>
                                                         {item.type === 'repair' && !isReturn && !item.returned && (
                                                             <div className="flex flex-wrap gap-3 text-xs mt-2 text-gray-500 items-center">
-                                                                {item.imei && <span className="flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded"><Smartphone size={10}/> {item.imei}</span>}
+                                                                {item.imei && <span className="flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded"><Smartphone size={10} /> {item.imei}</span>}
                                                                 <div className="flex items-center gap-2 group">
                                                                     {editingCondition.index === i ? (
                                                                         <div className="flex items-center gap-1 animate-in fade-in">
-                                                                            <input className="border border-purple-300 rounded px-2 py-0.5 text-xs focus:ring-1 focus:ring-purple-500 outline-none w-32" value={editingCondition.value} onChange={(e) => setEditingCondition({ ...editingCondition, value: e.target.value })} placeholder="Condition..." autoFocus/>
-                                                                            <button onClick={() => handleSaveCondition(i)} className="text-green-600 hover:bg-green-50 p-1 rounded"><CheckCircle size={14}/></button>
-                                                                            <button onClick={() => setEditingCondition({ index: -1, value: '' })} className="text-red-500 hover:bg-red-50 p-1 rounded"><X size={14}/></button>
+                                                                            <input className="border border-purple-300 rounded px-2 py-0.5 text-xs focus:ring-1 focus:ring-purple-500 outline-none w-32" value={editingCondition.value} onChange={(e) => setEditingCondition({ ...editingCondition, value: e.target.value })} placeholder="Condition..." autoFocus />
+                                                                            <button onClick={() => handleSaveCondition(i)} className="text-green-600 hover:bg-green-50 p-1 rounded"><CheckCircle size={14} /></button>
+                                                                            <button onClick={() => setEditingCondition({ index: -1, value: '' })} className="text-red-500 hover:bg-red-50 p-1 rounded"><X size={14} /></button>
                                                                         </div>
                                                                     ) : (
                                                                         <>
-                                                                            {item.condition ? <span className="flex items-center gap-1 bg-orange-50 text-orange-700 px-2 py-0.5 rounded border border-orange-100 font-medium"><AlertTriangle size={10}/> Cond: {item.condition}</span> : <span className="text-xs text-gray-300 italic flex items-center gap-1"><AlertTriangle size={10}/> No condition notes</span>}
-                                                                            {!isLocked && <button onClick={() => setEditingCondition({ index: i, value: item.condition || '' })} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-purple-600 transition p-1" title="Edit Condition"><Edit2 size={12}/></button>}
+                                                                            {item.condition ? <span className="flex items-center gap-1 bg-orange-50 text-orange-700 px-2 py-0.5 rounded border border-orange-100 font-medium"><AlertTriangle size={10} /> Cond: {item.condition}</span> : <span className="text-xs text-gray-300 italic flex items-center gap-1"><AlertTriangle size={10} /> No condition notes</span>}
+                                                                            {!isLocked && <button onClick={() => setEditingCondition({ index: i, value: item.condition || '' })} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-purple-600 transition p-1" title="Edit Condition"><Edit2 size={12} /></button>}
                                                                         </>
                                                                     )}
                                                                 </div>
                                                             </div>
                                                         )}
                                                     </div>
-                                                    
+
                                                     {item.type === 'repair' && <div className="mt-3 space-y-2">
                                                         {item.services?.map((svc, sIdx) => (
                                                             <div key={sIdx} className="p-3 rounded-lg border flex flex-col sm:flex-row justify-between gap-3 bg-gray-50 border-gray-100">
                                                                 <div className="flex items-center gap-2">
-                                                                    <Wrench size={16} className="text-gray-400"/>
+                                                                    <Wrench size={16} className="text-gray-400" />
                                                                     <span className="font-medium text-gray-700">{svc.service}</span>
                                                                     <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${svc.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{svc.status}</span>
                                                                 </div>
                                                                 <div className="flex items-center gap-2">
-                                                                    {svc.status !== 'Void' && !isLocked && <button onClick={() => handleVoidService(i, sIdx)} disabled={isUpdating} className="text-gray-400 hover:text-red-500"><Ban size={14}/></button>}
+                                                                    {svc.status !== 'Void' && !isLocked && <button onClick={() => handleVoidService(i, sIdx)} disabled={isUpdating} className="text-gray-400 hover:text-red-500"><Ban size={14} /></button>}
                                                                     <select className="bg-white border text-xs p-1.5 rounded font-bold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50" value={svc.worker || "Unassigned"} onChange={(e) => handleServiceAssign(i, sIdx, e.target.value)} disabled={isLocked || svc.status === 'Void'}>
                                                                         <option value="Unassigned">Unassigned</option>
                                                                         {workers.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
@@ -572,12 +566,12 @@ const OrderDetails = () => {
                     {/* PARTS USED SECTION */}
                     {partsUsed.length > 0 && (
                         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                             <div className="bg-yellow-50 px-6 py-3 border-b border-yellow-100 flex items-center gap-2"><Package size={18} className="text-yellow-700"/><h3 className="font-bold text-yellow-900 text-sm uppercase">Parts Used</h3></div>
-                             <div className="divide-y divide-gray-50">
+                            <div className="bg-yellow-50 px-6 py-3 border-b border-yellow-100 flex items-center gap-2"><Package size={18} className="text-yellow-700" /><h3 className="font-bold text-yellow-900 text-sm uppercase">Parts Used</h3></div>
+                            <div className="divide-y divide-gray-50">
                                 {partsUsed.map((part, idx) => (
                                     <div key={idx} className="px-6 py-3 flex justify-between items-center hover:bg-gray-50">
                                         <div><span className="text-sm font-bold text-slate-700">{part.name.replace('Used: ', '')}</span><div className="text-xs text-slate-400">By {part.worker || 'Unknown'} • {part.usedAt ? new Date(part.usedAt).toLocaleString() : ''}</div></div>
-                                        <button onClick={() => handleRemovePart(part)} className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-full transition disabled:opacity-30" title="Remove Part" disabled={isUpdating || isLocked}><Trash2 size={16}/></button>
+                                        <button onClick={() => handleRemovePart(part)} className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-full transition disabled:opacity-30" title="Remove Part" disabled={isUpdating || isLocked}><Trash2 size={16} /></button>
                                     </div>
                                 ))}
                             </div>
@@ -588,21 +582,21 @@ const OrderDetails = () => {
                 {/* RIGHT COLUMN - Payment */}
                 <div className="space-y-6">
                     <div className="bg-purple-50 p-6 rounded-2xl h-fit border border-purple-100">
-                        <h3 className="text-xs font-bold text-purple-800 uppercase tracking-wider mb-4 flex items-center gap-2"><User size={16}/> Customer</h3>
+                        <h3 className="text-xs font-bold text-purple-800 uppercase tracking-wider mb-4 flex items-center gap-2"><User size={16} /> Customer</h3>
                         <div className="space-y-4">
                             <div><p className="text-xs text-purple-400 font-bold uppercase">Name</p><p className="font-bold text-slate-800 text-lg">{order.customer?.name}</p></div>
                             <div><p className="text-xs text-purple-400 font-bold uppercase">Phone</p><p className="font-bold text-slate-800">{order.customer?.phone || 'N/A'}</p></div>
                         </div>
                     </div>
-                    
+
                     <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 shadow-sm h-fit">
-                        <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2"><DollarSign size={18}/> Payment Summary</h3>
-                        
+                        <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2"><DollarSign size={18} /> Payment Summary</h3>
+
                         {/* Financial Breakdown */}
                         <div className="space-y-3 text-sm mb-6">
                             <div className="flex justify-between text-slate-500"><span>Subtotal</span><span>{formatCurrency(order.subtotal || (order.totalCost + (order.discount || 0)))}</span></div>
                             <div className="flex justify-between items-center text-red-500 my-1">
-                                <div className="flex items-center gap-2"><span>Discount</span>{!isLocked && <button onClick={() => { setDiscountInput(order.discount || ''); setShowDiscountModal(true); }} className="bg-red-50 text-red-600 p-1 rounded hover:bg-red-100 transition" title="Edit Discount"><Edit2 size={12}/></button>}</div>
+                                <div className="flex items-center gap-2"><span>Discount</span>{!isLocked && <button onClick={() => { setDiscountInput(order.discount || ''); setShowDiscountModal(true); }} className="bg-red-50 text-red-600 p-1 rounded hover:bg-red-100 transition" title="Edit Discount"><Edit2 size={12} /></button>}</div>
                                 <span>-{formatCurrency(order.discount || 0)}</span>
                             </div>
                             <div className="flex justify-between border-t border-dashed border-gray-200 pt-2"><span>Total Cost</span><span className="font-bold">{formatCurrency(order.totalCost)}</span></div>
@@ -626,12 +620,12 @@ const OrderDetails = () => {
                                         <div className="flex items-center gap-2">
                                             <span className="font-bold text-green-600">+{formatCurrency(pay.amount)}</span>
                                             {/* 🔥 UNDO SINGLE PAYMENT */}
-                                            <button 
+                                            <button
                                                 onClick={() => handleRemovePayment(idx)}
                                                 className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1"
                                                 title="Delete Payment"
                                             >
-                                                <Trash2 size={14}/>
+                                                <Trash2 size={14} />
                                             </button>
                                         </div>
                                     </div>
@@ -641,29 +635,29 @@ const OrderDetails = () => {
 
                         <div className="space-y-3">
                             {(order.status === 'Void' || isReturn) && order.amountPaid > 0 && order.paymentStatus !== 'Refunded' && (
-                                <button onClick={() => setConfirmConfig({isOpen:true, title:"Refund Payment?", message:"Mark as Refunded.", confirmText:"Refund", confirmColor:"bg-blue-600", action: handleProcessRefund})} disabled={isUpdating} className="w-full bg-red-600 text-white py-3 rounded-lg font-bold shadow-sm hover:bg-red-700 transition">Process Refund</button>
+                                <button onClick={() => setConfirmConfig({ isOpen: true, title: "Refund Payment?", message: "Mark as Refunded.", confirmText: "Refund", confirmColor: "bg-blue-600", action: handleProcessRefund })} disabled={isUpdating} className="w-full bg-red-600 text-white py-3 rounded-lg font-bold shadow-sm hover:bg-red-700 transition">Process Refund</button>
                             )}
-                            
+
                             {order.balance > 0 && order.status !== 'Void' && !isReturn && (
-                                <button onClick={() => setShowPaymentModal(true)} className="w-full bg-black text-white py-3 rounded-lg font-bold shadow-lg hover:bg-gray-800 transition flex items-center justify-center gap-2"><PlusCircle size={18}/> Record Payment</button>
+                                <button onClick={() => setShowPaymentModal(true)} className="w-full bg-black text-white py-3 rounded-lg font-bold shadow-lg hover:bg-gray-800 transition flex items-center justify-center gap-2"><PlusCircle size={18} /> Record Payment</button>
                             )}
-                            
+
                             {/* 🔥 RESET PAYMENT (Undo All) */}
                             {order.amountPaid > 0 && order.status !== 'Void' && (
-                                <button onClick={() => setConfirmConfig({isOpen:true, title:"Reset Payment?", message:"Clear payment history?", confirmText:"Reset", action: handleResetPayment})} className="w-full text-gray-400 text-xs hover:text-red-600 py-2">Undo All Payments</button>
+                                <button onClick={() => setConfirmConfig({ isOpen: true, title: "Reset Payment?", message: "Clear payment history?", confirmText: "Reset", action: handleResetPayment })} className="w-full text-gray-400 text-xs hover:text-red-600 py-2">Undo All Payments</button>
                             )}
-                             
-                             {/* Refund Button */}
-                             {(order.balance < 0 || order.paymentStatus === 'Refund Due' || (order.amountPaid > 0 && order.status === 'Void')) && (
-                                <button onClick={() => setConfirmConfig({isOpen:true, title:"Process Refund?", message:`Refund ${formatCurrency(Math.abs(order.balance))}?`, confirmText:"Refund", confirmColor:"bg-red-600", action: handleProcessRefund})} disabled={isUpdating} className="w-full bg-red-600 text-white py-3 rounded-lg font-bold shadow-sm hover:bg-red-700 transition">Process Refund</button>
+
+                            {/* Refund Button */}
+                            {(order.balance < 0 || order.paymentStatus === 'Refund Due' || (order.amountPaid > 0 && order.status === 'Void')) && (
+                                <button onClick={() => setConfirmConfig({ isOpen: true, title: "Process Refund?", message: `Refund ${formatCurrency(Math.abs(order.balance))}?`, confirmText: "Refund", confirmColor: "bg-red-600", action: handleProcessRefund })} disabled={isUpdating} className="w-full bg-red-600 text-white py-3 rounded-lg font-bold shadow-sm hover:bg-red-700 transition">Process Refund</button>
                             )}
                         </div>
                     </div>
                 </div>
             </div>
 
-             {/* Payment Modal */}
-             {showPaymentModal && (
+            {/* Payment Modal */}
+            {showPaymentModal && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl animate-fade-in-up">
                         <h3 className="font-bold text-xl mb-4 text-gray-900">Record Payment</h3>
@@ -701,10 +695,10 @@ const OrderDetails = () => {
                         The child .printable-receipt becomes fixed/absolute.
                     */}
                     <div className="max-h-[90vh] overflow-y-auto w-full max-w-md rounded-lg no-scrollbar-print">
-                        
+
                         {/* Printable Content */}
                         <div className="bg-white w-full p-8 rounded shadow-2xl relative printable-receipt">
-                            <button onClick={() => setShowReceipt(false)} className="absolute top-2 right-2 text-gray-400 print:hidden hover:text-gray-600"><X/></button>
+                            <button onClick={() => setShowReceipt(false)} className="absolute top-2 right-2 text-gray-400 print:hidden hover:text-gray-600"><X /></button>
                             <div className="text-center border-b-2 border-black pb-4 mb-4">
                                 <h2 className="text-2xl font-extrabold uppercase tracking-tight">Farouk Techworld</h2>
                                 <p className="text-xs font-mono">Mokola Rd, Ibadan</p>
@@ -712,11 +706,11 @@ const OrderDetails = () => {
                             </div>
                             <div className="flex justify-between text-xs mb-4 font-mono border-b border-dashed border-gray-300 pb-2"><span>{new Date().toLocaleDateString('en-GB')}</span><span>{new Date().toLocaleTimeString()}</span></div>
                             <div className="mb-6 text-sm font-bold uppercase border-b border-black pb-2">Customer: {order.customer.name}</div>
-                            <table className="w-full text-xs mb-6 font-mono"><tbody>{order.items.map((item, i) => { if(item.type==='part_usage') return null; return (<tr key={i}><td className="py-1 pr-2 align-top"><div className="font-bold">{item.name || item.deviceModel}</div></td><td className="text-right align-top whitespace-nowrap">{formatCurrency(item.total ?? item.cost ?? 0)}</td></tr>) })}</tbody></table>
+                            <table className="w-full text-xs mb-6 font-mono"><tbody>{order.items.map((item, i) => { if (item.type === 'part_usage') return null; return (<tr key={i}><td className="py-1 pr-2 align-top"><div className="font-bold">{item.name || item.deviceModel}</div></td><td className="text-right align-top whitespace-nowrap">{formatCurrency(item.total ?? item.cost ?? 0)}</td></tr>) })}</tbody></table>
                             <div className="flex justify-between text-lg font-bold border-t-2 border-black pt-2 mb-1"><span>TOTAL:</span><span>{formatCurrency(order.totalCost)}</span></div>
                             <div className="space-y-1 text-sm font-mono mb-6 border-b border-black pb-4"><div className="flex justify-between"><span>Paid:</span><span>{formatCurrency(order.amountPaid || 0)}</span></div><div className="flex justify-between font-bold"><span>Balance:</span><span>{formatCurrency(order.balance)}</span></div></div>
                             <div className="text-center text-[10px] font-mono uppercase"><p>No Refund after payment</p><p>Warranty covers repair only</p><p className="mt-2 font-bold">Thank you!</p></div>
-                            <button onClick={() => window.print()} className="w-full mt-6 bg-black text-white py-3 font-bold uppercase rounded hover:bg-gray-800 print:hidden flex items-center justify-center gap-2"><Printer size={18}/> Print Now</button>
+                            <button onClick={() => window.print()} className="w-full mt-6 bg-black text-white py-3 font-bold uppercase rounded hover:bg-gray-800 print:hidden flex items-center justify-center gap-2"><Printer size={18} /> Print Now</button>
                         </div>
 
                     </div>
