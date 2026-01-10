@@ -425,7 +425,7 @@ const StoreInventory = () => {
         XLSX.writeFile(wb, "FTW_Inventory.xlsx");
     };
 
-    if (role !== 'admin') return <Navigate to="/admin/dashboard" replace />;
+    if (role !== 'admin' && role !== 'ceo') return <Navigate to="/admin/dashboard" replace />;
 
     return (
         <div className="min-h-screen bg-gray-50 p-4 sm:p-8 font-sans text-slate-900">
