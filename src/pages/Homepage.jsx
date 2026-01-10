@@ -35,7 +35,6 @@ const Homepage = () => {
       <WhyChooseUs /> 
       <Services />
       <HowWeWork />
-      {/* <Testimonials /> */}
       <FAQ /> 
       <Contact />
     </div>
