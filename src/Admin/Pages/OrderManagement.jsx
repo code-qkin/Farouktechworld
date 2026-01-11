@@ -421,17 +421,17 @@ const OrdersManagement = () => {
         } catch (e) { setToast({message: `Error: ${e}`, type: "error"}); } finally { setIsSubmitting(false); }
     };
 
-    const handleDeleteOrder = (order) => {
-        if (role === 'secretary') { setRequestModal({ isOpen: true, order }); return; }
-        setConfirmConfig({
-            isOpen: true, title: "Delete Order?", message: `Delete Ticket ${order.ticketId}? Cannot be undone.`, confirmText: "Delete Forever", confirmColor: "bg-red-600",
-            action: async () => {
-                await deleteDoc(doc(db, "Orders", order.id));
-                setToast({ message: "Deleted", type: "success" });
-                setConfirmConfig({ ...confirmConfig, isOpen: false });
-            }
-        });
-    };
+    // const handleDeleteOrder = (order) => {
+    //     if (role === 'secretary') { setRequestModal({ isOpen: true, order }); return; }
+    //     setConfirmConfig({
+    //         isOpen: true, title: "Delete Order?", message: `Delete Ticket ${order.ticketId}? Cannot be undone.`, confirmText: "Delete Forever", confirmColor: "bg-red-600",
+    //         action: async () => {
+    //             await deleteDoc(doc(db, "Orders", order.id));
+    //             setToast({ message: "Deleted", type: "success" });
+    //             setConfirmConfig({ ...confirmConfig, isOpen: false });
+    //         }
+    //     });
+    // };
 
     const handleSubmitRequest = async (e) => {
         e.preventDefault();
@@ -521,7 +521,7 @@ const OrdersManagement = () => {
                 </div>
                 <div className="flex gap-3">
                     <button onClick={handleExport} className="flex items-center gap-2 bg-white border border-gray-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold hover:bg-gray-50 transition text-sm shadow-sm"><Download size={16} /> Export</button>
-                    {(role === 'admin' || role === 'secretary') && <button onClick={() => { setEditOrderId(null); setShowPOS(true); }} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md shadow-purple-200 flex gap-2 items-center justify-center transition"><PlusCircle size={18}/> New Order</button>}
+                    {(role === 'admin' || role === 'secretary' || role === 'ceo' || role === 'manager') && <button onClick={() => { setEditOrderId(null); setShowPOS(true); }} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md shadow-purple-200 flex gap-2 items-center justify-center transition"><PlusCircle size={18}/> New Order</button>}
                 </div>
             </div>
 

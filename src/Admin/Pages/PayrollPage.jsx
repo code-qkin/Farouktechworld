@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { collection, query, getDocs, orderBy, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom'; // 🔥 Imported Navigate
 import { useAuth } from '../AdminContext';
 import { Toast, ConfirmModal } from '../Components/Feedback';
 
@@ -165,7 +165,7 @@ const SummaryCard = ({ label, value, icon: Icon, color, subtext, highlight }) =>
 
 const PayrollPage = () => {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, role } = useAuth(); // 🔥 Get role
     
     // Data States
     const [allOrders, setAllOrders] = useState([]); 
@@ -183,6 +183,11 @@ const PayrollPage = () => {
     // Feedback
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
+
+    // 🔥 SECURITY GUARD: Only Admin and CEO allowed
+    if (role !== 'admin' && role !== 'ceo') {
+        return <Navigate to="/admin/dashboard" replace />;
+    }
 
     // --- HELPER: Date Ranges ---
     const getCurrentWeekStr = () => {
@@ -219,7 +224,7 @@ const PayrollPage = () => {
                 const settingsMap = {};
                 uSnap.docs.forEach(doc => {
                     const u = doc.data();
-                    // 🔥 UPDATED: Include Worker, Secretary, and Admin
+                    // Include Worker, Secretary, and Admin
                     if (['worker', 'secretary', 'admin'].includes(u.role)) {
                         settingsMap[u.name] = { base: Number(u.baseSalary || 0), fixed: Number(u.fixedPerJob || 0) };
                     }

@@ -6,12 +6,13 @@ import { Wrench, ShieldCheck, RefreshCw } from 'lucide-react';
 import AdminDashboard from './Dashboard';
 import SecretaryDashboard from './SecretaryDashboard';
 import WorkerDashboard from './WorkerDashboard';
+import ManagerDashboard from './ManagerDashboard'; // 🔥 NEW IMPORT
 
 const DashboardHandler = () => {
     const { user, role, viewRole, setViewRole } = useAuth();
 
     // 1. Check if user has "Double Role" capabilities
-    const canSwitch = (role === 'admin' || role === 'secretary' || role === 'ceo') && user?.isTechnician;
+    const canSwitch = (role === 'admin' || role === 'secretary' || role === 'ceo' || role === 'manager') && user?.isTechnician;
 
     // 2. Handle The Switch
     const toggleView = () => {
@@ -26,14 +27,16 @@ const DashboardHandler = () => {
     let DashboardComponent;
     switch (viewRole) {
         case 'admin':
-        case 'ceo': // 🔥 CEO gets the Admin Dashboard
+        case 'ceo': 
             DashboardComponent = <AdminDashboard user={user} />;
+            break;
+        case 'manager': // 🔥 NEW CASE
+            DashboardComponent = <ManagerDashboard user={user} />;
             break;
         case 'secretary':
             DashboardComponent = <SecretaryDashboard user={user} />;
             break;
         case 'worker':
-            // Pass 'true' prop if they are an admin viewing as worker (optional)
             DashboardComponent = <WorkerDashboard user={user} isViewMode={true} />;
             break;
         default:
@@ -66,7 +69,7 @@ const DashboardHandler = () => {
                         {viewRole === 'worker' ? (
                             <>
                                 <ShieldCheck size={24} />
-                                <span>Back to Admin</span>
+                                <span>Back to {role === 'manager' ? 'Manager' : 'Admin'}</span>
                             </>
                         ) : (
                             <>

@@ -448,7 +448,7 @@ const OrderDetails = () => {
             <div className="max-w-7xl mx-auto mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <button onClick={() => navigate(-1)} className="flex items-center text-gray-600 hover:text-purple-700 transition bg-white px-4 py-2 rounded-lg shadow-sm border"><ArrowLeft size={20} className="mr-2" /> Back</button>
                 <div className="flex flex-wrap gap-2 no-print">
-                    {(role === 'admin' || role === 'secretary') && (
+                    {(role === 'admin' || role === 'secretary' || role === 'ceo') && (
                         <button onClick={handleDeleteClick} disabled={isUpdating} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold border transition ${role === 'secretary' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
                             {role === 'secretary' ? <AlertTriangle size={16} /> : <Trash2 size={16} />} {role === 'secretary' ? 'Request Delete' : 'Delete'}
                         </button>

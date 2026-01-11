@@ -102,6 +102,9 @@ const StoreInventory = () => {
     const { role } = useAuth(); 
     const navigate = useNavigate();
     
+    // 🔥 PERMISSION: Manager CANNOT see prices
+    const canSeePrice = role !== 'manager';
+
     // UI State
     const [activeTab, setActiveTab] = useState('products'); 
     const [isCreating, setIsCreating] = useState(false); 
@@ -305,7 +308,7 @@ const StoreInventory = () => {
         e.preventDefault();
         if (selectedIds.length === 0) return;
         const updates = {};
-        if (bulkEditData.price) updates.price = safeParseFloat(bulkEditData.price);
+        if (bulkEditData.price && canSeePrice) updates.price = safeParseFloat(bulkEditData.price);
         if (bulkEditData.stock) updates.stock = safeParseInt(bulkEditData.stock);
         if (bulkEditData.category) updates.category = bulkEditData.category.trim();
         if (bulkEditData.color) updates.color = bulkEditData.color.trim();
@@ -327,7 +330,7 @@ const StoreInventory = () => {
         e.preventDefault();
         setActionLoading(true);
         try {
-            const safePrice = safeParseFloat(newProduct.price);
+            const safePrice = canSeePrice ? safeParseFloat(newProduct.price) : 0;
             const safeStock = safeParseInt(newProduct.stock);
             if (isBulkMode) {
                 const models = getModelRange(deviceType, newProduct.rangeStart, newProduct.rangeEnd);
@@ -385,10 +388,13 @@ const StoreInventory = () => {
         if (!editingItem) return;
         setActionLoading(true);
         try {
-            await updateDoc(doc(db, "Inventory", editingItem.id), {
+            const updates = {
                 name: editingItem.name, category: editingItem.category, model: editingItem.model,
-                price: safeParseFloat(editingItem.price), stock: safeParseInt(editingItem.stock), color: editingItem.color || "", lastUpdated: serverTimestamp()
-            });
+                stock: safeParseInt(editingItem.stock), color: editingItem.color || "", lastUpdated: serverTimestamp()
+            };
+            if (canSeePrice) updates.price = safeParseFloat(editingItem.price);
+
+            await updateDoc(doc(db, "Inventory", editingItem.id), updates);
             setToast({ message: "Saved", type: "success" }); setEditingItem(null);
         } catch (e) { setToast({ message: "Update Failed", type: "error" }); }
         setActionLoading(false);
@@ -415,17 +421,23 @@ const StoreInventory = () => {
     };
 
     const handleExport = () => {
-        const data = products.map(p => ({
-            "Product": p.name, "Category": p.category, "Model": p.model, "Color": p.color || '',
-            "Price": safeParseFloat(p.price), "Stock": safeParseInt(p.stock), "Value": safeParseFloat(p.price) * Math.max(0, safeParseInt(p.stock))
-        }));
+        const data = products.map(p => {
+            const row = {
+                "Product": p.name, "Category": p.category, "Model": p.model, "Color": p.color || '', "Stock": safeParseInt(p.stock)
+            };
+            if (canSeePrice) {
+                row["Price"] = safeParseFloat(p.price);
+                row["Value"] = safeParseFloat(p.price) * Math.max(0, safeParseInt(p.stock));
+            }
+            return row;
+        });
         const ws = XLSX.utils.json_to_sheet(data);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Inventory");
         XLSX.writeFile(wb, "FTW_Inventory.xlsx");
     };
 
-    if (role !== 'admin' && role !== 'ceo') return <Navigate to="/admin/dashboard" replace />;
+    if (role !== 'admin' && role !== 'manager' && role !== 'ceo') return <Navigate to="/admin/dashboard" replace />;
 
     return (
         <div className="min-h-screen bg-gray-50 p-4 sm:p-8 font-sans text-slate-900">
@@ -444,17 +456,20 @@ const StoreInventory = () => {
             {/* METRICS */}
             {activeTab === 'products' && (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-                    <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24">
-                        <div className="flex justify-between items-center">
-                            <span className="text-[10px] font-bold text-gray-400 uppercase">Value (Current View)</span>
-                            <button onClick={() => setShowValue(!showValue)} className="text-gray-400 hover:text-purple-600 transition">
-                                {showValue ? <Eye size={14}/> : <EyeOff size={14}/>}
-                            </button>
+                    {/* 🔥 HIDE VALUE CARD FOR MANAGERS */}
+                    {canSeePrice && (
+                        <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24">
+                            <div className="flex justify-between items-center">
+                                <span className="text-[10px] font-bold text-gray-400 uppercase">Value (Current View)</span>
+                                <button onClick={() => setShowValue(!showValue)} className="text-gray-400 hover:text-purple-600 transition">
+                                    {showValue ? <Eye size={14}/> : <EyeOff size={14}/>}
+                                </button>
+                            </div>
+                            <span className="text-lg sm:text-xl font-black text-slate-900">
+                                {showValue ? formatCurrency(stats.totalValue) : '****'}
+                            </span>
                         </div>
-                        <span className="text-lg sm:text-xl font-black text-slate-900">
-                            {showValue ? formatCurrency(stats.totalValue) : '****'}
-                        </span>
-                    </div>
+                    )}
 
                     <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24"><span className="text-[10px] font-bold text-gray-400 uppercase">Visible Stock</span><span className="text-lg sm:text-xl font-black text-slate-900">{stats.totalItems} Items</span></div>
                     <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24"><span className="text-[10px] font-bold text-gray-400 uppercase">Low</span><span className="text-lg sm:text-xl font-black text-orange-600">{stats.lowStock} Items</span></div>
@@ -478,7 +493,7 @@ const StoreInventory = () => {
                             <select className="px-3 py-2.5 bg-gray-50 rounded-lg text-sm font-bold outline-none" value={filterStock} onChange={e => setFilterStock(e.target.value)}><option value="All">All Stock</option><option value="Low">Low</option><option value="Out">Out</option></select>
                             <button onClick={() => setIsCreating(true)} className="col-span-2 md:col-span-1 bg-purple-900 text-white px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-purple-800 transition flex items-center justify-center gap-2 shadow-sm"><Plus size={18}/> Add</button>
                         </div>
-                         {/* 🔥 DEVICE FILTER DROPDOWN */}
+                         {/* DEVICE FILTER DROPDOWN */}
                          <div className="relative min-w-[140px]">
                             <div className="absolute left-3 top-3.5 text-gray-400 pointer-events-none">
                                 {filterDeviceType === 'iPhone' ? <Smartphone size={16}/> : 
@@ -500,7 +515,7 @@ const StoreInventory = () => {
                         </div>
                     </div>
                     
-                    {/* 🔥🔥 RESTORED BULK ACTION BAR 🔥🔥 */}
+                    {/* BULK ACTION BAR */}
                     {selectedIds.length > 0 && (
                         <div className="bg-purple-50 border border-purple-100 p-3 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in shadow-sm mb-4">
                             <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -534,19 +549,44 @@ const StoreInventory = () => {
                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                         <div className="hidden md:block overflow-x-auto">
                             <table className="w-full text-left">
-                                <thead className="bg-gray-50 border-b text-xs font-bold text-slate-500 uppercase"><tr><th className="px-6 py-4 w-10"><input type="checkbox" className="w-4 h-4 accent-purple-600 cursor-pointer" checked={isAllSelected} onChange={handleSelectAll} /></th><th className="px-6 py-4">Product</th><th className="px-6 py-4">Category</th><th className="px-6 py-4 text-right">Price</th><th className="px-6 py-4 w-32">Stock</th><th className="px-6 py-4 text-right">Actions</th></tr></thead>
-                                <tbody className="divide-y divide-gray-100">{currentProducts.map((p) => { const isSelected = selectedIds.includes(p.id); return (<tr key={p.id} onClick={() => handleSelectOne(p.id)} className={`transition group cursor-pointer ${isSelected ? 'bg-purple-50/60' : 'hover:bg-gray-50'}`}><td className="px-6 py-4" onClick={e => e.stopPropagation()}><input type="checkbox" className="w-4 h-4 accent-purple-600 cursor-pointer" checked={isSelected} onChange={() => handleSelectOne(p.id)} /></td><td className="px-6 py-4"><div className="font-bold text-slate-900">{p.name}</div><div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Smartphone size={10}/> {p.model}{p.color && <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded flex items-center gap-1 border border-slate-200"><Palette size={8}/> {p.color}</span>}</div></td><td className="px-6 py-4"><span className="px-2 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border">{p.category}</span></td><td className="px-6 py-4 text-right font-mono font-bold text-slate-800">{formatCurrency(p.price)}</td><td className="px-6 py-4"><StockHealth stock={p.stock}/></td><td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}><div className="flex items-center justify-end gap-2"><button onClick={() => setRestockItem(p)} className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100"><ArrowUpCircle size={16}/></button><button onClick={() => setEditingItem(p)} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"><Edit2 size={16}/></button><button onClick={() => handleDelete(p)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"><Trash2 size={16}/></button></div></td></tr>); })}</tbody>
+                                <thead className="bg-gray-50 border-b text-xs font-bold text-slate-500 uppercase">
+                                    <tr>
+                                        <th className="px-6 py-4 w-10"><input type="checkbox" className="w-4 h-4 accent-purple-600 cursor-pointer" checked={isAllSelected} onChange={handleSelectAll} /></th>
+                                        <th className="px-6 py-4">Product</th>
+                                        <th className="px-6 py-4">Category</th>
+                                        {/* 🔥 HIDE PRICE HEADER */}
+                                        {canSeePrice && <th className="px-6 py-4 text-right">Price</th>}
+                                        <th className="px-6 py-4 w-32">Stock</th>
+                                        <th className="px-6 py-4 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {currentProducts.map((p) => { 
+                                        const isSelected = selectedIds.includes(p.id); 
+                                        return (
+                                            <tr key={p.id} onClick={() => handleSelectOne(p.id)} className={`transition group cursor-pointer ${isSelected ? 'bg-purple-50/60' : 'hover:bg-gray-50'}`}>
+                                                <td className="px-6 py-4" onClick={e => e.stopPropagation()}><input type="checkbox" className="w-4 h-4 accent-purple-600 cursor-pointer" checked={isSelected} onChange={() => handleSelectOne(p.id)} /></td>
+                                                <td className="px-6 py-4"><div className="font-bold text-slate-900">{p.name}</div><div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Smartphone size={10}/> {p.model}{p.color && <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded flex items-center gap-1 border border-slate-200"><Palette size={8}/> {p.color}</span>}</div></td>
+                                                <td className="px-6 py-4"><span className="px-2 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border">{p.category}</span></td>
+                                                {/* 🔥 HIDE PRICE CELL */}
+                                                {canSeePrice && <td className="px-6 py-4 text-right font-mono font-bold text-slate-800">{formatCurrency(p.price)}</td>}
+                                                <td className="px-6 py-4"><StockHealth stock={p.stock}/></td>
+                                                <td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}><div className="flex items-center justify-end gap-2"><button onClick={() => setRestockItem(p)} className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100"><ArrowUpCircle size={16}/></button><button onClick={() => setEditingItem(p)} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"><Edit2 size={16}/></button><button onClick={() => handleDelete(p)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"><Trash2 size={16}/></button></div></td>
+                                            </tr>
+                                        ); 
+                                    })}
+                                </tbody>
                             </table>
                         </div>
-                        {/* Mobile Cards ... */}
-                        <div className="md:hidden divide-y divide-gray-100">{currentProducts.map((p) => { const isSelected = selectedIds.includes(p.id); return (<div key={p.id} onClick={() => handleSelectOne(p.id)} className={`p-4 flex flex-col gap-3 cursor-pointer ${isSelected ? 'bg-purple-50' : ''}`}><div className="flex justify-between items-start"><div className="flex gap-3"><input type="checkbox" className="w-5 h-5 accent-purple-600 mt-1" checked={isSelected} onChange={() => handleSelectOne(p.id)} onClick={e => e.stopPropagation()} /><div><h4 className="font-bold text-slate-900 text-sm">{p.name}</h4><div className="text-xs text-slate-500 mt-1 flex items-center gap-1"><Smartphone size={10}/> {p.model}{p.color && <span className="ml-1 bg-slate-100 px-1 rounded flex items-center gap-0.5"><Palette size={8}/> {p.color}</span>}</div></div></div><div className="text-right"><p className="font-mono font-bold text-slate-800 text-sm">{formatCurrency(p.price)}</p><span className="text-[10px] font-bold text-slate-400 uppercase">{p.category}</span></div></div><div className="flex items-center gap-4 pl-8"><div className="flex-1"><StockHealth stock={p.stock}/></div><div className="flex gap-2" onClick={e => e.stopPropagation()}><button onClick={() => setRestockItem(p)} className="p-2 bg-green-50 text-green-600 rounded-lg"><ArrowUpCircle size={16}/></button><button onClick={() => setEditingItem(p)} className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Edit2 size={16}/></button><button onClick={() => handleDelete(p)} className="p-2 bg-red-50 text-red-600 rounded-lg"><Trash2 size={16}/></button></div></div></div>); })}</div>
-                        {/* Pagination ... */}
+                        {/* Mobile Cards */}
+                        <div className="md:hidden divide-y divide-gray-100">{currentProducts.map((p) => { const isSelected = selectedIds.includes(p.id); return (<div key={p.id} onClick={() => handleSelectOne(p.id)} className={`p-4 flex flex-col gap-3 cursor-pointer ${isSelected ? 'bg-purple-50' : ''}`}><div className="flex justify-between items-start"><div className="flex gap-3"><input type="checkbox" className="w-5 h-5 accent-purple-600 mt-1" checked={isSelected} onChange={() => handleSelectOne(p.id)} onClick={e => e.stopPropagation()} /><div><h4 className="font-bold text-slate-900 text-sm">{p.name}</h4><div className="text-xs text-slate-500 mt-1 flex items-center gap-1"><Smartphone size={10}/> {p.model}{p.color && <span className="ml-1 bg-slate-100 px-1 rounded flex items-center gap-0.5"><Palette size={8}/> {p.color}</span>}</div></div></div><div className="text-right">{/* 🔥 HIDE MOBILE PRICE */}{canSeePrice && <p className="font-mono font-bold text-slate-800 text-sm">{formatCurrency(p.price)}</p>}<span className="text-[10px] font-bold text-slate-400 uppercase">{p.category}</span></div></div><div className="flex items-center gap-4 pl-8"><div className="flex-1"><StockHealth stock={p.stock}/></div><div className="flex gap-2" onClick={e => e.stopPropagation()}><button onClick={() => setRestockItem(p)} className="p-2 bg-green-50 text-green-600 rounded-lg"><ArrowUpCircle size={16}/></button><button onClick={() => setEditingItem(p)} className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Edit2 size={16}/></button><button onClick={() => handleDelete(p)} className="p-2 bg-red-50 text-red-600 rounded-lg"><Trash2 size={16}/></button></div></div></div>); })}</div>
+                        {/* Pagination */}
                         {filteredProducts.length > 0 && (<div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-between"><span className="text-sm text-gray-500 hidden sm:block">Showing <span className="font-bold">{currentPage}</span> of <span className="font-bold">{totalPages}</span> pages</span><div className="flex items-center gap-2"><button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:hover:bg-transparent transition"><ChevronLeft size={18}/></button><span className="text-xs font-bold bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">Page {currentPage} of {totalPages}</span><button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:hover:bg-transparent transition"><ChevronRight size={18}/></button></div></div>)}
                     </div>
                 </div>
             )}
 
-            {/* --- TAB: HISTORY (UPDATED FOR ADMIN VISIBILITY) --- */}
+            {/* --- TAB: HISTORY --- */}
             {activeTab === 'history' && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in">
                     <div className="p-4 border-b border-gray-100 flex justify-between items-center">
@@ -563,7 +603,8 @@ const StoreInventory = () => {
                                     <th className="px-6 py-4">Primary User</th>
                                     <th className="px-6 py-4">Type</th>
                                     <th className="px-6 py-4">Items Used ( & Who Used It)</th>
-                                    <th className="px-6 py-4 text-right">Value</th>
+                                    {/* 🔥 HIDE HISTORY VALUE */}
+                                    {canSeePrice && <th className="px-6 py-4 text-right">Value</th>}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -581,7 +622,6 @@ const StoreInventory = () => {
                                                         <span className="font-medium">{item.name.replace('Used: ', '')}</span> 
                                                         <span className="font-bold text-slate-800">x{item.qty || 1}</span>
                                                         
-                                                        {/* 🔥 SHOW WORKER NAME FOR EACH ITEM (Visible Admin Usage) */}
                                                         {item.type === 'part_usage' && item.worker && (
                                                             <span className="ml-1 text-[10px] text-gray-400 bg-gray-100 px-1.5 rounded border border-gray-200">
                                                                 by {item.worker.split(' ')[0]}
@@ -591,7 +631,8 @@ const StoreInventory = () => {
                                                 ))}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-right font-bold text-slate-900">{formatCurrency(sale.total)}</td>
+                                        {/* 🔥 HIDE HISTORY VALUE CELL */}
+                                        {canSeePrice && <td className="px-6 py-4 text-right font-bold text-slate-900">{formatCurrency(sale.total)}</td>}
                                     </tr>
                                 ))}
                             </tbody>
@@ -608,7 +649,8 @@ const StoreInventory = () => {
                                         <p className="text-sm font-bold text-slate-800 mt-1">{sale.customer}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="font-bold text-slate-900">{formatCurrency(sale.total)}</p>
+                                        {/* 🔥 HIDE MOBILE HISTORY VALUE */}
+                                        {canSeePrice && <p className="font-bold text-slate-900">{formatCurrency(sale.total)}</p>}
                                         <span className="text-[10px] text-gray-400">{sale.date.toLocaleDateString()}</span>
                                     </div>
                                 </div>
@@ -727,7 +769,9 @@ const StoreInventory = () => {
                                     )}
                                 </div>
 
-                                <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Price</label><input type="text" className="w-full p-3 border rounded-xl font-mono font-bold" placeholder="0.00" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required /></div>
+                                {/* 🔥 HIDE PRICE INPUT */}
+                                {canSeePrice && <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Price</label><input type="text" className="w-full p-3 border rounded-xl font-mono font-bold" placeholder="0.00" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required /></div>}
+                                
                                 <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Stock</label><input type="number" className="w-full p-3 border rounded-xl font-bold" placeholder="0" value={newProduct.stock} onChange={e => setNewProduct({...newProduct, stock: e.target.value})} /></div>
                             </div>
                             <div className="flex gap-4 pt-2">
@@ -740,7 +784,6 @@ const StoreInventory = () => {
             )}
 
             {/* --- RESTOCK & EDIT MODALS --- */}
-            {/* Same modals as before for Restock, Edit, Bulk Edit */}
              {restockItem && (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-xs animate-in zoom-in-95">
@@ -776,7 +819,8 @@ const StoreInventory = () => {
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div><label className="text-xs font-bold text-slate-400 uppercase">Color</label><input className="w-full p-3 border rounded-xl outline-none" value={editingItem.color} onChange={e => setEditingItem({...editingItem, color: e.target.value})}/></div>
-                                <div><label className="text-xs font-bold text-slate-400 uppercase">Price</label><input type="text" className="w-full p-3 border rounded-xl outline-none font-mono font-bold" value={editingItem.price} onChange={e => setEditingItem({...editingItem, price: e.target.value})}/></div>
+                                {/* 🔥 HIDE EDIT PRICE */}
+                                {canSeePrice && <div><label className="text-xs font-bold text-slate-400 uppercase">Price</label><input type="text" className="w-full p-3 border rounded-xl outline-none font-mono font-bold" value={editingItem.price} onChange={e => setEditingItem({...editingItem, price: e.target.value})}/></div>}
                             </div>
                             <div><label className="text-xs font-bold text-red-400 uppercase flex gap-1"><AlertTriangle size={12}/> Manual Stock</label><input type="number" className="w-full p-3 border border-red-100 bg-red-50 rounded-xl outline-none font-bold text-red-900" value={editingItem.stock} onChange={e => setEditingItem({...editingItem, stock: e.target.value})}/></div>
                             <button type="submit" disabled={actionLoading} className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 shadow-lg mt-4">Save Changes</button>
@@ -785,7 +829,7 @@ const StoreInventory = () => {
                 </div>
             )}
 
-            {/* 櫨 BULK EDIT MODAL */}
+            {/* BULK EDIT MODAL */}
             {isBulkEditOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 w-full max-w-md animate-in zoom-in-95">
@@ -801,10 +845,13 @@ const StoreInventory = () => {
                                 Only fields you fill in will be updated. Leave blank to keep existing values.
                             </div>
                             
-                            <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase">New Price (Optional)</label>
-                                <input type="number" className="w-full p-3 border rounded-xl font-mono font-bold" placeholder="Leave blank to keep current" value={bulkEditData.price} onChange={e => setBulkEditData({...bulkEditData, price: e.target.value})}/>
-                            </div>
+                            {/* 🔥 HIDE BULK PRICE */}
+                            {canSeePrice && (
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">New Price (Optional)</label>
+                                    <input type="number" className="w-full p-3 border rounded-xl font-mono font-bold" placeholder="Leave blank to keep current" value={bulkEditData.price} onChange={e => setBulkEditData({...bulkEditData, price: e.target.value})}/>
+                                </div>
+                            )}
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>

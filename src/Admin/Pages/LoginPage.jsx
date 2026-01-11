@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, LogIn, Mail } from 'lucide-react';
+import { Lock, LogIn } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   signInWithEmailAndPassword,
@@ -9,7 +9,8 @@ import {
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebaseConfig';
 
-const ALLOWED_DASHBOARD_ROLES = ['admin', 'secretary', 'worker', 'ceo'];
+// 🔥 ADDED 'manager'
+const ALLOWED_DASHBOARD_ROLES = ['admin', 'secretary', 'worker', 'ceo', 'manager'];
 const googleProvider = new GoogleAuthProvider();
 
 const LoginPage = () => {
@@ -19,7 +20,6 @@ const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // --- CORE CHECKER FUNCTION ---
   const checkUserAccess = async (user) => {
     try {
       const userDocRef = doc(db, 'Users', user.uid);
@@ -28,14 +28,12 @@ const LoginPage = () => {
       if (userDoc.exists()) {
         const userData = userDoc.data();
 
-        // 🛑 CHECK 1: IS ACCOUNT SUSPENDED?
         if (userData.status === 'suspended') {
-          await auth.signOut(); // Logout immediately
+          await auth.signOut();
           setError("🚫 Access Denied: Your account has been suspended. Contact Admin.");
           return false;
         }
 
-        // ✅ CHECK 2: IS ROLE ALLOWED?
         if (ALLOWED_DASHBOARD_ROLES.includes(userData.role)) {
           navigate('/admin/dashboard', { replace: true });
           return true;
@@ -50,7 +48,6 @@ const LoginPage = () => {
       setError("Failed to verify account permissions.");
     }
 
-    // If we get here, something failed
     await auth.signOut();
     return false;
   };

@@ -36,7 +36,6 @@ const StatusBadge = ({ status }) => {
 };
 
 const MetricCard = ({ title, value, icon: Icon, color, subtext, onClick, isAlert, hideable }) => {
-    // 🔥 Default to hidden if hideable is true
     const [hidden, setHidden] = useState(hideable ? true : false);
 
     return (
@@ -85,7 +84,7 @@ const MetricCard = ({ title, value, icon: Icon, color, subtext, onClick, isAlert
 };
 
 const Dashboard = () => {
-    const { role } = useAuth();
+    const { role, user } = useAuth();
     const navigate = useNavigate();
 
     // Stats State
@@ -101,7 +100,7 @@ const Dashboard = () => {
     const [deletionRequests, setDeletionRequests] = useState([]);
     const [toast, setToast] = useState({ message: '', type: '' });
 
-    const welcomeName = role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Admin';
+    const welcomeName = user?.name || (role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Admin');
 
     // 1. FETCH DELETION REQUESTS (Admin Only)
     useEffect(() => {
@@ -148,9 +147,13 @@ const Dashboard = () => {
                 // Recent Activity Feed
                 if (recent.length < 5) {
                     recent.push({
-                        id: data.ticketId, docId: doc.id,
-                        device: data.items?.[0]?.deviceModel || 'Unknown Device',
-                        status: data.status, customer: data.customer?.name || 'Guest', cost: data.totalCost
+                        ticketId: data.ticketId, // 🔥 FIX 1: Explicitly save ticketId
+                        id: doc.id,
+                        // 🔥 FIX 2: Check for name (Product) if deviceModel (Repair) is missing
+                        device: data.items?.[0]?.deviceModel || data.items?.[0]?.name || 'Unknown Device',
+                        status: data.status, 
+                        customer: data.customer?.name || 'Guest', 
+                        cost: data.totalCost
                     });
                 }
 
@@ -235,7 +238,7 @@ const Dashboard = () => {
                     <p className="text-xs font-medium text-slate-400 hidden sm:block">Overview for {new Date().toDateString()}</p>
                 </div>
                 <div className="flex items-center gap-4">
-                    <div className="text-right hidden sm:block"><p className="text-sm font-bold text-slate-700">{welcomeName}</p><p className="text-xs font-medium text-slate-400">Administrator</p></div>
+                    <div className="text-right hidden sm:block"><p className="text-sm font-bold text-slate-700">{welcomeName}</p><p className="text-xs font-medium text-slate-400">{role?.toUpperCase()}</p></div>
                     <div className="h-8 w-px bg-slate-100 mx-2"></div>
                     <button onClick={handleLogout} className="text-slate-400 hover:text-red-600 transition p-2 rounded-xl hover:bg-slate-50"><LogOut size={20} /></button>
                 </div>
@@ -423,7 +426,7 @@ const Dashboard = () => {
                                             <div className="flex-1 min-w-0"><p className="text-xs font-bold text-slate-900 truncate">{order.customer}</p><p className="text-[10px] font-medium text-slate-500 truncate">{order.device}</p></div>
                                             <p className="text-xs font-bold text-purple-700">{formatCurrency(order.cost)}</p>
                                         </div>
-                                        <div className="flex justify-between items-center mt-1"><span className="font-mono text-[9px] text-slate-400">{order.id}</span><StatusBadge status={order.status} /></div>
+                                        <div className="flex justify-between items-center mt-1"><span className="font-mono text-[9px] text-slate-400">{order.ticketId}</span><StatusBadge status={order.status} /></div>
                                     </div>
                                 ))
                             }

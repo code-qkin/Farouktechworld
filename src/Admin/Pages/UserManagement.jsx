@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Users, Trash2, CheckCircle, Lock, Unlock, 
     ArrowLeft, DollarSign, Save, X, Wrench, Shield, Edit2,
-    UserPlus, Crown
+    UserPlus, Crown, Briefcase
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AdminContext.jsx'; 
@@ -12,8 +12,9 @@ import { Toast, ConfirmModal } from '../Components/Feedback.jsx';
 
 const getRoleBadge = (role) => {
     switch (role) {
-        case 'ceo': return 'bg-slate-900 text-yellow-400 border border-yellow-600 flex items-center gap-1'; // 🔥 CEO Badge
+        case 'ceo': return 'bg-slate-900 text-yellow-400 border border-yellow-600 flex items-center gap-1'; 
         case 'admin': return 'bg-red-100 text-red-700 border border-red-200';
+        case 'manager': return 'bg-indigo-100 text-indigo-700 border border-indigo-200';
         case 'secretary': return 'bg-purple-100 text-purple-700 border border-purple-200';
         case 'worker': return 'bg-blue-100 text-blue-700 border border-blue-200';
         case 'pending': return 'bg-yellow-100 text-yellow-700 border border-yellow-200 animate-pulse';
@@ -38,8 +39,9 @@ const UserManagement = () => {
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
     
-    // 🔥 Allow CEO to access this page too
-    if (role !== 'admin' && role !== 'ceo') return <Navigate to="/admin/dashboard" replace />;
+    // 🔥 PERMISSION CHECK: CEO, Admin, and Manager can access
+    const isManager = role === 'manager';
+    if (role !== 'admin' && role !== 'ceo' && role !== 'manager') return <Navigate to="/admin/dashboard" replace />;
 
     // 1. FETCH & SORT USERS
     useEffect(() => {
@@ -48,7 +50,7 @@ const UserManagement = () => {
         const unsubUsers = onSnapshot(q, (snap) => {
             const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             
-            // Sort: CEO first, then Admin, then Newest
+            // Sort: CEO first, then Admin, then Manager, then Newest
             fetched.sort((a, b) => {
                 if (a.role === 'ceo') return -1;
                 if (b.role === 'ceo') return 1;
@@ -66,22 +68,32 @@ const UserManagement = () => {
     const pendingUsers = useMemo(() => allUsers.filter(u => u.role === 'pending'), [allUsers]);
     const activeStaff = useMemo(() => allUsers.filter(u => u.role !== 'pending'), [allUsers]);
     
-    // 🔥 CHECK EXISTING CEO
     const existingCEO = useMemo(() => allUsers.find(u => u.role === 'ceo'), [allUsers]);
 
     // --- ACTIONS ---
     const handleRoleUpdate = async (userId, newRole) => {
-        // 🔥 SECURITY CHECK: Prevent multiple CEOs
+        // 🔥 SECURITY: Prevent changing own role (Double check)
+        if (userId === currentUser.uid) {
+            setToast({ message: "You cannot change your own role.", type: "error" });
+            setEditingUser(null);
+            return;
+        }
+
         if (newRole === 'ceo' && existingCEO && existingCEO.id !== userId) {
             setToast({ message: "There can only be one CEO.", type: "error" });
             setEditingUser(null);
+            return;
+        }
+        
+        if (isManager && (newRole === 'admin' || newRole === 'ceo')) {
+            setToast({ message: "Managers cannot assign Admin or CEO roles.", type: "error" });
             return;
         }
 
         try { 
             const updates = { role: newRole };
             if (newRole === 'worker') updates.isTechnician = true;
-            if (newRole === 'ceo') updates.isAdminAccess = true; // Ensure CEO has admin access flag
+            if (newRole === 'ceo' || newRole === 'admin') updates.isAdminAccess = true; 
             
             await updateDoc(doc(db, "Users", userId), updates); 
             setEditingUser(null); 
@@ -91,7 +103,9 @@ const UserManagement = () => {
     };
 
     const startNameEdit = (user) => { 
-        if (user.role === 'ceo' && currentUser.uid !== user.id) return; // Only CEO can edit own name
+        if (user.role === 'ceo' && currentUser.uid !== user.id) return;
+        if (isManager && (user.role === 'admin' || user.role === 'ceo')) return;
+        
         setEditingNameId(user.id); setNewName(user.name || ""); 
     };
     
@@ -106,7 +120,9 @@ const UserManagement = () => {
 
     const handleToggleStatus = (user) => {
         if (user.id === currentUser.uid) return setToast({message: "You cannot suspend yourself.", type: "error"});
-        if (user.role === 'ceo') return setToast({message: "Cannot suspend the CEO.", type: "error"}); // 🔥 Protect CEO
+        if (user.role === 'ceo') return setToast({message: "Cannot suspend the CEO.", type: "error"}); 
+        
+        if (isManager && user.role === 'admin') return setToast({message: "Managers cannot suspend Admins.", type: "error"});
 
         const isSuspended = user.status === 'suspended';
         setConfirmConfig({
@@ -127,7 +143,9 @@ const UserManagement = () => {
 
     const handleDelete = (user) => {
         if (user.id === currentUser.uid) return setToast({message: "Cannot delete your own account.", type: "error"});
-        if (user.role === 'ceo') return setToast({message: "The CEO account cannot be deleted.", type: "error"}); // 🔥 Protect CEO
+        if (user.role === 'ceo') return setToast({message: "The CEO account cannot be deleted.", type: "error"}); 
+        
+        if (isManager && user.role === 'admin') return setToast({message: "Managers cannot delete Admins.", type: "error"});
 
         setConfirmConfig({
             isOpen: true, title: "Delete User?", message: `Permanently delete ${user.name}?`, confirmText: "Delete", confirmColor: "bg-red-600",
@@ -147,11 +165,14 @@ const UserManagement = () => {
 
     const handleAdminToggle = async (user) => {
         if (user.role === 'ceo') return;
+        if (isManager) return setToast({message: "Managers cannot grant Admin access.", type: "error"});
+
         try { await updateDoc(doc(db, "Users", user.id), { isAdminAccess: !user.isAdminAccess }); setToast({ message: "Permissions updated", type: 'success' }); } 
         catch (e) { setToast({ message: "Failed.", type: 'error' }); }
     };
 
     const openPayrollModal = (user) => {
+        if (isManager) return setToast({message: "Access Denied: Managers cannot set salaries.", type: "error"});
         setPayrollModal({ isOpen: true, userId: user.id, name: user.name });
         setPayrollConfig({ baseSalary: user.baseSalary || 0, fixedPerJob: user.fixedPerJob || 0 });
     };
@@ -165,10 +186,16 @@ const UserManagement = () => {
     };
 
     const UserRow = ({ member }) => {
-        // 🔥 CEO Check: Is this row a CEO?
         const isCEO = member.role === 'ceo';
-        // Can we edit this row? (Only if it's NOT a CEO, or if WE are the CEO editing our own name only)
-        const canEditRole = !isCEO; 
+        const isTargetAdmin = member.role === 'admin';
+        const isSelf = member.id === currentUser.uid; // 🔥 Check if row is current user
+        
+        // Permissions for current user actions
+        // 1. Cannot edit CEO
+        // 2. Manager cannot edit Admin
+        // 3. CANNOT EDIT SELF (New Rule)
+        const canEditRole = !isCEO && !isSelf && (!isManager || !isTargetAdmin);
+        const canManage = !isCEO && !isSelf && (!isManager || !isTargetAdmin);
 
         return (
             <tr className={`hover:bg-gray-50 transition ${member.role === 'pending' ? 'bg-yellow-50' : ''} ${isCEO ? 'bg-slate-50' : ''}`}>
@@ -183,8 +210,8 @@ const UserManagement = () => {
                         <div className="group">
                             <div className={`font-bold flex items-center gap-2 ${member.status === 'suspended' ? 'text-gray-400' : 'text-gray-900'}`}>
                                 {isCEO && <Crown size={14} className="text-yellow-600 fill-yellow-400"/>}
-                                {member.name}
-                                {!isCEO && <button onClick={() => startNameEdit(member)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-purple-600 transition" title="Edit Name"><Edit2 size={12}/></button>}
+                                {member.name} {isSelf && <span className="text-[10px] text-purple-600 bg-purple-100 px-1.5 rounded">(You)</span>}
+                                {!isCEO && !isSelf && (!isManager || !isTargetAdmin) && <button onClick={() => startNameEdit(member)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-purple-600 transition" title="Edit Name"><Edit2 size={12}/></button>}
                             </div>
                             <div className="text-xs text-gray-500">{member.email}</div>
                         </div>
@@ -196,11 +223,11 @@ const UserManagement = () => {
                             <option value="pending">Pending</option>
                             <option value="worker">Worker</option>
                             <option value="secretary">Secretary</option>
-                            <option value="admin">Admin</option>
-                            {/* 🔥 Only show active option if no CEO exists OR this user is already the CEO */}
-                            <option value="ceo" disabled={existingCEO && existingCEO.id !== member.id}>
+                            <option value="manager">Manager</option>
+                            {!isManager && <option value="admin">Admin</option>}
+                            {!isManager && <option value="ceo" disabled={existingCEO && existingCEO.id !== member.id}>
                                 {existingCEO && existingCEO.id !== member.id ? "CEO (Taken)" : "CEO (Owner)"}
-                            </option>
+                            </option>}
                         </select>
                     ) : (
                         <button 
@@ -209,29 +236,33 @@ const UserManagement = () => {
                             className={`px-3 py-1 rounded-full text-xs font-bold uppercase transition shadow-sm flex items-center gap-1 ${getRoleBadge(member.role)} ${!canEditRole ? 'cursor-default opacity-100' : 'hover:scale-105'}`}
                         >
                             {member.role === 'ceo' && <Crown size={10} className="fill-current"/>}
+                            {member.role === 'manager' && <Briefcase size={10} className="fill-current"/>}
                             {member.role === 'pending' ? 'Approve' : member.role}
                         </button>
                     )}
                 </td>
                 <td className="px-6 py-4">
                     <div className="flex justify-center gap-2">
-                        {/* CEO always has permissions, so we disable toggles for visual clarity or force them ON */}
-                        <button onClick={() => handleTechToggle(member)} disabled={member.role === 'worker' || isCEO} className={`p-2 rounded-full border transition flex items-center gap-1 text-[10px] font-bold px-3 ${member.isTechnician || isCEO ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white text-gray-400'}`}><Wrench size={14} /> Tech</button>
-                        <button onClick={() => handleAdminToggle(member)} disabled={member.role === 'admin' || isCEO} className={`p-2 rounded-full border transition flex items-center gap-1 text-[10px] font-bold px-3 ${member.isAdminAccess || isCEO ? 'bg-red-100 text-red-700 border-red-200' : 'bg-white text-gray-400'}`}><Shield size={14} /> Admin</button>
+                        <button onClick={() => handleTechToggle(member)} disabled={member.role === 'worker' || isCEO || !canManage} className={`p-2 rounded-full border transition flex items-center gap-1 text-[10px] font-bold px-3 ${member.isTechnician || isCEO ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white text-gray-400'}`}><Wrench size={14} /> Tech</button>
+                        <button onClick={() => handleAdminToggle(member)} disabled={member.role === 'admin' || isCEO || isManager || !canManage} className={`p-2 rounded-full border transition flex items-center gap-1 text-[10px] font-bold px-3 ${member.isAdminAccess || isCEO ? 'bg-red-100 text-red-700 border-red-200' : 'bg-white text-gray-400'}`}><Shield size={14} /> Admin</button>
                     </div>
                 </td>
                 <td className="px-6 py-4 text-right flex justify-end gap-2">
-                    {/* Actions hidden for CEO rows to prevent accidental deletion/modification by anyone */}
-                    {!isCEO && (
+                    {canManage ? (
                         <>
-                            {member.role !== 'pending' && <button onClick={() => openPayrollModal(member)} className="p-2 rounded-full text-green-600 hover:bg-green-100 transition">₦</button>}
+                            {member.role !== 'pending' && !isManager && (
+                                <button onClick={() => openPayrollModal(member)} className="p-2 rounded-full text-green-600 hover:bg-green-100 transition" title="Set Salary">
+                                    ₦
+                                </button>
+                            )}
                             <button onClick={() => handleToggleStatus(member)} className={`p-2 rounded-full transition ${member.status === 'suspended' ? 'text-green-600 hover:bg-green-100' : 'text-orange-400 hover:bg-orange-100'}`}>
                                 {member.status === 'suspended' ? <Unlock size={18}/> : <Lock size={18}/>}
                             </button>
-                            {member.id !== currentUser.uid && <button onClick={() => handleDelete(member)} className="text-red-600 hover:bg-red-100 p-2 rounded-full"><Trash2 size={18}/></button>}
+                            <button onClick={() => handleDelete(member)} className="text-red-600 hover:bg-red-100 p-2 rounded-full"><Trash2 size={18}/></button>
                         </>
+                    ) : (
+                        <span className="text-xs text-gray-400 italic py-2 pr-2">{isSelf ? 'Self (Protected)' : 'Protected'}</span>
                     )}
-                    {isCEO && <span className="text-xs text-gray-400 italic py-2 pr-2">Protected</span>}
                 </td>
             </tr>
         );
