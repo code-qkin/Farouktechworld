@@ -247,7 +247,7 @@ const ServicePrices = () => {
         setNewServiceData({ ...newServiceData, [e.target.name]: e.target.value });
     };
 
-    if (role !== 'admin') return <div className="p-10">Access Denied</div>;
+    if (role !== 'admin' && role !== 'ceo') return <div className="p-10">Access Denied</div>;
 
     return (
         <div className="min-h-screen bg-gray-50 p-4 sm:p-8 relative">
