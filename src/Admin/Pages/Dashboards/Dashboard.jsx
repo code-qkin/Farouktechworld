@@ -100,7 +100,7 @@ const Dashboard = () => {
     const [deletionRequests, setDeletionRequests] = useState([]);
     const [toast, setToast] = useState({ message: '', type: '' });
 
-    const welcomeName = user?.name || (role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Admin');
+    const welcomeName = role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Admin';
 
     // 1. FETCH DELETION REQUESTS (Admin Only)
     useEffect(() => {
@@ -147,10 +147,10 @@ const Dashboard = () => {
                 // Recent Activity Feed
                 if (recent.length < 5) {
                     recent.push({
-                        ticketId: data.ticketId, // 🔥 FIX 1: Explicitly save ticketId
-                        id: doc.id,
-                        // 🔥 FIX 2: Check for name (Product) if deviceModel (Repair) is missing
-                        device: data.items?.[0]?.deviceModel || data.items?.[0]?.name || 'Unknown Device',
+                        id: data.ticketId, 
+                        docId: doc.id,
+                        ticketId: data.ticketId, // Ensure ticketId is available for navigation
+                        device: data.items?.[0]?.deviceModel || data.items?.[0]?.name || 'Unknown Device', // Fixed 'Unknown Device' issue
                         status: data.status, 
                         customer: data.customer?.name || 'Guest', 
                         cost: data.totalCost
@@ -311,13 +311,13 @@ const Dashboard = () => {
                             <button onClick={() => navigate('/admin/users')} className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-purple-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-purple-500 hover:shadow-lg">
                                 <Users size={18}/> <span className="text-[10px] font-bold">Staff</span>
                             </button>
-                            <button onClick={() => navigate('/admin/payroll')} className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-green-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-green-500 hover:shadow-lg">
-                                <Banknote size={18}/> <span className="text-[10px] font-bold">Payroll</span>
+                            <button onClick={() => navigate('/admin/worker-stats')} className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-orange-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-orange-500 hover:shadow-lg">
+                                <TrendingUp size={18}/> <span className="text-[10px] font-bold">Worker Stats</span>
                             </button>
                             <button onClick={() => navigate('/admin/pricing')} className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-blue-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-blue-500 hover:shadow-lg">
                                 <Smartphone size={18}/> <span className="text-[10px] font-bold">Services</span>
                             </button>
-                            <button onClick={() => navigate('/admin/manage-proof-of-work')} className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-orange-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-orange-500 hover:shadow-lg">
+                            <button onClick={() => navigate('/admin/manage-proof-of-work')} className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-pink-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-pink-500 hover:shadow-lg">
                                 <ImageIcon size={18}/> <span className="text-[10px] font-bold">Portfolio</span>
                             </button>
                         </div>
