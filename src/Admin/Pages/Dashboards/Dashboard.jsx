@@ -147,10 +147,9 @@ const Dashboard = () => {
                 // Recent Activity Feed
                 if (recent.length < 5) {
                     recent.push({
-                        id: data.ticketId, 
-                        docId: doc.id,
-                        ticketId: data.ticketId, // Ensure ticketId is available for navigation
-                        device: data.items?.[0]?.deviceModel || data.items?.[0]?.name || 'Unknown Device', // Fixed 'Unknown Device' issue
+                        id: doc.id,
+                        ticketId: data.ticketId, // Ensure ticketId is used for link
+                        device: data.items?.[0]?.deviceModel || data.items?.[0]?.name || 'Unknown Device', 
                         status: data.status, 
                         customer: data.customer?.name || 'Guest', 
                         cost: data.totalCost
@@ -301,25 +300,39 @@ const Dashboard = () => {
                         <MetricCard title="Inventory Count" value={stats.inventoryCount} icon={Package} color="blue" subtext="Total Items in Stock" onClick={() => navigate('/admin/store')} />
                     )}
 
-                    {/* Quick Actions */}
+                    {/* Quick Actions (5 Slots) */}
                     <div className={`${CARD_STYLE} p-5 flex flex-col justify-between h-full bg-slate-900 border-slate-900 group hover:shadow-xl`}>
                         <div className="flex justify-between items-center mb-2">
                             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Quick Actions</span>
                             <Settings size={18} className="text-slate-500 group-hover:text-white transition-colors duration-500"/>
                         </div>
                         <div className="grid grid-cols-2 gap-2 h-full items-center">
+                            
+                            {/* 1. Staff */}
                             <button onClick={() => navigate('/admin/users')} className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-purple-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-purple-500 hover:shadow-lg">
                                 <Users size={18}/> <span className="text-[10px] font-bold">Staff</span>
                             </button>
-                            <button onClick={() => navigate('/admin/worker-stats')} className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-orange-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-orange-500 hover:shadow-lg">
-                                <TrendingUp size={18}/> <span className="text-[10px] font-bold">Worker Stats</span>
+                            
+                            {/* 2. Payroll */}
+                            <button onClick={() => navigate('/admin/payroll')} className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-green-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-green-500 hover:shadow-lg">
+                                <Banknote size={18}/> <span className="text-[10px] font-bold">Payroll</span>
                             </button>
+                            
+                            {/* 3. Worker Stats */}
+                            <button onClick={() => navigate('/admin/worker-stats')} className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-orange-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-orange-500 hover:shadow-lg">
+                                <TrendingUp size={18}/> <span className="text-[10px] font-bold">Stats</span>
+                            </button>
+                            
+                            {/* 4. Services */}
                             <button onClick={() => navigate('/admin/pricing')} className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-blue-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-blue-500 hover:shadow-lg">
                                 <Smartphone size={18}/> <span className="text-[10px] font-bold">Services</span>
                             </button>
-                            <button onClick={() => navigate('/admin/manage-proof-of-work')} className="flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-pink-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-pink-500 hover:shadow-lg">
+
+                            {/* 5. Portfolio */}
+                            <button onClick={() => navigate('/admin/manage-proof-of-work')} className="col-span-2 flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-pink-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-pink-500 hover:shadow-lg">
                                 <ImageIcon size={18}/> <span className="text-[10px] font-bold">Portfolio</span>
                             </button>
+                            
                         </div>
                     </div>
                 </div>
@@ -433,30 +446,6 @@ const Dashboard = () => {
                         </div>
                         <button onClick={() => navigate('/admin/orders')} className="mt-3 w-full py-2 text-xs font-bold text-slate-600 bg-slate-50 rounded-lg hover:bg-slate-100 transition flex items-center justify-center gap-2 shadow-sm">View All</button>
                     </div>
-                </div>
-
-                <div className={CARD_STYLE}>
-                    <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-slate-50/50 to-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                        <div><h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><ShieldAlert size={18} className="text-orange-500"/> Inventory</h3><p className="text-xs font-medium text-slate-400">Real-time stock monitoring</p></div>
-                        <div className="flex bg-white p-1.5 rounded-xl border border-slate-100 shadow-sm">
-                            <button onClick={()=>setAlertTab('critical')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${alertTab === 'critical' ? 'bg-red-50 text-red-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Critical ({inventoryData.critical?.length || 0})</button>
-                            <button onClick={()=>setAlertTab('low')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${alertTab === 'low' ? 'bg-orange-50 text-orange-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Low ({inventoryData.low?.length || 0})</button>
-                        </div>
-                    </div>
-                    <div className="divide-y divide-slate-50 max-h-[300px] overflow-y-auto custom-scrollbar bg-white">
-                        {currentAlerts?.length === 0 ? <div className="p-8 text-center text-slate-400 flex flex-col items-center"><CheckCircle size={32} className="text-green-400 mb-2 opacity-50"/><p className="text-sm font-bold">No items in this category.</p></div> : 
-                            currentAlerts?.map(item => (
-                                <div key={item.id} className="px-5 py-3 flex justify-between items-center hover:bg-slate-50/80 transition group">
-                                    <div className="flex items-center gap-3">
-                                        <div className={`p-2 rounded-xl shadow-sm ${alertTab === 'critical' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}>{alertTab === 'critical' ? <XCircle size={16}/> : <AlertCircle size={16}/>}</div>
-                                        <div><p className="text-xs font-bold text-slate-800">{item.name}</p><div className="flex items-center gap-2 mt-1">{item.price > 50000 && <span className="text-[9px] font-black bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-100">HIGH VALUE</span>}<span className="text-[10px] font-medium text-slate-400">{item.category}</span></div></div>
-                                    </div>
-                                    <div className="flex items-center gap-4"><div className="text-right"><span className={`block text-xs font-black ${alertTab === 'critical' ? 'text-red-600' : 'text-slate-700'}`}>{item.stock} Left</span><div className="w-16 h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden ml-auto shadow-inner"><div className={`h-full rounded-full ${item.stock === 0 ? 'bg-red-500 w-0' : 'bg-gradient-to-r from-orange-400 to-orange-500'}`} style={{ width: `${(item.stock / 5) * 100}%` }}></div></div></div><button onClick={() => navigate('/admin/store')} className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition hover:bg-blue-100 shadow-sm">Restock</button></div>
-                                </div>
-                            ))
-                        }
-                    </div>
-                    <button onClick={() => navigate('/admin/store')} className="w-full py-3 bg-slate-50/50 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition border-t border-slate-100">Manage Full Inventory</button>
                 </div>
             </main>
         </div>
