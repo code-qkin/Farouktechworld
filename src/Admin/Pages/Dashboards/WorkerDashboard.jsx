@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     Wrench, CheckCircle, Clock, BoxSelect, LogOut, 
-    Search, X, Box, Briefcase, Layers, Undo2, Lock, Package, AlertTriangle, Bell, ShieldOff, Filter
+    Search, X, Box, Briefcase, Layers, Undo2, Lock, Package, AlertTriangle, Bell, ShieldOff, Filter, Palette
 } from 'lucide-react';
 import { useAuth } from '../../AdminContext.jsx';
 import { db, auth } from '../../../firebaseConfig.js';
@@ -66,7 +66,7 @@ const WorkerDashboard = ({ user: propUser }) => {
   const [selectedTask, setSelectedTask] = useState(null);
   const [selectedPart, setSelectedPart] = useState('');
   const [partSearch, setPartSearch] = useState(''); 
-  const [partCategoryFilter, setPartCategoryFilter] = useState('All'); // 🔥 New Filter
+  const [partCategoryFilter, setPartCategoryFilter] = useState('All'); 
   
   // Device Context
   const [selectedDeviceIndex, setSelectedDeviceIndex] = useState(null);
@@ -433,6 +433,14 @@ const WorkerDashboard = ({ user: propUser }) => {
                                 <div key={idx} className="relative">
                                     <div className="flex flex-wrap items-center gap-2 mb-2">
                                         <div className="bg-slate-800 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase truncate max-w-[200px]">{item.name || item.deviceModel}</div>
+                                        
+                                        {/* 🔥 ADDED COLOR DISPLAY HERE */}
+                                        {item.deviceColor && (
+                                            <div className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase border border-blue-100">
+                                                {item.deviceColor}
+                                            </div>
+                                        )}
+
                                         {item.passcode && <div className="flex items-center gap-1 bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-100"><Lock size={10} className="text-yellow-600"/><span className="font-mono text-[10px] font-bold text-slate-800">{item.passcode}</span></div>}
                                         {item.condition && <div className="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200"><AlertTriangle size={10} className="text-orange-500"/><span className="text-[10px] font-medium text-gray-600 truncate max-w-[150px]">{item.condition}</span></div>}
                                     </div>
