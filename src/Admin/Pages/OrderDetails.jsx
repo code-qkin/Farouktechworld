@@ -3,14 +3,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
     ArrowLeft, Printer, DollarSign, CheckCircle, Wrench, Ban, PlusCircle,
     X, RotateCcw, RefreshCw, Lock, Smartphone, Edit2, Trash2, AlertTriangle, Package,
-    Loader2, Calendar, User, Mail
+    Loader2, Calendar, User, Mail, Send
 } from 'lucide-react';
 import {
     collection, query, where, getDocs, doc,
     updateDoc, runTransaction, addDoc, serverTimestamp, Timestamp, onSnapshot, deleteDoc, arrayRemove, increment, arrayUnion
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig.js';
-import { useAuth } from '../AdminContext';
+import { useAuth } from '../AdminContext.jsx';
 import { Toast, ConfirmModal, PromptModal } from '../Components/Feedback.jsx';
 
 const OrderDetails = () => {
@@ -161,8 +161,6 @@ const OrderDetails = () => {
         setConfirmConfig({ ...confirmConfig, isOpen: false });
     };
 
-
-
     const handleProcessRefund = async () => {
         const reason = prompt("Enter reason for refund:");
         if (!reason) return;
@@ -176,7 +174,6 @@ const OrderDetails = () => {
         const item = order.items[index];
         const newStatus = !item.collected;
 
-        // 🔥 VALIDATION: Check if item services are completed before collection (Ignore Void)
         if (newStatus && item.type === 'repair' && item.services?.some(s => s.status !== 'Completed' && s.status !== 'Void')) {
             return setToast({ message: "Cannot collect: Repairs not completed!", type: "error" });
         }
@@ -326,12 +323,10 @@ const OrderDetails = () => {
         setConfirmConfig({ ...confirmConfig, isOpen: false });
     };
 
-    // 🔥 UPDATED: Strict Validation for Collection
     const handleStatusChange = async (e) => {
         const newStatus = e.target.value;
         if (newStatus === 'Void') { setConfirmConfig({ isOpen: true, title: "Void Order?", message: "Cancels order & zeros balance.", confirmText: "Void", confirmColor: "bg-red-600", action: handleVoidOrder }); return; }
 
-        // 🔥 BLOCK COLLECTION IF WORK NOT DONE
         if (newStatus === 'Collected') {
             const hasPendingRepairs = order.items?.some(item =>
                 item.type === 'repair' &&
@@ -347,15 +342,12 @@ const OrderDetails = () => {
         setIsUpdating(true);
         try {
             const updates = { status: newStatus };
-
-            // If collected, update items to collected=true
             if (newStatus === 'Collected' && order.items) {
                 updates.items = order.items.map(item => ({
                     ...item,
                     collected: true
                 }));
             }
-
             await updateDoc(doc(db, "Orders", order.id), updates);
             setToast({ message: "Status Updated", type: "success" });
         } catch (e) {
@@ -412,19 +404,41 @@ const OrderDetails = () => {
     };
 
     const handleDeleteClick = () => {
-        if (role === 'secretary') { setRequestModalOpen(true); return; }
+        // 🔥 FIXED: Opens Modal for Secretary
+        if (role === 'secretary') { 
+            setRequestModalOpen(true); 
+            return; 
+        }
         setConfirmConfig({ isOpen: true, title: "Delete Order?", message: "Permanent.", confirmText: "Delete", confirmColor: "bg-red-600", action: async () => { try { await deleteDoc(doc(db, "Orders", order.id)); setToast({ message: "Deleted", type: "success" }); setTimeout(() => navigate('/admin/orders'), 1000); } catch (e) { setToast({ message: "Failed", type: "error" }); } setConfirmConfig({ ...confirmConfig, isOpen: false }); } });
     };
 
     const handleSubmitRequest = async (e) => {
         e.preventDefault();
+        if (!deleteReason.trim()) return;
         setIsSubmittingRequest(true);
-        try { await addDoc(collection(db, "DeletionRequests"), { orderId: order.id, ticketId: order.ticketId, customer: order.customer?.name, reason: deleteReason, requestedBy: user?.name, requestedAt: serverTimestamp(), status: 'pending' }); setToast({ message: "Request Sent", type: "success" }); setRequestModalOpen(false); setDeleteReason(''); } catch (error) { setToast({ message: "Failed", type: "error" }); } finally { setIsSubmittingRequest(false); }
+        try { 
+            await addDoc(collection(db, "DeletionRequests"), { 
+                orderId: order.id, 
+                ticketId: order.ticketId, 
+                customer: order.customer?.name, 
+                reason: deleteReason, 
+                requestedBy: user?.name || "Secretary", 
+                requestedAt: serverTimestamp(), 
+                status: 'pending' 
+            }); 
+            setToast({ message: "Request Sent Successfully", type: "success" }); 
+            setRequestModalOpen(false); 
+            setDeleteReason(''); 
+        } catch (error) { 
+            console.error(error);
+            setToast({ message: "Failed to send request", type: "error" }); 
+        } finally { 
+            setIsSubmittingRequest(false); 
+        }
     };
 
     const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
 
-    // 🔥 FIXED DATE DISPLAY (DD/MM/YYYY)
     const dateStr = order?.createdAt?.seconds
         ? new Date(order.createdAt.seconds * 1000).toLocaleDateString('en-GB', {
             day: '2-digit', month: '2-digit', year: 'numeric',
@@ -443,6 +457,38 @@ const OrderDetails = () => {
             <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: '' })} />
             <ConfirmModal isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmText={confirmConfig.confirmText} confirmColor={confirmConfig.confirmColor} onCancel={() => setConfirmConfig({ ...confirmConfig, isOpen: false })} onConfirm={() => confirmConfig.action && confirmConfig.action(true)} />
             <PromptModal isOpen={promptConfig.isOpen} title={promptConfig.title} message={promptConfig.message} max={promptConfig.max} onCancel={() => setPromptConfig({ ...promptConfig, isOpen: false })} onConfirm={promptConfig.action} />
+
+            {/* 🔥 REQUEST DELETION MODAL (Fixed) */}
+            {requestModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 transform transition-all scale-100">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <AlertTriangle className="text-orange-500"/> Request Deletion
+                            </h3>
+                            <button onClick={() => setRequestModalOpen(false)}><X size={20} className="text-slate-400 hover:text-red-500"/></button>
+                        </div>
+                        <p className="text-sm text-slate-500 mb-4">Please provide a reason for deleting ticket <b>{order.ticketId}</b>. This will be sent to the admin for approval.</p>
+                        <form onSubmit={handleSubmitRequest}>
+                            <textarea 
+                                className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-orange-500 text-sm mb-4 bg-slate-50" 
+                                rows="3" 
+                                placeholder="Reason for deletion..." 
+                                value={deleteReason} 
+                                onChange={e => setDeleteReason(e.target.value)} 
+                                required 
+                                autoFocus 
+                            />
+                            <div className="flex gap-2">
+                                <button type="button" onClick={() => setRequestModalOpen(false)} className="flex-1 py-3 text-slate-500 font-bold bg-gray-100 rounded-xl hover:bg-gray-200 transition">Cancel</button>
+                                <button type="submit" disabled={isSubmittingRequest} className="flex-1 py-3 bg-orange-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-orange-700 transition">
+                                    {isSubmittingRequest ? <Loader2 className="animate-spin" size={18}/> : <Send size={18}/>} Send Request
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {/* HEADER */}
             <div className="max-w-7xl mx-auto mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -493,20 +539,32 @@ const OrderDetails = () => {
                                                     <div>
                                                         <div className="font-bold text-gray-900 text-base flex items-center gap-2">
                                                             {item.name || item.deviceModel}
+                                                            
+                                                            {/* 🔥 SHOW QUANTITY IF > 1 */}
+                                                            {item.qty > 1 && (
+                                                                <span className="text-[10px] bg-slate-100 text-slate-700 font-black px-1.5 py-0.5 rounded border border-slate-200">
+                                                                    x{item.qty}
+                                                                </span>
+                                                            )}
+
+                                                            {/* 🔥 SHOW DEVICE COLOR */}
+                                                            {item.deviceColor && (
+                                                                <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded border border-blue-100">
+                                                                    {item.deviceColor}
+                                                                </span>
+                                                            )}
+
                                                             {item.returned && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded border border-red-200">Returned</span>}
-                                                            {/* Collected Badge */}
                                                             {item.collected && (
                                                                 <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded border border-green-200 font-bold flex items-center gap-1">
                                                                     <CheckCircle size={10} /> Collected
                                                                 </span>
                                                             )}
-                                                            {/* Partial Collect Toggle */}
                                                             {order.status !== 'Void' && !isReturn && !item.returned && (
                                                                 <button onClick={() => toggleItemCollected(i)} disabled={isUpdating} className={`ml-auto text-[10px] px-2 py-1 rounded border font-bold transition flex items-center gap-1 ${item.collected ? 'text-gray-400 border-gray-200 hover:bg-gray-100' : 'text-green-700 border-green-200 bg-green-50 hover:bg-green-100'}`}>
                                                                     {item.collected ? "Undo Collect" : "Mark Collected"}
                                                                 </button>
                                                             )}
-                                                            {/* Return Button */}
                                                             {item.type === 'product' && !item.returned && !isReturn && (
                                                                 <button onClick={() => handleVoidProductTrigger(i)} disabled={isUpdating} className="text-red-500 hover:bg-red-50 p-1 rounded ml-2" title="Return Product"><RotateCcw size={16} /></button>
                                                             )}
@@ -688,15 +746,10 @@ const OrderDetails = () => {
                 </div>
             )}
 
-            {/* Receipt Modal - 🔥 FIXED STRUCTURE FOR PRINTING 🔥 */}
+            {/* Receipt Modal */}
             {showReceipt && (
                 <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
-                    {/* Scroll Wrapper: This gets hidden during print via CSS. 
-                        The child .printable-receipt becomes fixed/absolute.
-                    */}
                     <div className="max-h-[90vh] overflow-y-auto w-full max-w-md rounded-lg no-scrollbar-print">
-
-                        {/* Printable Content */}
                         <div className="bg-white w-full p-8 rounded shadow-2xl relative printable-receipt">
                             <button onClick={() => setShowReceipt(false)} className="absolute top-2 right-2 text-gray-400 print:hidden hover:text-gray-600"><X /></button>
                             <div className="text-center border-b-2 border-black pb-4 mb-4">
@@ -706,13 +759,12 @@ const OrderDetails = () => {
                             </div>
                             <div className="flex justify-between text-xs mb-4 font-mono border-b border-dashed border-gray-300 pb-2"><span>{new Date().toLocaleDateString('en-GB')}</span><span>{new Date().toLocaleTimeString()}</span></div>
                             <div className="mb-6 text-sm font-bold uppercase border-b border-black pb-2">Customer: {order.customer.name}</div>
-                            <table className="w-full text-xs mb-6 font-mono"><tbody>{order.items.map((item, i) => { if (item.type === 'part_usage') return null; return (<tr key={i}><td className="py-1 pr-2 align-top"><div className="font-bold">{item.name || item.deviceModel}</div></td><td className="text-right align-top whitespace-nowrap">{formatCurrency(item.total ?? item.cost ?? 0)}</td></tr>) })}</tbody></table>
+                            <table className="w-full text-xs mb-6 font-mono"><tbody>{order.items.map((item, i) => { if (item.type === 'part_usage') return null; return (<tr key={i}><td className="py-1 pr-2 align-top"><div className="font-bold">{item.name || item.deviceModel} {item.qty > 1 ? `x${item.qty}` : ''}</div></td><td className="text-right align-top whitespace-nowrap">{formatCurrency(item.total ?? item.cost ?? 0)}</td></tr>) })}</tbody></table>
                             <div className="flex justify-between text-lg font-bold border-t-2 border-black pt-2 mb-1"><span>TOTAL:</span><span>{formatCurrency(order.totalCost)}</span></div>
                             <div className="space-y-1 text-sm font-mono mb-6 border-b border-black pb-4"><div className="flex justify-between"><span>Paid:</span><span>{formatCurrency(order.amountPaid || 0)}</span></div><div className="flex justify-between font-bold"><span>Balance:</span><span>{formatCurrency(order.balance)}</span></div></div>
                             <div className="text-center text-[10px] font-mono uppercase"><p>No Refund after payment</p><p>Warranty covers repair only</p><p className="mt-2 font-bold">Thank you!</p></div>
                             <button onClick={() => window.print()} className="w-full mt-6 bg-black text-white py-3 font-bold uppercase rounded hover:bg-gray-800 print:hidden flex items-center justify-center gap-2"><Printer size={18} /> Print Now</button>
                         </div>
-
                     </div>
                 </div>
             )}
