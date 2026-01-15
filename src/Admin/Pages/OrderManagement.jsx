@@ -111,7 +111,6 @@ const OrdersManagement = () => {
     const [customer, setCustomer] = useState({ name: '', phone: '', email: '' });
     const [cart, setCart] = useState([]); 
     const [discount, setDiscount] = useState(0); 
-    // 🔥 Added deviceColor
     const [repairInput, setRepairInput] = useState({ deviceModel: '', deviceColor: '', imei: '', passcode: '', condition: '' });
     const [serviceInput, setServiceInput] = useState({ type: '', cost: '' });
     const [currentDeviceServices, setCurrentDeviceServices] = useState([]); 
@@ -254,6 +253,10 @@ const OrdersManagement = () => {
     const currentOrders = filteredOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
     const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
 
+    // Pagination (Store Inventory)
+    useEffect(() => setStorePage(1), [storeSearch, storeCategory]);
+    const totalStorePages = Math.ceil(filteredInventory.length / itemsPerStorePage);
+
     // --- HANDLERS ---
     
     const handleOpenNewOrder = () => {
@@ -261,7 +264,6 @@ const OrdersManagement = () => {
         setCustomer({ name: '', phone: '', email: '' });
         setCart([]);
         setDiscount(0);
-        // 🔥 Reset deviceColor too
         setRepairInput({ deviceModel: '', deviceColor: '', imei: '', passcode: '', condition: '' });
         setCurrentDeviceServices([]);
         setActiveTab('repair');
@@ -297,8 +299,11 @@ const OrdersManagement = () => {
 
     const addDeviceToCart = () => {
         if (!repairInput.deviceModel) return setToast({message: "Select Device Model.", type: "error"});
+        // 🔥 VALIDATION: Check if services exist before adding
+        if (currentDeviceServices.length === 0) return setToast({message: "Please add at least one service.", type: "error"});
+
         setCart([...cart, { type: 'repair', id: `rep-${Date.now()}`, ...repairInput, services: currentDeviceServices, qty: 1, total: currentDeviceServices.reduce((s, c) => s + c.cost, 0) }]);
-        setRepairInput({ deviceModel: '', deviceColor: '', imei: '', passcode: '', condition: '' }); // Reset
+        setRepairInput({ deviceModel: '', deviceColor: '', imei: '', passcode: '', condition: '' }); 
         setCurrentDeviceServices([]);
         if (window.innerWidth < 1024) setMobilePosTab('cart');
         setToast({message: "Device added", type: "success"});
@@ -328,7 +333,7 @@ const OrdersManagement = () => {
         if (item.type === 'repair') {
             setRepairInput({
                 deviceModel: item.deviceModel || '',
-                deviceColor: item.deviceColor || '', // 🔥 Populate Color
+                deviceColor: item.deviceColor || '',
                 imei: item.imei || '',
                 passcode: item.passcode || '',
                 condition: item.condition || ''
@@ -352,39 +357,70 @@ const OrdersManagement = () => {
         return `FTW-${datePart}-${timePart}${randomPart}`;
     };
 
+    // 🔥 FIXED TRANSACTION LOGIC (Read-Before-Write)
     const handleCheckout = async () => {
         if (isSubmitting || !customer.name || cart.length === 0) return setToast({message: "Details missing!", type: "error"});
         setIsSubmitting(true);
         try {
             await runTransaction(db, async (t) => {
+                
+                // --- 1. PREPARE READS ---
+                const inventoryReads = [];
+                let oldOrderSnap = null;
+
+                // Read Inventory if New Order
                 if (!editOrderId) {
                     for (const item of cart) {
                         if (item.type === 'product') {
                             const ref = doc(db, "Inventory", item.productId);
-                            const snap = await t.get(ref);
-                            if (snap.data().stock < item.qty) throw `Stock Error: ${item.name}`;
-                            t.update(ref, { stock: increment(-item.qty) });
+                            inventoryReads.push({ ref, item });
                         }
                     }
                 }
+
+                // Read Order if Editing
+                if (editOrderId) {
+                    oldOrderSnap = await t.get(doc(db, "Orders", editOrderId));
+                }
+
+                // Execute Inventory Reads
+                const inventorySnaps = await Promise.all(inventoryReads.map(r => t.get(r.ref)));
+
+                // --- 2. LOGIC CHECKS (No Writes Yet) ---
+                if (!editOrderId) {
+                    inventorySnaps.forEach((snap, idx) => {
+                        const request = inventoryReads[idx].item;
+                        if (!snap.exists()) throw `Product not found: ${request.name}`;
+                        const currentStock = snap.data().stock;
+                        if (currentStock < request.qty) throw `Stock Error: ${request.name}. Only ${currentStock} left.`;
+                    });
+                }
+
+                // Calculations
                 const subtotal = cart.reduce((s, i) => s + i.total, 0);
                 const totalCost = Math.max(0, subtotal - (Number(discount) || 0));
-                
-                const ticketId = generateTicketId();
-                
                 const orderData = { 
                     customer, items: cart.map(i => ({...i, collected: i.collected || false})), 
                     subtotal, discount: Number(discount), totalCost, 
                     lastUpdated: serverTimestamp() 
                 };
 
+                // --- 3. EXECUTE WRITES ---
+                
+                // Write Inventory
+                if (!editOrderId) {
+                    inventoryReads.forEach(r => {
+                        t.update(r.ref, { stock: increment(-r.item.qty) });
+                    });
+                }
+
+                // Write Order
                 if (editOrderId) {
-                    const ref = doc(db, "Orders", editOrderId);
-                    const old = (await t.get(ref)).data();
-                    const balance = totalCost - (old.amountPaid || 0);
-                    t.update(ref, { ...orderData, balance, paymentStatus: balance <= 0 ? 'Paid' : (old.amountPaid > 0 ? 'Part Payment' : 'Unpaid'), paid: balance <= 0 });
-                    setToast({message: "Order Updated", type: "success"});
+                    const oldData = oldOrderSnap.data();
+                    const balance = totalCost - (oldData.amountPaid || 0);
+                    t.update(doc(db, "Orders", editOrderId), { ...orderData, balance, paymentStatus: balance <= 0 ? 'Paid' : (oldData.amountPaid > 0 ? 'Part Payment' : 'Unpaid'), paid: balance <= 0 });
                 } else {
+                    const ticketId = generateTicketId();
                     const newRef = doc(collection(db, "Orders"));
                     t.set(newRef, { 
                         ticketId, ...orderData, amountPaid: 0, balance: totalCost, 
@@ -392,11 +428,17 @@ const OrdersManagement = () => {
                         createdAt: serverTimestamp(), orderType: cart.some(i=>i.type==='repair') ? 'repair' : 'store_sale',
                         warrantyExpiry: Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
                     });
-                    setToast({message: `Order ${ticketId} Created!`, type: "success"});
                 }
             });
+
+            // Success
+            setToast({message: editOrderId ? "Order Updated" : "Order Created!", type: "success"});
             setShowPOS(false); setCart([]); setCustomer({ name: '', phone: '', email: '' }); setDiscount(0); setEditOrderId(null);
-        } catch (e) { setToast({message: `Error: ${e}`, type: "error"}); } 
+            
+        } catch (e) { 
+            console.error("Transaction Error:", e);
+            setToast({message: typeof e === 'string' ? e : "Transaction Failed. Check console.", type: "error"}); 
+        } 
         finally { setIsSubmitting(false); }
     };
 
@@ -447,9 +489,7 @@ const OrdersManagement = () => {
         setIsSubmitting(false);
     };
 
-    
-    
-
+   
     const toggleReturnItem = (iIdx, sIdx) => {
         const key = sIdx !== undefined ? `${iIdx}-${sIdx}` : `${iIdx}-product`;
         setSelectedReturnItems(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
@@ -470,6 +510,7 @@ const OrdersManagement = () => {
             {/* HEADER */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
                 <div className="flex items-center gap-3">
+                    {/* 🔥 ADDED BACK BUTTON */}
                     <button onClick={() => navigate('/admin/dashboard')} className="bg-white p-2 rounded-xl shadow-sm border border-gray-200 hover:bg-gray-100 transition text-slate-600">
                         <ArrowLeft size={20} />
                     </button>
@@ -484,7 +525,7 @@ const OrdersManagement = () => {
                 </div>
             </div>
 
-          
+           
             <div className="flex flex-wrap gap-4 mb-8">
                 <QuickStat label="Orders Found" value={stats.total} icon={Layers} color="bg-blue-50 text-blue-600"/>
                 <QuickStat label="Pending Jobs" value={stats.pending} icon={Clock} color="bg-orange-50 text-orange-600"/>
@@ -650,7 +691,17 @@ const OrdersManagement = () => {
                                                 {currentDeviceServices.map(s=>(<div key={s.id} className="flex justify-between items-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm text-sm"><span className="font-bold text-slate-700">{s.service}</span><div className="flex items-center gap-4"><span className="font-mono font-bold text-slate-900">{formatCurrency(s.cost)}</span><button onClick={() => setCurrentDeviceServices(currentDeviceServices.filter(x => x.id !== s.id))} className="text-red-400 hover:text-red-600"><Minus size={16}/></button></div></div>))}
                                             </div>
                                         </div>
-                                        <button onClick={addDeviceToCart} className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold shadow-lg hover:bg-black transition flex justify-center gap-2 items-center"><PlusCircle size={20}/> Add Device to Ticket</button>
+                                        {/* 🔥 VALIDATED BUTTON */}
+                                        <button 
+                                            onClick={addDeviceToCart} 
+                                            disabled={!repairInput.deviceModel || currentDeviceServices.length === 0}
+                                            className={`w-full py-4 rounded-xl font-bold shadow-lg transition flex justify-center gap-2 items-center 
+                                                ${!repairInput.deviceModel || currentDeviceServices.length === 0 
+                                                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
+                                                    : 'bg-slate-900 text-white hover:bg-black'}`}
+                                        >
+                                            <PlusCircle size={20}/> Add Device to Ticket
+                                        </button>
                                     </div>
                                 )}
                                 
@@ -671,6 +722,29 @@ const OrdersManagement = () => {
                                                 </button>
                                             ))}
                                         </div>
+                                        
+                                        {/* 🔥 STORE PAGINATION CONTROLS */}
+                                        {Math.ceil(filteredInventory.length / itemsPerStorePage) > 1 && (
+                                            <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100">
+                                                <button 
+                                                    onClick={() => setStorePage(prev => Math.max(prev - 1, 1))} 
+                                                    disabled={storePage === 1}
+                                                    className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition"
+                                                >
+                                                    <ChevronLeft size={20}/>
+                                                </button>
+                                                <span className="text-xs font-bold text-slate-500">
+                                                    Page {storePage} of {Math.ceil(filteredInventory.length / itemsPerStorePage)}
+                                                </span>
+                                                <button 
+                                                    onClick={() => setStorePage(prev => Math.min(prev + 1, Math.ceil(filteredInventory.length / itemsPerStorePage)))} 
+                                                    disabled={storePage === Math.ceil(filteredInventory.length / itemsPerStorePage)}
+                                                    className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition"
+                                                >
+                                                    <ChevronRight size={20}/>
+                                                </button>
+                                            </div>
+                                        )}
                                     </>
                                 )}
 
