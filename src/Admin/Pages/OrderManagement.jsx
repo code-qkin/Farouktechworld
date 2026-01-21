@@ -555,26 +555,7 @@ const OrdersManagement = () => {
         setIsSubmitting(false);
     };
 
-    const handleDeleteOrder = (order) => {
-        if (role === 'secretary') { setRequestModal({ isOpen: true, order }); return; }
-        setConfirmConfig({
-            isOpen: true, title: "Delete Order?", message: `Delete Ticket ${order.ticketId}? Cannot be undone.`, confirmText: "Delete Forever", confirmColor: "bg-red-600",
-            action: async () => {
-                await deleteDoc(doc(db, "Orders", order.id));
-                setToast({ message: "Deleted", type: "success" });
-                setConfirmConfig({ ...confirmConfig, isOpen: false });
-            }
-        });
-    };
-
-    const handleSubmitRequest = async (e) => {
-        e.preventDefault();
-        setIsSubmitting(true);
-        await addDoc(collection(db, "DeletionRequests"), { orderId: requestModal.order.id, ticketId: requestModal.order.ticketId, customer: requestModal.order.customer?.name, reason: deleteReason, requestedBy: user?.name || "Secretary", requestedAt: serverTimestamp(), status: 'pending' });
-        setToast({ message: "Request Sent", type: "success" });
-        setRequestModal({ isOpen: false, order: null }); setDeleteReason(''); setIsSubmitting(false);
-    };
-
+    
     const toggleReturnItem = (iIdx, sIdx) => {
         const key = sIdx !== undefined ? `${iIdx}-${sIdx}` : `${iIdx}-product`;
         setSelectedReturnItems(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
@@ -614,7 +595,6 @@ const OrdersManagement = () => {
             <div className="flex flex-wrap gap-4 mb-8">
                 <QuickStat label="Orders Found" value={stats.total} icon={Layers} color="bg-blue-50 text-blue-600"/>
                 <QuickStat label="Pending Jobs" value={stats.pending} icon={Clock} color="bg-orange-50 text-orange-600"/>
-                {!isManager && <QuickStat label="View Revenue" value={formatCurrency(stats.revenue)} icon={DollarSign} color="bg-green-50 text-green-600"/>}
             </div>
 
             {/* FILTERS & TABLE */}
