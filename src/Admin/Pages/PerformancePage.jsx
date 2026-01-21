@@ -178,24 +178,39 @@ const PerformanceReports = () => {
         return { netRevenue, refunds, debt, totalExpenses, netProfit, repairRev, storeRev, chartData };
     }, [filteredOrders, filteredExpenses]);
 
-    // 4. ACTIONS
+    // 4. ACTIONS (🔥 FIXED ERROR HANDLING)
     const handleAddExpense = async (e) => {
         e.preventDefault();
-        if (!newExpense.desc || !newExpense.amount) return;
+        
+        // Validate Input
+        const amount = Number(newExpense.amount);
+        if (!newExpense.desc || !amount || amount <= 0) {
+            alert("Please enter a valid description and a positive amount.");
+            return;
+        }
+
         try {
             await addDoc(collection(db, "Expenses"), {
                 description: newExpense.desc,
-                amount: Number(newExpense.amount),
+                amount: amount,
                 date: serverTimestamp()
             });
-            setShowExpenseModal(false); setNewExpense({ desc: '', amount: '' });
-        } catch (e) { alert("Error adding expense."); }
+            setShowExpenseModal(false); 
+            setNewExpense({ desc: '', amount: '' });
+        } catch (error) { 
+            console.error("Error adding expense:", error); 
+            alert(`Failed to add expense: ${error.message}. Check your internet or permissions.`);
+        }
     };
 
     const handleDeleteExpense = async (id) => {
         if (window.confirm("Delete this expense?")) {
-            try { await deleteDoc(doc(db, "Expenses", id)); }
-            catch (e) { alert("Error deleting expense."); }
+            try { 
+                await deleteDoc(doc(db, "Expenses", id)); 
+            } catch (e) { 
+                console.error("Error deleting expense:", e);
+                alert("Error deleting expense. You may not have permission."); 
+            }
         }
     };
 
