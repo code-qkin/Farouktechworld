@@ -11,7 +11,7 @@ import * as XLSX from 'xlsx';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(amount);
 
-// 🔥 DATE HELPER: Uses System Local Time
+// DATE HELPER: Uses System Local Time
 const parseDate = (dateInput) => {
     if (!dateInput) return new Date();
     if (dateInput.toDate) return dateInput.toDate(); 
@@ -19,9 +19,8 @@ const parseDate = (dateInput) => {
     return new Date(dateInput); 
 };
 
-// 🔥 HIDEABLE STAT CARD COMPONENT
+// HIDEABLE STAT CARD COMPONENT
 const RegisterStatCard = ({ title, value, icon: Icon, color, isHideable, subtext }) => {
-    // Initialize hidden state based on isHideable prop
     const [hidden, setHidden] = useState(isHideable);
 
     const colors = {
@@ -54,13 +53,33 @@ const RegisterStatCard = ({ title, value, icon: Icon, color, isHideable, subtext
     );
 };
 
+// 🔥 STATE HELPER
+const getSavedState = (key, fallback) => {
+    try {
+        const saved = sessionStorage.getItem('pay_reg_state');
+        if (!saved) return fallback;
+        const parsed = JSON.parse(saved);
+        return parsed[key] !== undefined ? parsed[key] : fallback;
+    } catch { return fallback; }
+};
+
 const PaymentRegister = () => {
     const navigate = useNavigate();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [dateFilter, setDateFilter] = useState('month'); // today, week, month, all
-    const [methodFilter, setMethodFilter] = useState('All');
+    
+    // 🔥 PERSISTENT STATE
+    const [searchTerm, setSearchTerm] = useState(() => getSavedState('searchTerm', ''));
+    const [dateFilter, setDateFilter] = useState(() => getSavedState('dateFilter', 'month'));
+    const [customStart, setCustomStart] = useState(() => getSavedState('customStart', ''));
+    const [customEnd, setCustomEnd] = useState(() => getSavedState('customEnd', ''));
+    const [methodFilter, setMethodFilter] = useState(() => getSavedState('methodFilter', 'All'));
+
+    // 🔥 SAVE STATE ON CHANGE
+    useEffect(() => {
+        const stateToSave = { searchTerm, dateFilter, customStart, customEnd, methodFilter };
+        sessionStorage.setItem('pay_reg_state', JSON.stringify(stateToSave));
+    }, [searchTerm, dateFilter, customStart, customEnd, methodFilter]);
 
     // 1. FETCH ORDERS
     useEffect(() => {
@@ -140,10 +159,16 @@ const PaymentRegister = () => {
             if (dateFilter === 'today') matchesDate = p.date >= startOfDay && p.date < endOfDay; 
             else if (dateFilter === 'week') matchesDate = p.date >= startOfWeek;
             else if (dateFilter === 'month') matchesDate = p.date >= startOfMonth;
+            else if (dateFilter === 'custom') {
+                const start = customStart ? new Date(customStart) : new Date('1970-01-01');
+                const end = customEnd ? new Date(customEnd) : new Date();
+                end.setHours(23, 59, 59, 999); // Ensure end date covers the full day
+                matchesDate = p.date >= start && p.date <= end;
+            }
 
             return matchesSearch && matchesMethod && matchesDate;
         });
-    }, [allPayments, searchTerm, dateFilter, methodFilter]);
+    }, [allPayments, searchTerm, dateFilter, methodFilter, customStart, customEnd]);
 
     // 4. CALCULATE STATS
     const stats = useMemo(() => {
@@ -190,7 +215,7 @@ const PaymentRegister = () => {
                 </div>
             </div>
 
-            {/* 🔥 UPDATED STATS CARDS - ALL HIDDEN BY DEFAULT 🔥 */}
+            {/* STATS CARDS */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 <RegisterStatCard 
                     title="Total Revenue" 
@@ -233,7 +258,7 @@ const PaymentRegister = () => {
                         onChange={e => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center flex-wrap">
                     <select 
                         className="px-4 py-2.5 bg-gray-50 rounded-lg text-sm font-bold text-slate-600 outline-none cursor-pointer border border-gray-200"
                         value={dateFilter}
@@ -242,8 +267,29 @@ const PaymentRegister = () => {
                         <option value="today">Today</option>
                         <option value="week">This Week</option>
                         <option value="month">This Month</option>
+                        <option value="custom">Custom Range</option>
                         <option value="all">All Time</option>
                     </select>
+
+                    {/* 🔥 CUSTOM DATE INPUTS */}
+                    {dateFilter === 'custom' && (
+                        <div className="flex items-center gap-2 bg-gray-50 p-1 rounded-lg border border-gray-200 animate-in fade-in">
+                            <input 
+                                type="date" 
+                                className="bg-transparent border-none text-xs font-bold text-slate-600 outline-none focus:ring-0"
+                                value={customStart}
+                                onChange={e => setCustomStart(e.target.value)}
+                            />
+                            <span className="text-slate-400">-</span>
+                            <input 
+                                type="date" 
+                                className="bg-transparent border-none text-xs font-bold text-slate-600 outline-none focus:ring-0"
+                                value={customEnd}
+                                onChange={e => setCustomEnd(e.target.value)}
+                            />
+                        </div>
+                    )}
+
                     <select 
                         className="px-4 py-2.5 bg-gray-50 rounded-lg text-sm font-bold text-slate-600 outline-none cursor-pointer border border-gray-200"
                         value={methodFilter}

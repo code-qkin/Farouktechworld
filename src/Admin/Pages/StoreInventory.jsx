@@ -1,18 +1,18 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     Package, Plus, Search, Edit2, Trash2, Smartphone, 
     ArrowLeft, ArrowUpCircle, Save, X, 
     AlertTriangle, ClipboardEdit, Loader2,
     Download, Filter, ChevronLeft, ChevronRight, History, Layers, Palette, List, Wrench,
-    Eye, EyeOff, Tablet, Watch, ChevronDown
+    Eye, EyeOff, Tablet, Watch, ChevronDown, Calendar, Check
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { useAuth } from '../AdminContext';
-import { db } from '../../firebaseConfig'; 
+import { useAuth } from '../AdminContext.jsx';
+import { db } from '../../firebaseConfig.js'; 
 import { 
     collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, increment, serverTimestamp, writeBatch 
 } from 'firebase/firestore';
-import { Toast, ConfirmModal } from '../Components/Feedback';
+import { Toast, ConfirmModal } from '../Components/Feedback.jsx';
 import * as XLSX from 'xlsx';
 
 const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
@@ -26,6 +26,9 @@ const getDeviceType = (item) => {
     if (text.includes('watch') || text.includes('series') || text.includes('ultra')) return 'Watch';
     return 'iPhone';
 };
+
+// --- HELPER: Flexible String Matching (Removes spaces for comparison) ---
+const normalizeStr = (str) => str ? str.toLowerCase().replace(/\s+/g, '') : '';
 
 const MODEL_DB = {
     iPhone: [
@@ -98,15 +101,91 @@ const StockHealth = ({ stock }) => {
     );
 };
 
+// CUSTOM SEARCHABLE DROPDOWN COMPONENT
+const SearchableDropdown = ({ options, value, onChange, placeholder = "Select..." }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [search, setSearch] = useState('');
+    const dropdownRef = useRef(null);
+
+    const filteredOptions = options.filter(opt => 
+        opt.toLowerCase().includes(search.toLowerCase())
+    );
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    return (
+        <div className="relative w-full md:w-48" ref={dropdownRef}>
+            <button 
+                onClick={() => setIsOpen(!isOpen)} 
+                className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 rounded-lg text-sm font-bold border border-transparent focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition text-left"
+            >
+                <span className={value === 'All' ? 'text-gray-500' : 'text-slate-800 truncate'}>
+                    {value === 'All' ? placeholder : value}
+                </span>
+                <ChevronDown size={16} className="text-gray-400"/>
+            </button>
+
+            {isOpen && (
+                <div className="absolute top-full left-0 w-full mt-1 bg-white border border-gray-100 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                    <div className="p-2 border-b border-gray-50">
+                        <input 
+                            autoFocus
+                            className="w-full p-2 bg-gray-50 rounded-lg text-xs font-bold outline-none"
+                            placeholder="Search category..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+                    </div>
+                    <div className="max-h-60 overflow-y-auto custom-scrollbar">
+                        <button 
+                            onClick={() => { onChange('All'); setIsOpen(false); }}
+                            className={`w-full text-left px-4 py-2 text-xs font-bold hover:bg-purple-50 transition ${value === 'All' ? 'text-purple-600 bg-purple-50' : 'text-slate-600'}`}
+                        >
+                            All Categories
+                        </button>
+                        {filteredOptions.map(opt => (
+                            <button 
+                                key={opt}
+                                onClick={() => { onChange(opt); setIsOpen(false); }}
+                                className={`w-full text-left px-4 py-2 text-xs font-bold hover:bg-purple-50 transition ${value === opt ? 'text-purple-600 bg-purple-50' : 'text-slate-600'}`}
+                            >
+                                {opt}
+                            </button>
+                        ))}
+                        {filteredOptions.length === 0 && <div className="p-4 text-center text-xs text-gray-400">No matches</div>}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// 🔥 STATE PERSISTENCE HELPER
+const getSavedState = (key, fallback) => {
+    try {
+        const saved = sessionStorage.getItem('store_inv_state');
+        if (!saved) return fallback;
+        const parsed = JSON.parse(saved);
+        return parsed[key] !== undefined ? parsed[key] : fallback;
+    } catch { return fallback; }
+};
+
 const StoreInventory = () => {
     const { role } = useAuth(); 
     const navigate = useNavigate();
     
-    // 🔥 PERMISSION: Manager CANNOT see prices
+    // PERMISSION: Manager CANNOT see prices
     const canSeePrice = role !== 'manager';
 
     // UI State
-    const [activeTab, setActiveTab] = useState('products'); 
     const [isCreating, setIsCreating] = useState(false); 
     const [showValue, setShowValue] = useState(false); 
 
@@ -116,11 +195,41 @@ const StoreInventory = () => {
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
     
-    // Filters
-    const [searchTerm, setSearchTerm] = useState('');
-    const [filterCategory, setFilterCategory] = useState('All');
-    const [filterStock, setFilterStock] = useState('All'); 
-    const [filterDeviceType, setFilterDeviceType] = useState('All'); 
+    // 🔥 INITIALIZE STATE FROM SESSION STORAGE
+    const [activeTab, setActiveTab] = useState(() => getSavedState('activeTab', 'products'));
+    const [searchTerm, setSearchTerm] = useState(() => getSavedState('searchTerm', ''));
+    const [filterCategory, setFilterCategory] = useState(() => getSavedState('filterCategory', 'All'));
+    const [filterStock, setFilterStock] = useState(() => getSavedState('filterStock', 'All'));
+    const [filterDeviceType, setFilterDeviceType] = useState(() => getSavedState('filterDeviceType', 'All'));
+    
+    // History Filters
+    const [historySearch, setHistorySearch] = useState(() => getSavedState('historySearch', ''));
+    const [historyTypeFilter, setHistoryTypeFilter] = useState(() => getSavedState('historyTypeFilter', 'All'));
+    const [historyTimeFilter, setHistoryTimeFilter] = useState(() => getSavedState('historyTimeFilter', 'all'));
+    const [historyCategoryFilter, setHistoryCategoryFilter] = useState(() => getSavedState('historyCategoryFilter', 'All'));
+    const [historyCustomStart, setHistoryCustomStart] = useState(() => getSavedState('historyCustomStart', ''));
+    const [historyCustomEnd, setHistoryCustomEnd] = useState(() => getSavedState('historyCustomEnd', ''));
+
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(() => getSavedState('currentPage', 1));
+    const [historyPage, setHistoryPage] = useState(() => getSavedState('historyPage', 1));
+
+    const itemsPerPage = 50;
+    const historyPerPage = 20;
+
+    // 🔥 SAVE STATE ON CHANGE
+    useEffect(() => {
+        const stateToSave = {
+            activeTab, searchTerm, filterCategory, filterStock, filterDeviceType,
+            historySearch, historyTypeFilter, historyTimeFilter, historyCategoryFilter, historyCustomStart, historyCustomEnd,
+            currentPage, historyPage
+        };
+        sessionStorage.setItem('store_inv_state', JSON.stringify(stateToSave));
+    }, [
+        activeTab, searchTerm, filterCategory, filterStock, filterDeviceType,
+        historySearch, historyTypeFilter, historyTimeFilter, historyCategoryFilter, historyCustomStart, historyCustomEnd,
+        currentPage, historyPage
+    ]);
 
     // Bulk Selection State
     const [selectedIds, setSelectedIds] = useState([]);
@@ -131,12 +240,6 @@ const StoreInventory = () => {
     // Custom Color per Model State
     const [isCustomColorMode, setIsCustomColorMode] = useState(false);
     const [modelSpecificColors, setModelSpecificColors] = useState({});
-
-    // Pagination
-    const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 50;
-    const [historyPage, setHistoryPage] = useState(1);
-    const historyPerPage = 20;
 
     // Modals
     const [restockItem, setRestockItem] = useState(null); 
@@ -198,13 +301,13 @@ const StoreInventory = () => {
         }
     }, [activeTab]);
 
-    // 3. FILTERING
+    // 3. FILTERING PRODUCTS
     const filteredProducts = useMemo(() => {
         return products.filter(product => {
-            const term = searchTerm.toLowerCase();
-            const pName = (product.name || '').toLowerCase();
-            const pModel = (product.model || '').toLowerCase();
-            const pColor = (product.color || '').toLowerCase();
+            const term = normalizeStr(searchTerm);
+            const pName = normalizeStr(product.name);
+            const pModel = normalizeStr(product.model);
+            const pColor = normalizeStr(product.color);
             const type = getDeviceType(product);
             
             const matchesSearch = pName.includes(term) || pModel.includes(term) || pColor.includes(term);
@@ -216,7 +319,61 @@ const StoreInventory = () => {
         });
     }, [products, searchTerm, filterCategory, filterStock, filterDeviceType]);
 
+    // 🔥 SMART HISTORY FILTERING (Search + Type + Category + Time)
+    const filteredHistory = useMemo(() => {
+        let data = salesHistory;
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endOfDay = new Date(startOfDay); endOfDay.setDate(startOfDay.getDate() + 1);
+        
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay()); 
+        startOfWeek.setHours(0,0,0,0);
+
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        // 1. Search Filter (Customer, Ticket, or Item Name)
+        if (historySearch) {
+            const term = normalizeStr(historySearch);
+            data = data.filter(s => 
+                normalizeStr(s.customer).includes(term) || 
+                normalizeStr(s.ticketId).includes(term) ||
+                s.items.some(i => normalizeStr(i.name).includes(term))
+            );
+        }
+
+        // 2. Type Filter
+        if (historyTypeFilter !== 'All') {
+            data = data.filter(s => s.type === historyTypeFilter);
+        }
+
+        // 3. Category Filter
+        if (historyCategoryFilter !== 'All') {
+            data = data.filter(s => s.items.some(i => {
+                const product = products.find(p => p.id === i.productId || p.id === i.partId || p.name === i.name);
+                return product && product.category === historyCategoryFilter;
+            }));
+        }
+
+        // 4. Time Filter
+        if (historyTimeFilter === 'today') {
+            data = data.filter(s => s.date >= startOfDay && s.date < endOfDay);
+        } else if (historyTimeFilter === 'week') {
+            data = data.filter(s => s.date >= startOfWeek);
+        } else if (historyTimeFilter === 'month') {
+            data = data.filter(s => s.date >= startOfMonth);
+        } else if (historyTimeFilter === 'custom') {
+            const start = historyCustomStart ? new Date(historyCustomStart) : new Date('1970-01-01');
+            const end = historyCustomEnd ? new Date(historyCustomEnd) : new Date();
+            end.setHours(23, 59, 59, 999);
+            data = data.filter(s => s.date >= start && s.date <= end);
+        }
+
+        return data;
+    }, [salesHistory, historySearch, historyTypeFilter, historyCategoryFilter, historyTimeFilter, historyCustomStart, historyCustomEnd, products]);
+
     useEffect(() => { setCurrentPage(1); }, [searchTerm, filterCategory, filterStock, filterDeviceType]);
+    useEffect(() => { setHistoryPage(1); }, [historySearch, historyTypeFilter, historyTimeFilter, historyCustomStart, historyCustomEnd]);
 
     // 4. METRICS
     const dynamicCategories = useMemo(() => [...new Set(products.map(p => p.category).filter(Boolean))].sort(), [products]);
@@ -236,8 +393,8 @@ const StoreInventory = () => {
     const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
     
     // History Pagination
-    const currentHistory = salesHistory.slice((historyPage - 1) * historyPerPage, historyPage * historyPerPage);
-    const totalHistoryPages = Math.ceil(salesHistory.length / historyPerPage);
+    const currentHistory = filteredHistory.slice((historyPage - 1) * historyPerPage, historyPage * historyPerPage);
+    const totalHistoryPages = Math.ceil(filteredHistory.length / historyPerPage);
 
     // Helpers for Bulk Models
     const activeModelsInRange = useMemo(() => {
@@ -488,9 +645,17 @@ const StoreInventory = () => {
                 <div className="space-y-6 animate-in fade-in">
                     <div className="bg-white p-3 rounded-xl shadow-sm border flex flex-col md:flex-row gap-3">
                         <div className="relative flex-1"><Search className="absolute left-3 top-3 text-gray-400" size={18}/><input className="w-full pl-10 pr-4 py-2.5 bg-gray-50 rounded-lg outline-none text-sm font-medium focus:ring-2 focus:ring-purple-500" placeholder="Search loaded items..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div>
-                        <div className="grid grid-cols-2 md:flex gap-2">
-                            <select className="px-3 py-2.5 bg-gray-50 rounded-lg text-sm font-bold outline-none" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}><option value="All">All Cats</option>{dynamicCategories.map(c => <option key={c} value={c}>{c}</option>)}</select>
-                            <select className="px-3 py-2.5 bg-gray-50 rounded-lg text-sm font-bold outline-none" value={filterStock} onChange={e => setFilterStock(e.target.value)}><option value="All">All Stock</option><option value="Low">Low</option><option value="Out">Out</option></select>
+                        <div className="grid grid-cols-2 md:flex gap-2 items-center">
+                            
+                            {/* 🔥 REPLACED WITH SEARCHABLE DROPDOWN */}
+                            <SearchableDropdown 
+                                options={dynamicCategories} 
+                                value={filterCategory} 
+                                onChange={setFilterCategory} 
+                                placeholder="All Categories" 
+                            />
+
+                            <select className="px-3 py-2.5 bg-gray-50 rounded-lg text-sm font-bold outline-none border border-transparent focus:border-purple-500" value={filterStock} onChange={e => setFilterStock(e.target.value)}><option value="All">All Stock</option><option value="Low">Low</option><option value="Out">Out</option></select>
                             <button onClick={() => setIsCreating(true)} className="col-span-2 md:col-span-1 bg-purple-900 text-white px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-purple-800 transition flex items-center justify-center gap-2 shadow-sm"><Plus size={18}/> Add</button>
                         </div>
                          {/* DEVICE FILTER DROPDOWN */}
@@ -589,9 +754,66 @@ const StoreInventory = () => {
             {/* --- TAB: HISTORY --- */}
             {activeTab === 'history' && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in">
-                    <div className="p-4 border-b border-gray-100 flex justify-between items-center">
-                        <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><History className="text-purple-600"/> Sales & Usage History</h3>
-                        <div className="text-xs text-slate-500 font-bold bg-slate-100 px-2 py-1 rounded-full">{salesHistory.length} Txns</div>
+                    
+                    {/* 🔥 HISTORY HEADER + FILTERS */}
+                    <div className="p-4 border-b border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div className="flex items-center gap-2">
+                            <History className="text-purple-600" size={20}/>
+                            <h3 className="font-bold text-slate-800 text-lg">Sales & Usage History</h3>
+                            <span className="text-xs font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded-full">{filteredHistory.length}</span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                            {/* 🔥 SEARCH BAR */}
+                            <div className="relative flex-1 md:flex-none">
+                                <Search className="absolute left-2.5 top-2.5 text-gray-400" size={14}/>
+                                <input 
+                                    className="w-full md:w-48 pl-8 pr-3 py-2 bg-gray-50 rounded-lg text-xs font-bold focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none transition" 
+                                    placeholder="Search customer, item..." 
+                                    value={historySearch} 
+                                    onChange={e => setHistorySearch(e.target.value)}
+                                />
+                            </div>
+
+                            {/* 🔥 TYPE FILTER */}
+                            <select 
+                                className="px-3 py-2 bg-gray-50 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer border border-transparent hover:bg-gray-100"
+                                value={historyTypeFilter}
+                                onChange={e => setHistoryTypeFilter(e.target.value)}
+                            >
+                                <option value="All">All Types</option>
+                                <option value="Store Sale">Store Sales</option>
+                                <option value="Internal Use">Internal Usage</option>
+                            </select>
+
+                            {/* 🔥 CATEGORY FILTER (NEW) */}
+                            <SearchableDropdown 
+                                options={dynamicCategories} 
+                                value={historyCategoryFilter} 
+                                onChange={setHistoryCategoryFilter} 
+                                placeholder="All Categories" 
+                            />
+
+                            <div className="bg-gray-100 p-1 rounded-lg flex gap-1">
+                                {['all', 'today', 'week', 'month', 'custom'].map(t => (
+                                    <button 
+                                        key={t}
+                                        onClick={() => setHistoryTimeFilter(t)}
+                                        className={`px-3 py-1.5 text-xs font-bold rounded-md capitalize transition ${historyTimeFilter === t ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                    >
+                                        {t}
+                                    </button>
+                                ))}
+                            </div>
+                            
+                            {historyTimeFilter === 'custom' && (
+                                <div className="flex items-center gap-2 bg-gray-50 p-1 rounded-lg border border-gray-200 animate-in fade-in">
+                                    <input type="date" className="bg-transparent text-xs font-bold text-slate-600 outline-none" value={historyCustomStart} onChange={e => setHistoryCustomStart(e.target.value)} />
+                                    <span className="text-slate-400">-</span>
+                                    <input type="date" className="bg-transparent text-xs font-bold text-slate-600 outline-none" value={historyCustomEnd} onChange={e => setHistoryCustomEnd(e.target.value)} />
+                                </div>
+                            )}
+                        </div>
                     </div>
                     
                     <div className="hidden md:block overflow-x-auto">
@@ -608,62 +830,94 @@ const StoreInventory = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {currentHistory.map(sale => (
-                                    <tr key={sale.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/admin/orders/${sale.ticketId}`)}>
-                                        <td className="px-6 py-4 text-gray-500">{sale.date.toLocaleDateString()}</td>
-                                        <td className="px-6 py-4 font-mono font-bold text-purple-700">{sale.ticketId}</td>
-                                        <td className="px-6 py-4 font-medium">{sale.customer}</td>
-                                        <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs font-bold ${sale.type === 'Internal Use' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>{sale.type}</span></td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex flex-col gap-1">
-                                                {sale.items.map((item, idx) => (
-                                                    <div key={idx} className="text-xs text-slate-600 flex items-center gap-1">
-                                                        {item.type === 'part_usage' ? <Wrench size={12} className="text-blue-500"/> : <Package size={12} className="text-green-500"/>}
-                                                        <span className="font-medium">{item.name.replace('Used: ', '')}</span> 
-                                                        <span className="font-bold text-slate-800">x{item.qty || 1}</span>
-                                                        
-                                                        {item.type === 'part_usage' && item.worker && (
-                                                            <span className="ml-1 text-[10px] text-gray-400 bg-gray-100 px-1.5 rounded border border-gray-200">
-                                                                by {item.worker.split(' ')[0]}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </td>
-                                        {/* 🔥 HIDE HISTORY VALUE CELL */}
-                                        {canSeePrice && <td className="px-6 py-4 text-right font-bold text-slate-900">{formatCurrency(sale.total)}</td>}
-                                    </tr>
-                                ))}
+                                {currentHistory.map(sale => {
+                                    // 🔥 FILTER ITEMS FOR DISPLAY
+                                    const visibleItems = sale.items.filter(item => {
+                                        const term = normalizeStr(historySearch);
+                                        const matchesSearch = !term || normalizeStr(item.name).includes(term) || normalizeStr(sale.ticketId).includes(term) || normalizeStr(sale.customer).includes(term);
+
+                                        const product = products.find(p => p.id === item.productId || p.id === item.partId || p.name === item.name);
+                                        const itemCategory = product ? product.category : 'Uncategorized';
+                                        const matchesCategory = historyCategoryFilter === 'All' || itemCategory === historyCategoryFilter;
+
+                                        return matchesSearch && matchesCategory;
+                                    });
+
+                                    if (visibleItems.length === 0) return null;
+
+                                    return (
+                                        <tr key={sale.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/admin/orders/${sale.ticketId}`)}>
+                                            <td className="px-6 py-4 text-gray-500">{sale.date.toLocaleDateString()}</td>
+                                            <td className="px-6 py-4 font-mono font-bold text-purple-700">{sale.ticketId}</td>
+                                            <td className="px-6 py-4 font-medium">{sale.customer}</td>
+                                            <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs font-bold ${sale.type === 'Internal Use' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>{sale.type}</span></td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-col gap-1">
+                                                    {visibleItems.map((item, idx) => (
+                                                        <div key={idx} className="text-xs text-slate-600 flex items-center gap-1">
+                                                            {item.type === 'part_usage' ? <Wrench size={12} className="text-blue-500"/> : <Package size={12} className="text-green-500"/>}
+                                                            <span className="font-medium">{item.name.replace('Used: ', '')}</span> 
+                                                            <span className="font-bold text-slate-800">x{item.qty || 1}</span>
+                                                            
+                                                            {item.type === 'part_usage' && item.worker && (
+                                                                <span className="ml-1 text-[10px] text-gray-400 bg-gray-100 px-1.5 rounded border border-gray-200">
+                                                                    by {item.worker.split(' ')[0]}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </td>
+                                            {/* 🔥 HIDE HISTORY VALUE CELL */}
+                                            {canSeePrice && <td className="px-6 py-4 text-right font-bold text-slate-900">{formatCurrency(sale.total)}</td>}
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
 
                     {/* Mobile Cards (With Item Details) */}
                     <div className="md:hidden divide-y divide-gray-100">
-                        {currentHistory.map(sale => (
-                            <div key={sale.id} className="p-4 flex flex-col gap-2 cursor-pointer active:bg-gray-50" onClick={() => navigate(`/admin/orders/${sale.ticketId}`)}>
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <span className="font-mono text-xs font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded">{sale.ticketId}</span>
-                                        <p className="text-sm font-bold text-slate-800 mt-1">{sale.customer}</p>
-                                    </div>
-                                    <div className="text-right">
-                                        {/* 🔥 HIDE MOBILE HISTORY VALUE */}
-                                        {canSeePrice && <p className="font-bold text-slate-900">{formatCurrency(sale.total)}</p>}
-                                        <span className="text-[10px] text-gray-400">{sale.date.toLocaleDateString()}</span>
-                                    </div>
-                                </div>
-                                <div className="mt-2 space-y-1">
-                                    {sale.items.map((item, idx) => (
-                                        <div key={idx} className="text-xs text-slate-500 flex justify-between">
-                                            <span>{item.name} (x{item.qty||1})</span>
-                                            {item.worker && <span className="text-[9px] bg-slate-100 px-1 rounded">{item.worker.split(' ')[0]}</span>}
+                        {currentHistory.map(sale => {
+                             // 🔥 FILTER ITEMS FOR DISPLAY (MOBILE)
+                             const visibleItems = sale.items.filter(item => {
+                                const term = normalizeStr(historySearch);
+                                const matchesSearch = !term || normalizeStr(item.name).includes(term) || normalizeStr(sale.ticketId).includes(term) || normalizeStr(sale.customer).includes(term);
+
+                                const product = products.find(p => p.id === item.productId || p.id === item.partId || p.name === item.name);
+                                const itemCategory = product ? product.category : 'Uncategorized';
+                                const matchesCategory = historyCategoryFilter === 'All' || itemCategory === historyCategoryFilter;
+
+                                return matchesSearch && matchesCategory;
+                            });
+
+                            if (visibleItems.length === 0) return null;
+
+                            return (
+                                <div key={sale.id} className="p-4 flex flex-col gap-2 cursor-pointer active:bg-gray-50" onClick={() => navigate(`/admin/orders/${sale.ticketId}`)}>
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <span className="font-mono text-xs font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded">{sale.ticketId}</span>
+                                            <p className="text-sm font-bold text-slate-800 mt-1">{sale.customer}</p>
                                         </div>
-                                    ))}
+                                        <div className="text-right">
+                                            {/* 🔥 HIDE MOBILE HISTORY VALUE */}
+                                            {canSeePrice && <p className="font-bold text-slate-900">{formatCurrency(sale.total)}</p>}
+                                            <span className="text-[10px] text-gray-400">{sale.date.toLocaleDateString()}</span>
+                                        </div>
+                                    </div>
+                                    <div className="mt-2 space-y-1">
+                                        {visibleItems.map((item, idx) => (
+                                            <div key={idx} className="text-xs text-slate-500 flex justify-between">
+                                                <span>{item.name} (x{item.qty||1})</span>
+                                                {item.worker && <span className="text-[9px] bg-slate-100 px-1 rounded">{item.worker.split(' ')[0]}</span>}
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
 
                     {/* Pagination */}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     Wrench, CheckCircle, Clock, BoxSelect, LogOut, 
-    Search, X, Box, Briefcase, Layers, Undo2, Lock, Package, AlertTriangle, Bell, ShieldOff, Filter, Palette
+    Search, X, Box, Briefcase, Layers, Undo2, Lock, Package, AlertTriangle, Bell, ShieldOff, Filter, Palette, Loader2
 } from 'lucide-react';
 import { useAuth } from '../../AdminContext.jsx';
 import { db, auth } from '../../../firebaseConfig.js';
@@ -61,6 +61,7 @@ const WorkerDashboard = ({ user: propUser }) => {
   
   // Modals
   const [showPartModal, setShowPartModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false); // 🔥 Added loading state for buttons
   
   // Selection State
   const [selectedTask, setSelectedTask] = useState(null);
@@ -245,8 +246,12 @@ const WorkerDashboard = ({ user: propUser }) => {
   };
 
   const handleUsePart = async () => { 
+    if (isSubmitting) return; // 🔥 Prevent duplicate clicks
     if (!selectedPart || selectedDeviceIndex === null) return;
+    
+    setIsSubmitting(true);
     const part = inventory.find(i => i.id === selectedPart);
+    
     try {
         await runTransaction(db, async (t) => {
             const partRef = doc(db, "Inventory", selectedPart);
@@ -267,13 +272,21 @@ const WorkerDashboard = ({ user: propUser }) => {
             };
             t.update(doc(db, "Orders", selectedTask.id), { items: arrayUnion(usageEntry) });
         });
+        
         setShowPartModal(false); setSelectedPart(''); setPartSearch(''); setPartCategoryFilter('All');
         setToast({ message: `Logged usage: ${part.name}`, type: 'success' });
-    } catch (e) { setToast({ message: `Error: ${e}`, type: 'error' }); }
+    } catch (e) { 
+        setToast({ message: `Error: ${e}`, type: 'error' }); 
+    } finally {
+        setIsSubmitting(false); // 🔥 Re-enable
+    }
   };
 
   const handleLogNoPart = async () => {
+    if (isSubmitting) return; // 🔥 Prevent duplicate clicks
     if (!selectedTask || selectedDeviceIndex === null) return;
+
+    setIsSubmitting(true);
     try {
          const myIdentity = user.name || user.email || "Technician";
          const usageEntry = {
@@ -288,7 +301,11 @@ const WorkerDashboard = ({ user: propUser }) => {
          await updateDoc(doc(db, "Orders", selectedTask.id), { items: arrayUnion(usageEntry) });
          setShowPartModal(false);
          setToast({ message: "Logged: No Part Needed", type: 'success' });
-    } catch (e) { setToast({ message: `Error: ${e}`, type: 'error' }); }
+    } catch (e) { 
+        setToast({ message: `Error: ${e}`, type: 'error' }); 
+    } finally {
+        setIsSubmitting(false); // 🔥 Re-enable
+    }
   };
 
   const handleUndoPart = (orderId, partItem) => {
@@ -532,8 +549,13 @@ const WorkerDashboard = ({ user: propUser }) => {
                   </div>
 
                   <div className="flex gap-2 shrink-0">
-                        <button onClick={handleLogNoPart} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold hover:bg-gray-200 transition flex items-center justify-center gap-1 text-sm"><ShieldOff size={16}/> No Part</button>
-                        <button onClick={handleUsePart} disabled={!selectedPart} className="flex-1 bg-purple-600 text-white py-3 rounded-xl font-bold hover:bg-purple-700 shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed text-sm">Confirm Usage</button>
+                        {/* 🔥 Disable buttons while submitting */}
+                        <button onClick={handleLogNoPart} disabled={isSubmitting} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold hover:bg-gray-200 transition flex items-center justify-center gap-1 text-sm disabled:opacity-50">
+                            {isSubmitting ? <Loader2 size={16} className="animate-spin"/> : <><ShieldOff size={16}/> No Part</>}
+                        </button>
+                        <button onClick={handleUsePart} disabled={!selectedPart || isSubmitting} className="flex-1 bg-purple-600 text-white py-3 rounded-xl font-bold hover:bg-purple-700 shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center">
+                            {isSubmitting ? <Loader2 size={16} className="animate-spin"/> : "Confirm Usage"}
+                        </button>
                   </div>
               </div>
           </div>

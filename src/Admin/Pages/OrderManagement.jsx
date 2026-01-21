@@ -67,6 +67,16 @@ const QuickStat = ({ label, value, icon: Icon, color }) => (
     </div>
 );
 
+// 🔥 STATE PERSISTENCE HELPER
+const getSavedState = (key, fallback) => {
+    try {
+        const saved = sessionStorage.getItem('order_man_state');
+        if (!saved) return fallback;
+        const parsed = JSON.parse(saved);
+        return parsed[key] !== undefined ? parsed[key] : fallback;
+    } catch { return fallback; }
+};
+
 const OrdersManagement = () => {
     const { role, user } = useAuth(); 
     const navigate = useNavigate();
@@ -79,26 +89,22 @@ const OrdersManagement = () => {
     const [savedCustomers, setSavedCustomers] = useState([]); 
     const [loading, setLoading] = useState(true);
     
-    // Pagination & Search
-    const [searchTerm, setSearchTerm] = useState('');
-    
-    // Filters
-    const [timeFilter, setTimeFilter] = useState('day'); 
-    const [customStart, setCustomStart] = useState('');
-    const [customEnd, setCustomEnd] = useState('');
-    
-    const [filterStatus, setFilterStatus] = useState('All');
-    const [filterType, setFilterType] = useState('All');
-    const [filterPayment, setFilterPayment] = useState('All'); 
+    // 🔥 INITIALIZE STATE FROM SESSION STORAGE
+    const [searchTerm, setSearchTerm] = useState(() => getSavedState('searchTerm', ''));
+    const [timeFilter, setTimeFilter] = useState(() => getSavedState('timeFilter', 'day')); 
+    const [customStart, setCustomStart] = useState(() => getSavedState('customStart', ''));
+    const [customEnd, setCustomEnd] = useState(() => getSavedState('customEnd', ''));
+    const [filterStatus, setFilterStatus] = useState(() => getSavedState('filterStatus', 'All'));
+    const [filterType, setFilterType] = useState(() => getSavedState('filterType', 'All'));
+    const [filterPayment, setFilterPayment] = useState(() => getSavedState('filterPayment', 'All')); 
+    const [currentPage, setCurrentPage] = useState(() => getSavedState('currentPage', 1));
 
-    // POS State
-    const [storeSearch, setStoreSearch] = useState('');
-    const [storeCategory, setStoreCategory] = useState('All');
-    const [storePage, setStorePage] = useState(1);
+    // POS State (Persist store search/page too)
+    const [storeSearch, setStoreSearch] = useState(() => getSavedState('storeSearch', ''));
+    const [storeCategory, setStoreCategory] = useState(() => getSavedState('storeCategory', 'All'));
+    const [storePage, setStorePage] = useState(() => getSavedState('storePage', 1));
     const itemsPerStorePage = 24;
 
-    // Pagination
-    const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 15; 
     
     // UI State
@@ -130,6 +136,16 @@ const OrdersManagement = () => {
 
     // PERMISSION CHECK
     const isManager = role === 'manager';
+
+    // 🔥 SAVE STATE ON CHANGE
+    useEffect(() => {
+        const stateToSave = {
+            searchTerm, timeFilter, customStart, customEnd, 
+            filterStatus, filterType, filterPayment, currentPage,
+            storeSearch, storeCategory, storePage
+        };
+        sessionStorage.setItem('order_man_state', JSON.stringify(stateToSave));
+    }, [searchTerm, timeFilter, customStart, customEnd, filterStatus, filterType, filterPayment, currentPage, storeSearch, storeCategory, storePage]);
 
     // --- DATA LOGIC ---
     
@@ -249,12 +265,14 @@ const OrdersManagement = () => {
     }, [filteredOrders]);
 
     // Pagination
-    useEffect(() => setCurrentPage(1), [filteredOrders]);
     const currentOrders = filteredOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
     const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
 
+    useEffect(() => {
+        if (currentPage > totalPages && totalPages > 0) setCurrentPage(totalPages);
+    }, [filteredOrders.length, totalPages, currentPage]);
+
     // Pagination (Store Inventory)
-    useEffect(() => setStorePage(1), [storeSearch, storeCategory]);
     const totalStorePages = Math.ceil(filteredInventory.length / itemsPerStorePage);
 
     // --- HANDLERS ---
@@ -299,7 +317,6 @@ const OrdersManagement = () => {
 
     const addDeviceToCart = () => {
         if (!repairInput.deviceModel) return setToast({message: "Select Device Model.", type: "error"});
-        // 🔥 VALIDATION: Check if services exist before adding
         if (currentDeviceServices.length === 0) return setToast({message: "Please add at least one service.", type: "error"});
 
         setCart([...cart, { type: 'repair', id: `rep-${Date.now()}`, ...repairInput, services: currentDeviceServices, qty: 1, total: currentDeviceServices.reduce((s, c) => s + c.cost, 0) }]);
@@ -309,10 +326,45 @@ const OrdersManagement = () => {
         setToast({message: "Device added", type: "success"});
     };
 
+    // 🔥 FIXED: MERGE ITEMS IN CART
     const handleGridAddToCart = (p) => {
         if (p.stock < 1) return setToast({message: "Out of Stock!", type: "error"});
-        setCart([...cart, { type: 'product', id: `prod-${Date.now()}`, productId: p.id, name: p.name, price: p.price, qty: 1, total: p.price }]);
-        setToast({message: "Added to cart", type: "success"});
+        
+        setCart(prevCart => {
+            // Check if item exists in cart
+            const existingIndex = prevCart.findIndex(item => item.productId === p.id && item.type === 'product');
+            
+            if (existingIndex >= 0) {
+                // Check if adding 1 exceeds stock
+                if (prevCart[existingIndex].qty + 1 > p.stock) {
+                    setToast({message: "Stock limit reached!", type: "error"});
+                    return prevCart;
+                }
+
+                // MERGE: Update Quantity
+                const newCart = [...prevCart];
+                const item = newCart[existingIndex];
+                newCart[existingIndex] = {
+                    ...item,
+                    qty: item.qty + 1,
+                    total: (item.qty + 1) * item.price
+                };
+                setToast({message: `Updated to x${item.qty + 1}`, type: "success"});
+                return newCart;
+            } else {
+                // Add New Item
+                setToast({message: "Added to cart", type: "success"});
+                return [...prevCart, { 
+                    type: 'product', 
+                    id: `prod-${Date.now()}`, 
+                    productId: p.id, 
+                    name: p.name, 
+                    price: p.price, 
+                    qty: 1, 
+                    total: p.price 
+                }];
+            }
+        });
     };
     
     const updateCartQty = (itemId, change) => {
@@ -357,68 +409,84 @@ const OrdersManagement = () => {
         return `FTW-${datePart}-${timePart}${randomPart}`;
     };
 
-    // 🔥 FIXED TRANSACTION LOGIC (Read-Before-Write)
     const handleCheckout = async () => {
         if (isSubmitting || !customer.name || cart.length === 0) return setToast({message: "Details missing!", type: "error"});
         setIsSubmitting(true);
         try {
             await runTransaction(db, async (t) => {
-                
-                // --- 1. PREPARE READS ---
-                const inventoryReads = [];
-                let oldOrderSnap = null;
+                let oldOrderData = null;
+                const inventoryChanges = new Map();
 
-                // Read Inventory if New Order
-                if (!editOrderId) {
-                    for (const item of cart) {
-                        if (item.type === 'product') {
-                            const ref = doc(db, "Inventory", item.productId);
-                            inventoryReads.push({ ref, item });
+                if (editOrderId) {
+                    const oldRef = doc(db, "Orders", editOrderId);
+                    const oldSnap = await t.get(oldRef);
+                    if (!oldSnap.exists()) throw "Order not found";
+                    oldOrderData = oldSnap.data();
+
+                    if (oldOrderData.items) {
+                        oldOrderData.items.forEach(item => {
+                            if (item.type === 'product' && item.productId) {
+                                const current = inventoryChanges.get(item.productId) || 0;
+                                inventoryChanges.set(item.productId, current + (Number(item.qty) || 1));
+                            }
+                        });
+                    }
+                }
+
+                cart.forEach(item => {
+                    if (item.type === 'product' && item.productId) {
+                        const current = inventoryChanges.get(item.productId) || 0;
+                        inventoryChanges.set(item.productId, current - (Number(item.qty) || 1));
+                    }
+                });
+
+                const productIds = Array.from(inventoryChanges.keys());
+                for (const pid of productIds) {
+                    const change = inventoryChanges.get(pid);
+                    if (change < 0) {
+                        const invRef = doc(db, "Inventory", pid);
+                        const invSnap = await t.get(invRef);
+                        if (!invSnap.exists()) throw `Product ${pid} not found`;
+                        
+                        const currentStock = invSnap.data().stock || 0;
+                        if (currentStock + change < 0) {
+                            throw `Insufficient stock for ${invSnap.data().name}. Available: ${currentStock}, Need: ${Math.abs(change)}`;
                         }
                     }
                 }
 
-                // Read Order if Editing
-                if (editOrderId) {
-                    oldOrderSnap = await t.get(doc(db, "Orders", editOrderId));
+                for (const pid of productIds) {
+                    const change = inventoryChanges.get(pid);
+                    if (change !== 0) {
+                        t.update(doc(db, "Inventory", pid), { stock: increment(change) });
+                    }
                 }
 
-                // Execute Inventory Reads
-                const inventorySnaps = await Promise.all(inventoryReads.map(r => t.get(r.ref)));
-
-                // --- 2. LOGIC CHECKS (No Writes Yet) ---
-                if (!editOrderId) {
-                    inventorySnaps.forEach((snap, idx) => {
-                        const request = inventoryReads[idx].item;
-                        if (!snap.exists()) throw `Product not found: ${request.name}`;
-                        const currentStock = snap.data().stock;
-                        if (currentStock < request.qty) throw `Stock Error: ${request.name}. Only ${currentStock} left.`;
-                    });
-                }
-
-                // Calculations
-                const subtotal = cart.reduce((s, i) => s + i.total, 0);
+                const subtotal = cart.reduce((s, i) => s + (i.total || 0), 0);
                 const totalCost = Math.max(0, subtotal - (Number(discount) || 0));
+                
                 const orderData = { 
                     customer, items: cart.map(i => ({...i, collected: i.collected || false})), 
                     subtotal, discount: Number(discount), totalCost, 
                     lastUpdated: serverTimestamp() 
                 };
 
-                // --- 3. EXECUTE WRITES ---
-                
-                // Write Inventory
-                if (!editOrderId) {
-                    inventoryReads.forEach(r => {
-                        t.update(r.ref, { stock: increment(-r.item.qty) });
-                    });
-                }
-
-                // Write Order
                 if (editOrderId) {
-                    const oldData = oldOrderSnap.data();
-                    const balance = totalCost - (oldData.amountPaid || 0);
-                    t.update(doc(db, "Orders", editOrderId), { ...orderData, balance, paymentStatus: balance <= 0 ? 'Paid' : (oldData.amountPaid > 0 ? 'Part Payment' : 'Unpaid'), paid: balance <= 0 });
+                    let finalItems = orderData.items;
+                    if (oldOrderData && oldOrderData.items) {
+                        const hiddenItems = oldOrderData.items.filter(i => i.type !== 'product' && i.type !== 'repair');
+                        finalItems = [...finalItems, ...hiddenItems];
+                    }
+
+                    const oldPaid = oldOrderData.amountPaid || 0;
+                    const balance = totalCost - oldPaid;
+                    t.update(doc(db, "Orders", editOrderId), { 
+                        ...orderData, 
+                        items: finalItems,
+                        balance, 
+                        paymentStatus: balance <= 0 ? 'Paid' : (oldPaid > 0 ? 'Part Payment' : 'Unpaid'), 
+                        paid: balance <= 0 
+                    });
                 } else {
                     const ticketId = generateTicketId();
                     const newRef = doc(collection(db, "Orders"));
@@ -431,13 +499,11 @@ const OrdersManagement = () => {
                 }
             });
 
-            // Success
             setToast({message: editOrderId ? "Order Updated" : "Order Created!", type: "success"});
             setShowPOS(false); setCart([]); setCustomer({ name: '', phone: '', email: '' }); setDiscount(0); setEditOrderId(null);
-            
         } catch (e) { 
             console.error("Transaction Error:", e);
-            setToast({message: typeof e === 'string' ? e : "Transaction Failed. Check console.", type: "error"}); 
+            setToast({message: typeof e === 'string' ? e : "Transaction Failed.", type: "error"}); 
         } 
         finally { setIsSubmitting(false); }
     };
@@ -489,7 +555,26 @@ const OrdersManagement = () => {
         setIsSubmitting(false);
     };
 
-   
+    const handleDeleteOrder = (order) => {
+        if (role === 'secretary') { setRequestModal({ isOpen: true, order }); return; }
+        setConfirmConfig({
+            isOpen: true, title: "Delete Order?", message: `Delete Ticket ${order.ticketId}? Cannot be undone.`, confirmText: "Delete Forever", confirmColor: "bg-red-600",
+            action: async () => {
+                await deleteDoc(doc(db, "Orders", order.id));
+                setToast({ message: "Deleted", type: "success" });
+                setConfirmConfig({ ...confirmConfig, isOpen: false });
+            }
+        });
+    };
+
+    const handleSubmitRequest = async (e) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+        await addDoc(collection(db, "DeletionRequests"), { orderId: requestModal.order.id, ticketId: requestModal.order.ticketId, customer: requestModal.order.customer?.name, reason: deleteReason, requestedBy: user?.name || "Secretary", requestedAt: serverTimestamp(), status: 'pending' });
+        setToast({ message: "Request Sent", type: "success" });
+        setRequestModal({ isOpen: false, order: null }); setDeleteReason(''); setIsSubmitting(false);
+    };
+
     const toggleReturnItem = (iIdx, sIdx) => {
         const key = sIdx !== undefined ? `${iIdx}-${sIdx}` : `${iIdx}-product`;
         setSelectedReturnItems(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
@@ -525,10 +610,11 @@ const OrdersManagement = () => {
                 </div>
             </div>
 
-           
+            {/* QUICK STATS - 🔥 REVENUE REMOVED FOR MANAGER */}
             <div className="flex flex-wrap gap-4 mb-8">
                 <QuickStat label="Orders Found" value={stats.total} icon={Layers} color="bg-blue-50 text-blue-600"/>
                 <QuickStat label="Pending Jobs" value={stats.pending} icon={Clock} color="bg-orange-50 text-orange-600"/>
+                {!isManager && <QuickStat label="View Revenue" value={formatCurrency(stats.revenue)} icon={DollarSign} color="bg-green-50 text-green-600"/>}
             </div>
 
             {/* FILTERS & TABLE */}

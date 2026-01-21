@@ -23,7 +23,7 @@ const getTimeDifference = (date) => {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
 };
 
-// 🔥 Reusable Hideable Card Component
+// Reusable Hideable Card Component
 const DebtStatCard = ({ title, value, subtext, color, hideable }) => {
     const [hidden, setHidden] = useState(hideable ? true : false);
 
@@ -60,20 +60,37 @@ const DebtStatCard = ({ title, value, subtext, color, hideable }) => {
     );
 };
 
+// 🔥 STATE HELPER
+const getSavedState = (key, fallback) => {
+    try {
+        const saved = sessionStorage.getItem('debt_ana_state');
+        if (!saved) return fallback;
+        const parsed = JSON.parse(saved);
+        return parsed[key] !== undefined ? parsed[key] : fallback;
+    } catch { return fallback; }
+};
+
 const DebtAnalysis = () => {
     const navigate = useNavigate();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [filterRisk, setFilterRisk] = useState('All'); // All, High, Medium, Low, Overpaid
+    
+    // 🔥 PERSISTENT STATE
+    const [searchTerm, setSearchTerm] = useState(() => getSavedState('searchTerm', ''));
+    const [filterRisk, setFilterRisk] = useState(() => getSavedState('filterRisk', 'All'));
+    const [currentPage, setCurrentPage] = useState(() => getSavedState('currentPage', 1));
 
-    // Pagination State
-    const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
     // Feedback
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
+
+    // 🔥 SAVE STATE
+    useEffect(() => {
+        const stateToSave = { searchTerm, filterRisk, currentPage };
+        sessionStorage.setItem('debt_ana_state', JSON.stringify(stateToSave));
+    }, [searchTerm, filterRisk, currentPage]);
 
     // 1. FETCH DATA
     useEffect(() => {
@@ -170,14 +187,16 @@ const DebtAnalysis = () => {
     }, [orders, searchTerm, filterRisk]);
 
     // 4. PAGINATION LOGIC
-    useEffect(() => {
-        setCurrentPage(1); 
-    }, [searchTerm, filterRisk]);
-
+    // Removed automatic reset to allow persistence
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
     const currentItems = filteredList.slice(indexOfFirstItem, indexOfLastItem);
     const totalPages = Math.ceil(filteredList.length / itemsPerPage);
+
+    // Auto-correct page if out of bounds
+    useEffect(() => {
+        if (currentPage > totalPages && totalPages > 0) setCurrentPage(totalPages);
+    }, [filteredList.length, totalPages, currentPage]);
 
     const handleExport = () => {
         const data = filteredList.map(o => ({
