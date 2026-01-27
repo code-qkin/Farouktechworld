@@ -17,7 +17,7 @@ const SignupPage = () => {
     const [loading, setLoading] = useState(false);
     const [toast, setToast] = useState({ message: '', type: '' }); 
     
-    //  Verification State (Controls switching to the "Check Inbox" screen)
+    // Verification UI State
     const [showVerification, setShowVerification] = useState(false);
     const [verifying, setVerifying] = useState(false);
     const [resending, setResending] = useState(false);
@@ -62,37 +62,43 @@ const SignupPage = () => {
                 console.warn("Email send failed:", emailErr);
             }
             
-           
+            // 4. Show Verification Screen (No Redirect)
             setShowVerification(true);
             setToast({ message: "Account created! Please verify your email.", type: 'success' });
 
         } catch (err) {
             console.error("Signup Error:", err);
 
-            // Handle "Email Already In Use" (Recovering Unverified Accounts)
+            // 🔥 GHOST ACCOUNT FIX: Handle "Email Already In Use"
             if (err.code === 'auth/email-already-in-use') {
                 try {
+                    // A. Attempt Login (Verify ownership with password)
                     const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
                     const user = userCredential.user;
+
+                    // B. Check if DB profile exists
                     const userDoc = await getDoc(doc(db, "Users", user.uid));
                     
-                    // RECOVER: If missing DB or UNVERIFIED, show screen
+                    // C. RECOVERY LOGIC
                     if (!userDoc.exists() || !user.emailVerified) {
+                        // If DB is missing, recreate it
                         if (!userDoc.exists()) await createUserProfile(user);
                         
                         // If unverified, show the screen so they can verify!
                         if (!user.emailVerified) {
+                            try { await sendEmailVerification(user); } catch (e) {}
                             setShowVerification(true);
                             setToast({ message: "Account recovered. Please verify.", type: 'info' });
                             return; 
                         }
                     }
 
-                    // If we get here, they are fully verified.
+                    // D. If they are verified and exist, send them to login
                     setToast({ message: "Account already active. Please Log In.", type: 'info' });
                     setTimeout(() => navigate('/admin/login'), 2000);
 
                 } catch (recoveryErr) {
+                    // E. WRONG PASSWORD = Real "Taken" Email
                     if (recoveryErr.code === 'auth/wrong-password' || recoveryErr.code === 'auth/invalid-credential') {
                         setToast({ message: "Email registered. Please Log In or Reset Password.", type: 'error' });
                     } else {
@@ -110,24 +116,23 @@ const SignupPage = () => {
         }
     };
 
-   
+    // Check Verification Status
     const checkVerificationStatus = async () => {
         setVerifying(true);
         try {
-            await auth.currentUser.reload(); // Refresh user token
+            await auth.currentUser.reload(); 
             if (auth.currentUser.emailVerified) {
-               
+                // Sync status to DB
                 await updateDoc(doc(db, "Users", auth.currentUser.uid), { isVerified: true });
                 
                 setToast({ message: "Verified! Request sent to Admin.", type: 'success' });
                 
-                // Logout so they don't get stuck in a "Pending" session
                 setTimeout(async () => {
                     await signOut(auth);
                     navigate('/admin/login');
                 }, 1500);
             } else {
-                setToast({ message: "Not verified yet. Check your inbox (or spam).", type: 'warning' });
+                setToast({ message: "Not verified yet. Check your inbox.", type: 'warning' });
             }
         } catch (e) {
             setToast({ message: "Error checking status.", type: 'error' });
@@ -136,7 +141,6 @@ const SignupPage = () => {
         }
     };
 
-    
     const handleResendLink = async () => {
         setResending(true);
         try {
@@ -155,7 +159,6 @@ const SignupPage = () => {
 
             <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl border-t-4 border-purple-600">
                 
-                {/*  VERIFICATION STATE UI */}
                 {showVerification ? (
                     <div className="text-center animate-in fade-in slide-in-from-bottom-4">
                         <div className="bg-yellow-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -190,7 +193,6 @@ const SignupPage = () => {
                         </div>
                     </div>
                 ) : (
-                    //  NORMAL SIGNUP FORM
                     <>
                         <div className="text-center mb-6">
                             <div className="bg-purple-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">

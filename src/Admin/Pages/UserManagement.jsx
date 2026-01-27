@@ -29,11 +29,9 @@ const UserManagement = () => {
     const [editingUser, setEditingUser] = useState(null); 
     const navigate = useNavigate();
     
-    // Inline Editing States
+    // Inline Editing (Name Only)
     const [editingNameId, setEditingNameId] = useState(null);
     const [newName, setNewName] = useState("");
-    const [editingEmailId, setEditingEmailId] = useState(null);
-    const [newEmail, setNewEmail] = useState("");
 
     // Payroll Modal
     const [payrollModal, setPayrollModal] = useState({ isOpen: false, userId: null, name: '' });
@@ -60,10 +58,13 @@ const UserManagement = () => {
         return () => unsubUsers();
     }, []);
 
-    // 🔥 UPDATED FILTER: Only show Pending users who are VERIFIED
+    // 🔥 FILTER LOGIC:
+    // 1. Pending: Must be verified to show up (Anti-Spam)
     const pendingUsers = useMemo(() => allUsers.filter(u => u.role === 'pending' && u.isVerified), [allUsers]);
     
+    // 2. Active Staff: Show everyone (even if unverified legacy accounts)
     const activeStaff = useMemo(() => allUsers.filter(u => u.role !== 'pending'), [allUsers]);
+    
     const existingCEO = useMemo(() => allUsers.find(u => u.role === 'ceo'), [allUsers]);
 
     // --- ACTIONS ---
@@ -115,7 +116,7 @@ const UserManagement = () => {
         catch (error) { setToast({ message: "Failed.", type: 'error' }); }
     };
 
-    // --- NAME EDITING ---
+    // --- NAME EDITING ONLY ---
     const startNameEdit = (user) => { 
         if (user.role === 'ceo' && currentUser.uid !== user.id) return;
         if (isManager && (user.role === 'admin' || user.role === 'ceo')) return;
@@ -132,25 +133,6 @@ const UserManagement = () => {
             setToast({ message: "Name updated", type: "success" });
         } catch (e) { setToast({ message: "Failed", type: "error" }); }
         setEditingNameId(null);
-    };
-
-    // --- EMAIL EDITING ---
-    const startEmailEdit = (user) => {
-        if (user.role === 'ceo' && currentUser.uid !== user.id) return setToast({ message: "Cannot edit CEO email", type: "error" });
-        if (isManager && (user.role === 'admin' || user.role === 'ceo')) return setToast({ message: "Insufficient permissions", type: "error" });
-        setEditingEmailId(user.id); setNewEmail(user.email || "");
-    };
-
-    const saveEmail = async () => {
-        if (!newEmail.trim() || !editingEmailId) {
-            setEditingEmailId(null);
-            return;
-        }
-        try {
-            await updateDoc(doc(db, "Users", editingEmailId), { email: newEmail.trim() });
-            setToast({ message: "Email updated (DB Only)", type: "success" });
-        } catch (e) { setToast({ message: "Failed", type: "error" }); }
-        setEditingEmailId(null);
     };
 
     const handleToggleStatus = (user) => {
@@ -250,25 +232,10 @@ const UserManagement = () => {
                         </div>
                     )}
 
-                    {/* EMAIL - Click to Edit */}
-                    {editingEmailId === member.id ? (
-                        <input 
-                            className="p-1 border border-blue-400 rounded text-xs w-full outline-none mt-1 animate-in fade-in" 
-                            value={newEmail} 
-                            onChange={(e) => setNewEmail(e.target.value)} 
-                            autoFocus 
-                            onBlur={saveEmail} 
-                            onKeyDown={(e) => e.key === 'Enter' && saveEmail()} 
-                        />
-                    ) : (
-                        <div 
-                            className={`text-xs text-gray-500 mt-0.5 flex items-center gap-2 ${canManage ? 'cursor-pointer hover:text-blue-600' : ''}`}
-                            onClick={() => canManage && startEmailEdit(member)}
-                            title={canManage ? "Click to edit email" : ""}
-                        >
-                            {member.email}
-                        </div>
-                    )}
+                    {/* EMAIL - Read Only */}
+                    <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2 cursor-default">
+                        {member.email}
+                    </div>
                 </td>
 
                 {/* ROLE */}
@@ -356,7 +323,7 @@ const UserManagement = () => {
                 <h1 className="text-3xl font-extrabold text-purple-900 flex items-center gap-2"><Users className="w-8 h-8 text-indigo-600"/> Team Management</h1>
             </div>
 
-            {/* PENDING REQUESTS SECTION */}
+            {/* PENDING REQUESTS */}
             {pendingUsers.length > 0 && (
                 <div className="bg-yellow-50 border-l-4 border-yellow-400 p-6 rounded-r-xl shadow-sm animate-in slide-in-from-top-4">
                     <div className="flex items-center gap-3 mb-4">
