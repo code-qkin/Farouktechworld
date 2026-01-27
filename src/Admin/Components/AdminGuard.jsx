@@ -19,6 +19,13 @@ const AdminGuard = () => {
         if (docSnap.exists()) {
             const userData = docSnap.data();
 
+            // 🔥 CHECK EMAIL VERIFICATION
+            if (auth.currentUser && !auth.currentUser.emailVerified) {
+                auth.signOut();
+                // We rely on the redirect to login page where they can see why they were kicked out if they try again
+                return;
+            }
+
             if (userData.status === 'suspended') {
                 auth.signOut();
                 alert("Session Terminated: Your account has been suspended.");
