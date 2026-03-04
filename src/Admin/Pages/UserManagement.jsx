@@ -90,6 +90,7 @@ const UserManagement = () => {
     };
 
     const handleRoleUpdate = async (userId, newRole) => {
+        if (role !== 'admin' && role !== 'ceo' && role !== 'manager') return setToast({ message: "Unauthorized", type: "error" });
         if (userId === currentUser.uid) {
             setToast({ message: "You cannot change your own role.", type: "error" });
             setEditingUser(null);
@@ -118,12 +119,14 @@ const UserManagement = () => {
 
     // --- NAME EDITING ONLY ---
     const startNameEdit = (user) => { 
+        if (role !== 'admin' && role !== 'ceo' && role !== 'manager') return;
         if (user.role === 'ceo' && currentUser.uid !== user.id) return;
         if (isManager && (user.role === 'admin' || user.role === 'ceo')) return;
         setEditingNameId(user.id); setNewName(user.name || ""); 
     };
     
     const saveName = async () => {
+        if (role !== 'admin' && role !== 'ceo' && role !== 'manager') return;
         if (!newName.trim() || !editingNameId) {
             setEditingNameId(null);
             return;
@@ -136,6 +139,7 @@ const UserManagement = () => {
     };
 
     const handleToggleStatus = (user) => {
+        if (role !== 'admin' && role !== 'ceo' && role !== 'manager') return setToast({ message: "Unauthorized", type: "error" });
         if (user.id === currentUser.uid) return setToast({message: "You cannot suspend yourself.", type: "error"});
         if (user.role === 'ceo') return setToast({message: "Cannot suspend the CEO.", type: "error"}); 
         if (isManager && user.role === 'admin') return setToast({message: "Managers cannot suspend Admins.", type: "error"});
@@ -158,6 +162,7 @@ const UserManagement = () => {
     };
 
     const handleDelete = (user) => {
+        if (role !== 'admin' && role !== 'ceo' && role !== 'manager') return setToast({ message: "Unauthorized", type: "error" });
         if (user.id === currentUser.uid) return setToast({message: "Cannot delete yourself.", type: "error"});
         if (user.role === 'ceo') return setToast({message: "Cannot delete CEO.", type: "error"}); 
         if (isManager && user.role === 'admin') return setToast({message: "Cannot delete Admins.", type: "error"});
@@ -173,12 +178,14 @@ const UserManagement = () => {
     };
 
     const handleTechToggle = async (user) => {
+        if (role !== 'admin' && role !== 'ceo' && role !== 'manager') return setToast({ message: "Unauthorized", type: "error" });
         if (user.role === 'ceo') return;
         try { await updateDoc(doc(db, "Users", user.id), { isTechnician: !user.isTechnician }); setToast({ message: "Permissions updated", type: 'success' }); } 
         catch (e) { setToast({ message: "Failed.", type: 'error' }); }
     };
 
     const handleAdminToggle = async (user) => {
+        if (role !== 'admin' && role !== 'ceo') return setToast({ message: "Unauthorized: Admins Only", type: "error" });
         if (user.role === 'ceo') return;
         if (isManager) return setToast({message: "Managers cannot grant Admin access.", type: "error"});
         try { await updateDoc(doc(db, "Users", user.id), { isAdminAccess: !user.isAdminAccess }); setToast({ message: "Permissions updated", type: 'success' }); } 
@@ -186,12 +193,14 @@ const UserManagement = () => {
     };
 
     const openPayrollModal = (user) => {
+        if (role !== 'admin' && role !== 'ceo') return setToast({ message: "Unauthorized: Admins Only", type: "error" });
         if (isManager) return setToast({message: "Access Denied: Managers cannot set salaries.", type: "error"});
         setPayrollModal({ isOpen: true, userId: user.id, name: user.name });
         setPayrollConfig({ baseSalary: user.baseSalary || 0, fixedPerJob: user.fixedPerJob || 0 });
     };
 
     const savePayrollConfig = async () => {
+        if (role !== 'admin' && role !== 'ceo') return setToast({ message: "Unauthorized", type: "error" });
         try {
             await updateDoc(doc(db, "Users", payrollModal.userId), { baseSalary: Number(payrollConfig.baseSalary), fixedPerJob: Number(payrollConfig.fixedPerJob) });
             setToast({ message: "Payroll updated", type: 'success' });

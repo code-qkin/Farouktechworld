@@ -7,7 +7,7 @@ import {
     signOut, 
     sendEmailVerification 
 } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebaseConfig'; 
 import { useNavigate, Link } from 'react-router-dom';
 import { Toast } from '../Components/Feedback';
@@ -17,14 +17,14 @@ const SignupPage = () => {
     const [loading, setLoading] = useState(false);
     const [toast, setToast] = useState({ message: '', type: '' }); 
     
-    // Verification UI State
+    // UI State
     const [showVerification, setShowVerification] = useState(false);
     const [verifying, setVerifying] = useState(false);
     const [resending, setResending] = useState(false);
 
     const navigate = useNavigate();
 
-    // Helper: Create the user profile in Database
+    // Helper: Create profile (Starts as Unverified)
     const createUserProfile = async (user) => {
         try {
             await setDoc(doc(db, "Users", user.uid), {
@@ -37,7 +37,7 @@ const SignupPage = () => {
                 createdAt: serverTimestamp()
             }, { merge: true });
         } catch (error) {
-            console.error("Database Write Error:", error);
+            console.error("Database Error (Ignored for now):", error);
         }
     };
 
@@ -47,92 +47,87 @@ const SignupPage = () => {
         setToast({ message: '', type: '' });
 
         try {
-            // 1. Create New Account
+            // 1. Create Account
             const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
             const user = userCredential.user;
 
-            // 2. Setup Profile
+            // 2. Setup Profile & DB
             await updateProfile(user, { displayName: formData.name });
             await createUserProfile(user);
 
-            // 3. Send Verification Email
-            try {
-                await sendEmailVerification(user);
-            } catch (emailErr) {
-                console.warn("Email send failed:", emailErr);
-            }
+            // 3. Send Verification
+            try { await sendEmailVerification(user); } catch (e) { console.warn("Email send issue:", e); }
             
-            // 4. Show Verification Screen (No Redirect)
+            // 4. SHOW SCREEN (Force this to happen)
             setShowVerification(true);
-            setToast({ message: "Account created! Please verify your email.", type: 'success' });
+            setToast({ message: "Account created! Please verify email.", type: 'success' });
 
         } catch (err) {
             console.error("Signup Error:", err);
 
-            // 🔥 GHOST ACCOUNT FIX: Handle "Email Already In Use"
+            // 🔥 RECOVERY: Handle "Email Already In Use" (Ghost Account)
             if (err.code === 'auth/email-already-in-use') {
                 try {
-                    // A. Attempt Login (Verify ownership with password)
+                    // A. Login to prove ownership
                     const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
                     const user = userCredential.user;
 
-                    // B. Check if DB profile exists
+                    // B. Check DB
                     const userDoc = await getDoc(doc(db, "Users", user.uid));
                     
-                    // C. RECOVERY LOGIC
+                    // C. Fix Missing DB or Unverified Status
                     if (!userDoc.exists() || !user.emailVerified) {
-                        // If DB is missing, recreate it
+                        // Fix DB if missing
                         if (!userDoc.exists()) await createUserProfile(user);
                         
-                        // If unverified, show the screen so they can verify!
+                        // Fix Verification UI
                         if (!user.emailVerified) {
                             try { await sendEmailVerification(user); } catch (e) {}
+                            
+                            // 🔥 SHOW SCREEN (Do NOT redirect)
                             setShowVerification(true);
                             setToast({ message: "Account recovered. Please verify.", type: 'info' });
                             return; 
                         }
                     }
 
-                    // D. If they are verified and exist, send them to login
-                    setToast({ message: "Account already active. Please Log In.", type: 'info' });
+                    // D. If verified & exists, login
+                    setToast({ message: "Account active. Logging in...", type: 'info' });
                     setTimeout(() => navigate('/admin/login'), 2000);
 
                 } catch (recoveryErr) {
-                    // E. WRONG PASSWORD = Real "Taken" Email
                     if (recoveryErr.code === 'auth/wrong-password' || recoveryErr.code === 'auth/invalid-credential') {
-                        setToast({ message: "Email registered. Please Log In or Reset Password.", type: 'error' });
+                        setToast({ message: "Email taken. Please Log In or Reset Password.", type: 'error' });
                     } else {
                         setToast({ message: "Error: " + recoveryErr.message, type: 'error' });
                     }
                 }
-            } 
-            else if (err.code === 'auth/weak-password') {
-                setToast({ message: "Password must be at least 6 characters.", type: 'error' });
             } else {
-                setToast({ message: "Error: " + err.message, type: 'error' });
+                setToast({ message: err.message, type: 'error' });
             }
         } finally {
             setLoading(false);
         }
     };
 
-    // Check Verification Status
+    // 🔥 "I Have Verified" Button Logic
     const checkVerificationStatus = async () => {
         setVerifying(true);
         try {
-            await auth.currentUser.reload(); 
+            await auth.currentUser.reload(); // Force refresh token
             if (auth.currentUser.emailVerified) {
-                // Sync status to DB
-                await updateDoc(doc(db, "Users", auth.currentUser.uid), { isVerified: true });
+                // SYNC: Force DB update (using setDoc merge to be safe)
+                await setDoc(doc(db, "Users", auth.currentUser.uid), { isVerified: true }, { merge: true });
                 
                 setToast({ message: "Verified! Request sent to Admin.", type: 'success' });
                 
+                // Logout to clear pending session
                 setTimeout(async () => {
                     await signOut(auth);
                     navigate('/admin/login');
                 }, 1500);
             } else {
-                setToast({ message: "Not verified yet. Check your inbox.", type: 'warning' });
+                setToast({ message: "Not verified yet. Check spam folder.", type: 'warning' });
             }
         } catch (e) {
             setToast({ message: "Error checking status.", type: 'error' });
@@ -145,9 +140,13 @@ const SignupPage = () => {
         setResending(true);
         try {
             await sendEmailVerification(auth.currentUser);
-            setToast({ message: "Link resent! Check your inbox.", type: 'success' });
+            setToast({ message: "Link resent! Check inbox.", type: 'success' });
         } catch (e) {
-            setToast({ message: "Link sent! Check your inbox.", type: 'success' });
+            if(e.code === 'auth/too-many-requests') {
+                setToast({ message: "Too many attempts. Wait a moment.", type: 'warning' });
+            } else {
+                setToast({ message: "Link sent.", type: 'success' });
+            }
         } finally {
             setResending(false);
         }
@@ -158,9 +157,8 @@ const SignupPage = () => {
             <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: '' })} />
 
             <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl border-t-4 border-purple-600">
-                
                 {showVerification ? (
-                    <div className="text-center animate-in fade-in slide-in-from-bottom-4">
+                    <div className="text-center">
                         <div className="bg-yellow-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                             <ShieldAlert className="w-8 h-8 text-yellow-600" />
                         </div>

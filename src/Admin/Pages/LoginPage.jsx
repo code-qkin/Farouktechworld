@@ -9,7 +9,7 @@ import {
   sendEmailVerification,
   signOut
 } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore'; 
+import { doc, getDoc, setDoc } from 'firebase/firestore'; // 🔥 Use setDoc for safer sync
 import { auth, db } from '../../firebaseConfig';
 
 const ALLOWED_DASHBOARD_ROLES = ['admin', 'secretary', 'worker', 'ceo', 'manager'];
@@ -32,7 +32,6 @@ const LoginPage = () => {
 
   const checkUserAccess = async (user) => {
     try {
-      // 1. Check Verification
       if (!user.emailVerified) {
           setIsUnverified(true); 
           setLoading(false);
@@ -43,9 +42,9 @@ const LoginPage = () => {
       const userDoc = await getDoc(userDocRef);
 
       if (userDoc.exists()) {
-        // 🔥 CRITICAL FIX: Sync DB status if they are verified in Auth but false in DB
+        // 🔥 SYNC: Ensure DB knows they are verified. Use setDoc with merge to be safe.
         if (!userDoc.data().isVerified) {
-            await updateDoc(userDocRef, { isVerified: true });
+            await setDoc(userDocRef, { isVerified: true }, { merge: true });
         }
 
         const userData = userDoc.data();
@@ -60,8 +59,6 @@ const LoginPage = () => {
           navigate('/admin/dashboard', { replace: true });
           return true;
         } else {
-          // They are verified but still 'pending'. 
-          // We show an error, BUT we successfully updated the DB above, so Admin can now see them!
           setError("Access Denied: Account pending Admin approval.");
         }
       } else {

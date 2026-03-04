@@ -154,19 +154,37 @@ const OrderDetails = () => {
 
     // Reset ALL Payments
     const handleResetPayment = async () => {
+        if (role !== 'admin' && role !== 'ceo') return setToast({ message: "Unauthorized", type: "error" });
         setIsUpdating(true);
-        await updateDoc(doc(db, "Orders", order.id), { amountPaid: 0, balance: order.totalCost, paymentStatus: 'Unpaid', paid: false, paymentHistory: [] });
-        setToast({ message: "All Payments Reset", type: "success" });
+        try {
+            await updateDoc(doc(db, "Orders", order.id), { 
+                amountPaid: 0, 
+                balance: order.totalCost, 
+                paymentStatus: 'Unpaid', 
+                paid: false, 
+                paymentHistory: [] 
+            });
+            setToast({ message: "All Payments Reset", type: "success" });
+        } catch (e) { setToast({ message: "Failed to reset payments", type: "error" }); }
         setIsUpdating(false);
         setConfirmConfig({ ...confirmConfig, isOpen: false });
     };
 
     const handleProcessRefund = async () => {
+        if (role !== 'admin' && role !== 'ceo') return setToast({ message: "Unauthorized", type: "error" });
         const reason = prompt("Enter reason for refund:");
         if (!reason) return;
         setIsUpdating(true);
-        await updateDoc(doc(db, "Orders", order.id), { amountPaid: 0, refundedAmount: order.amountPaid, paymentStatus: 'Refunded', balance: 0, refundReason: reason });
-        setToast({ message: "Refund Processed", type: "success" });
+        try {
+            await updateDoc(doc(db, "Orders", order.id), { 
+                amountPaid: 0, 
+                refundedAmount: order.amountPaid, 
+                paymentStatus: 'Refunded', 
+                balance: 0, 
+                refundReason: reason 
+            });
+            setToast({ message: "Refund Processed", type: "success" });
+        } catch (e) { setToast({ message: "Failed to process refund", type: "error" }); }
         setIsUpdating(false); setConfirmConfig({ ...confirmConfig, isOpen: false });
     };
 
@@ -316,8 +334,12 @@ const OrderDetails = () => {
     };
 
     const handleVoidOrder = async () => {
+        if (role !== 'admin' && role !== 'ceo') return setToast({ message: "Unauthorized", type: "error" });
         setIsUpdating(true);
-        try { await updateDoc(doc(db, "Orders", order.id), { status: 'Void', paymentStatus: 'Voided', balance: 0 }); navigate('/admin/orders'); }
+        try { 
+            await updateDoc(doc(db, "Orders", order.id), { status: 'Void', paymentStatus: 'Voided', balance: 0 }); 
+            navigate('/admin/orders'); 
+        }
         catch (e) { setToast({ message: "Void Failed", type: 'error' }); }
         setIsUpdating(false);
         setConfirmConfig({ ...confirmConfig, isOpen: false });
@@ -325,7 +347,11 @@ const OrderDetails = () => {
 
     const handleStatusChange = async (e) => {
         const newStatus = e.target.value;
-        if (newStatus === 'Void') { setConfirmConfig({ isOpen: true, title: "Void Order?", message: "Cancels order & zeros balance.", confirmText: "Void", confirmColor: "bg-red-600", action: handleVoidOrder }); return; }
+        if (newStatus === 'Void') {
+            if (role !== 'admin' && role !== 'ceo') return setToast({ message: "Unauthorized", type: "error" });
+            setConfirmConfig({ isOpen: true, title: "Void Order?", message: "Cancels order & zeros balance.", confirmText: "Void", confirmColor: "bg-red-600", action: handleVoidOrder }); 
+            return; 
+        }
 
         if (newStatus === 'Collected') {
             const hasPendingRepairs = order.items?.some(item =>
@@ -342,6 +368,15 @@ const OrderDetails = () => {
         setIsUpdating(true);
         try {
             const updates = { status: newStatus };
+            
+            // 🔥 RESTORE ORDER IF UNVOIDING (Admin/CEO only)
+            if (order.status === 'Void' && newStatus !== 'Void') {
+                const newBalance = (order.totalCost || 0) - (order.amountPaid || 0);
+                updates.balance = newBalance;
+                updates.paymentStatus = newBalance <= 0 && order.totalCost > 0 ? 'Paid' : (order.amountPaid > 0 ? 'Part Payment' : 'Unpaid');
+                updates.paid = newBalance <= 0 && order.totalCost > 0;
+            }
+
             if (newStatus === 'Collected' && order.items) {
                 updates.items = order.items.map(item => ({
                     ...item,
@@ -511,7 +546,7 @@ const OrderDetails = () => {
                         <div className="bg-slate-900 p-6 sm:p-8 text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
                             <div><h1 className="text-3xl font-mono font-black tracking-tight">{order.ticketId}</h1><p className="text-slate-400 text-sm mt-1 flex items-center gap-2"><Calendar size={14} /> {dateStr}</p></div>
                             <div className="bg-white/20 px-3 py-1 rounded-lg backdrop-blur-sm">
-                                <select value={order.status} onChange={handleStatusChange} disabled={isUpdating || order.status === 'Void'} className="bg-transparent text-white font-bold outline-none cursor-pointer disabled:opacity-80">
+                                <select value={order.status} onChange={handleStatusChange} disabled={isUpdating || (order.status === 'Void' && role !== 'admin' && role !== 'ceo')} className="bg-transparent text-white font-bold outline-none cursor-pointer disabled:opacity-80">
                                     {['Pending', 'In Progress', 'Ready for Pickup', 'Completed', 'Collected', 'Void'].map(s => <option key={s} className="text-black">{s}</option>)}
                                 </select>
                             </div>
@@ -692,8 +727,22 @@ const OrderDetails = () => {
                         )}
 
                         <div className="space-y-3">
-                            {(order.status === 'Void' || isReturn) && order.amountPaid > 0 && order.paymentStatus !== 'Refunded' && (
-                                <button onClick={() => setConfirmConfig({ isOpen: true, title: "Refund Payment?", message: "Mark as Refunded.", confirmText: "Refund", confirmColor: "bg-blue-600", action: handleProcessRefund })} disabled={isUpdating} className="w-full bg-red-600 text-white py-3 rounded-lg font-bold shadow-sm hover:bg-red-700 transition">Process Refund</button>
+                            {/* Consolidated Refund Button */}
+                            {(order.balance < 0 || order.paymentStatus === 'Refund Due' || ((order.status === 'Void' || isReturn) && order.amountPaid > 0 && order.paymentStatus !== 'Refunded')) && (
+                                <button 
+                                    onClick={() => setConfirmConfig({ 
+                                        isOpen: true, 
+                                        title: "Process Refund?", 
+                                        message: order.balance < 0 ? `Refund ${formatCurrency(Math.abs(order.balance))}?` : "Refund entire payment?", 
+                                        confirmText: "Refund", 
+                                        confirmColor: "bg-red-600", 
+                                        action: handleProcessRefund 
+                                    })} 
+                                    disabled={isUpdating} 
+                                    className="w-full bg-red-600 text-white py-3 rounded-lg font-bold shadow-sm hover:bg-red-700 transition"
+                                >
+                                    Process Refund
+                                </button>
                             )}
 
                             {order.balance > 0 && order.status !== 'Void' && !isReturn && (
@@ -703,11 +752,6 @@ const OrderDetails = () => {
                             {/* 🔥 RESET PAYMENT (Undo All) */}
                             {order.amountPaid > 0 && order.status !== 'Void' && (
                                 <button onClick={() => setConfirmConfig({ isOpen: true, title: "Reset Payment?", message: "Clear payment history?", confirmText: "Reset", action: handleResetPayment })} className="w-full text-gray-400 text-xs hover:text-red-600 py-2">Undo All Payments</button>
-                            )}
-
-                            {/* Refund Button */}
-                            {(order.balance < 0 || order.paymentStatus === 'Refund Due' || (order.amountPaid > 0 && order.status === 'Void')) && (
-                                <button onClick={() => setConfirmConfig({ isOpen: true, title: "Process Refund?", message: `Refund ${formatCurrency(Math.abs(order.balance))}?`, confirmText: "Refund", confirmColor: "bg-red-600", action: handleProcessRefund })} disabled={isUpdating} className="w-full bg-red-600 text-white py-3 rounded-lg font-bold shadow-sm hover:bg-red-700 transition">Process Refund</button>
                             )}
                         </div>
                     </div>

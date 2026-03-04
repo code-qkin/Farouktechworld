@@ -423,6 +423,7 @@ const StoreInventory = () => {
 
     // Bulk Actions
     const handleBulkPushStock = async () => {
+        if (role !== 'admin' && role !== 'ceo' && role !== 'manager') return setToast({ message: "Unauthorized", type: "error" });
         if (selectedIds.length === 0) return;
         setConfirmConfig({
             isOpen: true, title: "Bulk Stock Push", message: `Add +${bulkStockInput} stock to ${selectedIds.length} items?`, confirmText: "Push Stock", confirmColor: "bg-green-600",
@@ -444,6 +445,7 @@ const StoreInventory = () => {
     };
 
     const handleBulkDelete = async () => {
+        if (role !== 'admin' && role !== 'ceo') return setToast({ message: "Unauthorized: Admins Only", type: "error" });
         if (selectedIds.length === 0) return;
         setConfirmConfig({
             isOpen: true, title: "Delete All Selected?", message: `You are about to PERMANENTLY delete ${selectedIds.length} items.`, confirmText: "Delete All", confirmColor: "bg-red-600",
@@ -463,6 +465,7 @@ const StoreInventory = () => {
 
     const handleBulkEditSave = async (e) => {
         e.preventDefault();
+        if (role !== 'admin' && role !== 'ceo' && role !== 'manager') return setToast({ message: "Unauthorized", type: "error" });
         if (selectedIds.length === 0) return;
         const updates = {};
         if (bulkEditData.price && canSeePrice) updates.price = safeParseFloat(bulkEditData.price);
@@ -485,6 +488,7 @@ const StoreInventory = () => {
     // Actions
     const handleCreateProduct = async (e) => {
         e.preventDefault();
+        if (role !== 'admin' && role !== 'ceo' && role !== 'manager') return setToast({ message: "Unauthorized", type: "error" });
         setActionLoading(true);
         try {
             const safePrice = canSeePrice ? safeParseFloat(newProduct.price) : 0;
@@ -542,6 +546,7 @@ const StoreInventory = () => {
 
     const handleUpdateProduct = async (e) => {
         e.preventDefault();
+        if (role !== 'admin' && role !== 'ceo' && role !== 'manager') return setToast({ message: "Unauthorized", type: "error" });
         if (!editingItem) return;
         setActionLoading(true);
         try {
@@ -558,6 +563,7 @@ const StoreInventory = () => {
     };
 
     const handleRestock = async () => {
+        if (role !== 'admin' && role !== 'ceo' && role !== 'manager') return setToast({ message: "Unauthorized", type: "error" });
         if (!restockItem || !restockQty) return;
         setActionLoading(true);
         try {
@@ -571,6 +577,7 @@ const StoreInventory = () => {
     };
 
     const handleDelete = (item) => {
+        if (role !== 'admin' && role !== 'ceo') return setToast({ message: "Unauthorized: Admins Only", type: "error" });
         setConfirmConfig({
             isOpen: true, title: "Delete Item?", message: `Delete "${item.name}"?`, confirmText: "Delete", confirmColor: "bg-red-600",
             action: async () => { try { await deleteDoc(doc(db, "Inventory", item.id)); setToast({ message: "Deleted.", type: "success" }); } catch(e) { setToast({message: "Delete Failed", type: "error"}); } setConfirmConfig({ ...confirmConfig, isOpen: false }); }
