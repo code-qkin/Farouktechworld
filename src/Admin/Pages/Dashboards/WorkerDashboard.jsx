@@ -110,7 +110,7 @@ const WorkerDashboard = ({ user: propUser }) => {
   useEffect(() => {
     const unsubInv = onSnapshot(collection(db, "Inventory"), snap => 
         setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
+    , (error) => console.error("Inventory listener error:", error));
 
     const unsubOrders = onSnapshot(query(collection(db, "Orders"), orderBy("createdAt", "desc")), snap => {
         const allJobs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -140,6 +140,8 @@ const WorkerDashboard = ({ user: propUser }) => {
             lastAssignedJobIds.current = myCurrentJobIds;
             isFirstRun.current = false;
         }
+    }, (error) => {
+        console.error("Orders listener error:", error);
     });
 
     return () => { unsubInv(); unsubOrders(); };

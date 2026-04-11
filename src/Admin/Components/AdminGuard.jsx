@@ -44,6 +44,12 @@ const AdminGuard = () => {
         } else {
             auth.signOut();
         }
+    }, (error) => {
+        console.error("User profile listener error:", error);
+        if (error.code === 'permission-denied') {
+            // This often happens during sign out, ignore it or handle it silently
+            return;
+        }
     });
 
     return () => unsubscribe();

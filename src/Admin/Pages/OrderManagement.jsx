@@ -210,12 +210,12 @@ const OrdersManagement = () => {
             unsubOrders = onSnapshot(q, (snap) => {
                 setOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
                 setLoading(false);
-            });
+            }, (error) => console.error("Orders listener error:", error));
         }
         
-        const unsubInv = onSnapshot(query(collection(db, "Inventory"), orderBy("name")), snap => setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-        const unsubCust = onSnapshot(query(collection(db, "Customers"), orderBy("name")), snap => setSavedCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-        getDocs(collection(db, "Services")).then(snap => setDbServices(snap.docs.map(d => d.data())));
+        const unsubInv = onSnapshot(query(collection(db, "Inventory"), orderBy("name")), snap => setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() }))), (error) => console.error("Inventory listener error:", error));
+        const unsubCust = onSnapshot(query(collection(db, "Customers"), orderBy("name")), snap => setSavedCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() }))), (error) => console.error("Customers listener error:", error));
+        getDocs(collection(db, "Services")).then(snap => setDbServices(snap.docs.map(d => d.data()))).catch(e => console.error("Services fetch error:", e));
 
         return () => { unsubOrders(); unsubInv(); unsubCust(); };
     }, [timeFilter, searchTerm, customStart, customEnd]);
