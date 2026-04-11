@@ -429,8 +429,8 @@ const Dashboard = () => {
                             <div><h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><TrendingUp size={18} className="text-purple-600"/> Revenue Trend</h3><p className="text-xs font-medium text-slate-400">7 Day Performance</p></div>
                             <button onClick={() => navigate('/admin/performance')} className="text-xs font-bold text-purple-700 bg-purple-50 px-4 py-2 rounded-xl hover:bg-purple-100 transition shadow-sm">View Report</button>
                         </div>
-                        <div className="h-[250px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
+                        <div className="h-[250px] w-full min-h-[250px]">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                                 <AreaChart data={chartData}>
                                     <defs><linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#7e22ce" stopOpacity={0.1}/><stop offset="95%" stopColor="#7e22ce" stopOpacity={0}/></linearGradient></defs>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
