@@ -305,7 +305,6 @@ const PerformanceReports = () => {
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
-
                     <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 h-[300px] sm:h-[350px]">
                         <h3 className="font-bold text-gray-800 mb-4 text-sm sm:text-base">Revenue Source</h3>
                         <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
