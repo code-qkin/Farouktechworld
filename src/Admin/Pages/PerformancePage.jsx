@@ -294,7 +294,7 @@ const PerformanceReports = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-2 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 h-[300px] sm:h-[350px]">
                         <h3 className="font-bold text-gray-800 mb-4 text-sm sm:text-base">Revenue Trend</h3>
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                             <AreaChart data={stats.chartData}>
                                 <defs><linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.1} /><stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} /></linearGradient></defs>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -308,7 +308,7 @@ const PerformanceReports = () => {
 
                     <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 h-[300px] sm:h-[350px]">
                         <h3 className="font-bold text-gray-800 mb-4 text-sm sm:text-base">Revenue Source</h3>
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                             <PieChart>
                                 <Pie data={[{ name: 'Repairs', value: stats.repairRev }, { name: 'Sales', value: stats.storeRev }]} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
                                     <Cell fill="#8b5cf6" />
