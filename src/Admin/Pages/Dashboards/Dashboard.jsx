@@ -222,7 +222,21 @@ const Dashboard = () => {
         }
     };
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500">Loading Dashboard...</div>;
+    if (loading) return (
+        <div className="min-h-screen bg-[#fafafa] p-6 max-w-[1600px] mx-auto space-y-8 animate-pulse">
+            <div className="h-16 bg-slate-200 rounded-xl w-full mb-8"></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
+                {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-32 bg-slate-200 rounded-2xl"></div>)}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[1, 2, 3, 4].map(i => <div key={i} className="h-48 bg-slate-200 rounded-2xl"></div>)}
+            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                <div className="h-[300px] bg-slate-200 rounded-2xl xl:col-span-2"></div>
+                <div className="h-[300px] bg-slate-200 rounded-2xl"></div>
+            </div>
+        </div>
+    );
 
     const currentAlerts = alertTab === 'critical' ? inventoryData.critical : alertTab === 'low' ? inventoryData.low : inventoryData.highValue;
     const totalAlerts = inventoryData.critical.length + inventoryData.low.length;

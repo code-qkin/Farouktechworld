@@ -14,6 +14,8 @@ import Dashboard from './Admin/Pages/Dashboards/DashboardHandler';
 import OrdersManagement from './Admin/Pages/OrderManagement';
 import UserManagement from './Admin/Pages/UserManagement';
 import StoreInventory from './Admin/Pages/StoreInventory';
+import CustomerManagement from './Admin/Pages/CustomerManagement';
+import CustomerProfile from './Admin/Pages/CustomerProfile';
 // import CompleteSignupPage from './Admin/Pages/CompleteSignUp';
 import OrderDetails from './Admin/Pages/OrderDetails';
 import Settings from './Admin/Components/Settings';
@@ -37,6 +39,8 @@ import DebtAnalysis from "./Admin/Pages/DebtAnalysis";
 import PaymentRegister from "./Admin/Pages/PaymentRegister";
 import WorkerStat from "./Admin/Pages/WorkerStat";
 
+import AdminLayout from './Admin/Components/AdminLayout';
+
 const router = createBrowserRouter(
   createRoutesFromElements(
     <Route path="/" element={<MainLayout />}>
@@ -52,23 +56,26 @@ const router = createBrowserRouter(
         <Route path="login" element={<LoginPage />} />
        <Route path="register" element={<SignUp />} />
         <Route element={<AdminAuthGuard />}>
-        <Route path="system-reset" element={<SystemReset />} />
-          <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="orders" element={<OrdersManagement />} />
-          <Route path="users" element={<UserManagement />} />
-          <Route path="store" element={<StoreInventory />} />
-          <Route path="orders/:orderId" element={<OrderDetails />} />
-          <Route path="performance" element={<PerformancePage />} />
-          <Route path="job-history" element={<JobHistory />} />
-          <Route path="payroll" element={<PayrollPage />} />
-          <Route path="pricing" element={<ServicePrices />} />
-          <Route path="manage-proof-of-work" element={<ManageProofOfWork />} />
-          <Route path="devices" element={<DeviceManager />} />
-          <Route path="debt-analysis" element={<DebtAnalysis />} />
-          <Route path="payments" element={<PaymentRegister />} />
-          <Route path="worker-stats" element={<WorkerStat />} />
-          {/* <Route path="settings" element={<Settings/>} /> */}
+          <Route path="system-reset" element={<SystemReset />} />
+          <Route element={<AdminLayout />}>
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="orders" element={<OrdersManagement />} />
+            <Route path="users" element={<UserManagement />} />
+            <Route path="store" element={<StoreInventory />} />
+            <Route path="customers" element={<CustomerManagement />} />
+            <Route path="customers/:customerId" element={<CustomerProfile />} />
+            <Route path="orders/:orderId" element={<OrderDetails />} />
+            <Route path="performance" element={<PerformancePage />} />
+            <Route path="job-history" element={<JobHistory />} />
+            <Route path="payroll" element={<PayrollPage />} />
+            <Route path="pricing" element={<ServicePrices />} />
+            <Route path="manage-proof-of-work" element={<ManageProofOfWork />} />
+            <Route path="devices" element={<DeviceManager />} />
+            <Route path="debt-analysis" element={<DebtAnalysis />} />
+            <Route path="payments" element={<PaymentRegister />} />
+            <Route path="worker-stats" element={<WorkerStat />} />
+          </Route>
         </Route>
       </Route>
 

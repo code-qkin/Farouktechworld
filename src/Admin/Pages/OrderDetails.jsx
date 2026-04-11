@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
     ArrowLeft, Printer, DollarSign, CheckCircle, Wrench, Ban, PlusCircle,
     X, RotateCcw, RefreshCw, Lock, Smartphone, Edit2, Trash2, AlertTriangle, Package,
-    Loader2, Calendar, User, Mail, Send
+    Loader2, Calendar, User, Mail, Send, Eye
 } from 'lucide-react';
 import {
     collection, query, where, getDocs, doc,
@@ -23,6 +23,9 @@ const OrderDetails = () => {
     const [loading, setLoading] = useState(true);
     const [workers, setWorkers] = useState([]);
     const [isUpdating, setIsUpdating] = useState(false);
+
+    // Real-time Conflict Detection
+    const [activeEditors, setActiveEditors] = useState([]);
 
     // UI State
     const [showReceipt, setShowReceipt] = useState(false);
@@ -49,21 +52,65 @@ const OrderDetails = () => {
 
     // 1. FETCH ORDER
     useEffect(() => {
+        let unsubscribe = () => {};
+        let docId = id;
         const fetchData = async () => {
-            let docId = id;
             if (id.startsWith('FTW')) {
                 const q = query(collection(db, "Orders"), where("ticketId", "==", id));
                 const snap = await getDocs(q);
                 if (!snap.empty) docId = snap.docs[0].id;
             }
-            onSnapshot(doc(db, "Orders", docId), (docSnap) => {
-                if (docSnap.exists()) setOrder({ id: docSnap.id, ...docSnap.data() });
+            unsubscribe = onSnapshot(doc(db, "Orders", docId), (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    setOrder({ id: docSnap.id, ...data });
+                    // Conflict Detection Update
+                    if (data.activeEditors) {
+                        setActiveEditors(data.activeEditors.filter(e => e.uid !== user?.uid));
+                    }
+                }
                 else navigate('/admin/orders');
                 setLoading(false);
             });
         };
         fetchData();
-    }, [id, navigate]);
+
+        return () => unsubscribe();
+    }, [id, navigate, user?.uid]);
+
+    // Presence Management
+    useEffect(() => {
+        if (!order?.id || !user?.uid) return;
+
+        const updatePresence = async (isEntering) => {
+            try {
+                const ref = doc(db, "Orders", order.id);
+                if (isEntering) {
+                    await updateDoc(ref, { 
+                        activeEditors: arrayUnion({ uid: user.uid, name: user.name || user.email, time: Date.now() }) 
+                    });
+                } else {
+                    // Need to get the document to filter out this specific user safely or use a trick, 
+                    // Since arrayRemove needs exact object match, we fetch and update.
+                    const snap = await getDocs(query(collection(db, "Orders"), where("ticketId", "==", order.ticketId)));
+                    if (!snap.empty) {
+                        const currentEditors = snap.docs[0].data().activeEditors || [];
+                        const newEditors = currentEditors.filter(e => e.uid !== user.uid);
+                        await updateDoc(doc(db, "Orders", order.id), { activeEditors: newEditors });
+                    }
+                }
+            } catch (e) { console.error("Presence error", e); }
+        };
+
+        updatePresence(true);
+        
+        window.addEventListener("beforeunload", () => updatePresence(false));
+
+        return () => {
+            updatePresence(false);
+            window.removeEventListener("beforeunload", () => updatePresence(false));
+        };
+    }, [order?.id, user?.uid, user?.name, user?.email]);
 
     // 2. FETCH WORKERS
     useEffect(() => {
@@ -529,6 +576,16 @@ const OrderDetails = () => {
             <div className="max-w-7xl mx-auto mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <button onClick={() => navigate(-1)} className="flex items-center text-gray-600 hover:text-purple-700 transition bg-white px-4 py-2 rounded-lg shadow-sm border"><ArrowLeft size={20} className="mr-2" /> Back</button>
                 <div className="flex flex-wrap gap-2 no-print">
+                    {order && order.customer?.phone && (
+                        <a 
+                            href={`https://wa.me/${order.customer.phone.replace(/\D/g,'')}?text=${encodeURIComponent(`Hi ${order.customer.name}, your device (${order.items?.[0]?.deviceModel || 'repair'}) is ready for pickup at FaroukTechWorld! Total: ₦${order.totalCost?.toLocaleString()}.`)}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 bg-green-50 text-green-700 border border-green-200 px-4 py-2 rounded-lg hover:bg-green-100 text-sm font-bold transition shadow-sm"
+                        >
+                            <Send size={16} /> Notify
+                        </a>
+                    )}
                     {(role === 'admin' || role === 'secretary' || role === 'ceo') && (
                         <button onClick={handleDeleteClick} disabled={isUpdating} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold border transition ${role === 'secretary' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
                             {role === 'secretary' ? <AlertTriangle size={16} /> : <Trash2 size={16} />} {role === 'secretary' ? 'Request Delete' : 'Delete'}
@@ -537,6 +594,16 @@ const OrderDetails = () => {
                     <button onClick={() => setShowReceipt(true)} className="flex items-center gap-2 bg-purple-900 text-white px-4 py-2 rounded-lg hover:bg-purple-800 text-sm font-bold"><Printer size={16} /> Receipt</button>
                 </div>
             </div>
+
+            {/* Active Editors Banner */}
+            {activeEditors.length > 0 && (
+                <div className="max-w-7xl mx-auto mb-6 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
+                    <Eye size={18} className="animate-pulse" />
+                    <span className="text-sm font-bold">
+                        {activeEditors.map(e => e.name).join(', ')} {activeEditors.length === 1 ? 'is' : 'are'} currently viewing/editing this ticket. Avoid making conflicting changes.
+                    </span>
+                </div>
+            )}
 
             <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* LEFT COLUMN - Order Items */}
