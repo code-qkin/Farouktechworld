@@ -108,7 +108,7 @@ const Dashboard = () => {
             const q = query(collection(db, "DeletionRequests"), orderBy("requestedAt", "desc"));
             const unsub = onSnapshot(q, (snap) => {
                 setDeletionRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-            });
+            }, (err) => console.error("Deletion requests error:", err));
             return () => unsub();
         }
     }, [role]);

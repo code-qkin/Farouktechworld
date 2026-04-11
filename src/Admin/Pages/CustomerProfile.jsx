@@ -72,13 +72,14 @@ const CustomerProfile = () => {
                     };
 
                     const unsubId = onSnapshot(qId, (snapId) => {
-                        // We need both, but if qId is empty we still want qPhone
-                        onSnapshot(qPhone, (snapPhone) => {
+                        const unsubPhone = onSnapshot(qPhone, (snapPhone) => {
                             handleSnaps([snapId, snapPhone]);
-                        });
-                    });
+                        }, (err) => console.error("Phone query error:", err));
+                        
+                        return () => unsubPhone();
+                    }, (err) => console.error("ID query error:", err));
 
-                    return unsubId;
+                    return () => unsubId();
                 } else {
                     navigate('/admin/customers');
                 }

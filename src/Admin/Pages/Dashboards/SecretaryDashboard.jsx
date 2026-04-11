@@ -82,7 +82,7 @@ const SecretaryDashboard = ({ user }) => {
       const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setOrders(fetched);
       setLoading(false);
-    });
+    }, (err) => console.error("Secretary orders listener error:", err));
     return () => unsubscribe();
   }, []);
 

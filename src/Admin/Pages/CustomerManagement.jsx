@@ -48,13 +48,13 @@ const CustomerManagement = () => {
         const unsubCustomers = onSnapshot(query(collection(db, "Customers"), orderBy("name")), (snap) => {
             setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             setLoading(false);
-        });
+        }, (err) => console.error("Customers listener error:", err));
 
         let unsubRequests = () => {};
         if (isAdmin) {
             unsubRequests = onSnapshot(query(collection(db, "CustomerRequests"), orderBy("requestedAt", "desc")), (snap) => {
                 setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-            });
+            }, (err) => console.error("Requests listener error:", err));
         }
 
         return () => { unsubCustomers(); unsubRequests(); };

@@ -71,6 +71,8 @@ const OrderDetails = () => {
                 }
                 else navigate('/admin/orders');
                 setLoading(false);
+            }, (error) => {
+                console.error("Order snapshot error:", error);
             });
         };
         fetchData();
@@ -114,7 +116,16 @@ const OrderDetails = () => {
 
     // 2. FETCH WORKERS
     useEffect(() => {
-        onSnapshot(collection(db, "Users"), (snap) => setWorkers(snap.docs.map(d => ({ value: d.data().name || d.data().email, label: d.data().name || d.data().email, isTechnician: d.data().isTechnician || d.data().role === 'worker' })).filter(u => u.isTechnician)));
+        const unsub = onSnapshot(collection(db, "Users"), (snap) => {
+            setWorkers(snap.docs.map(d => ({ 
+                value: d.data().name || d.data().email, 
+                label: d.data().name || d.data().email, 
+                isTechnician: d.data().isTechnician || d.data().role === 'worker' 
+            })).filter(u => u.isTechnician));
+        }, (error) => {
+            console.error("Workers listener error:", error);
+        });
+        return () => unsub();
     }, []);
 
     // --- HANDLERS ---
