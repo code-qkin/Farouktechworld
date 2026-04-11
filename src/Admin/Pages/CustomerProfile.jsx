@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../AdminContext';
+import { motion } from 'framer-motion';
 
 const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
 
