@@ -201,7 +201,7 @@ const OrderDetails = () => {
 
     // Reset ALL Payments
     const handleResetPayment = async () => {
-        if (role !== 'admin' && role !== 'ceo') return setToast({ message: "Unauthorized", type: "error" });
+        if (role !== 'admin' && role !== 'ceo' && role !== 'secretary') return setToast({ message: "Unauthorized", type: "error" });
         setIsUpdating(true);
         try {
             await updateDoc(doc(db, "Orders", order.id), { 
@@ -218,7 +218,7 @@ const OrderDetails = () => {
     };
 
     const handleProcessRefund = async () => {
-        if (role !== 'admin' && role !== 'ceo') return setToast({ message: "Unauthorized", type: "error" });
+        if (role !== 'admin' && role !== 'ceo' && role !== 'secretary') return setToast({ message: "Unauthorized", type: "error" });
         const reason = prompt("Enter reason for refund:");
         if (!reason) return;
         setIsUpdating(true);
@@ -406,7 +406,7 @@ const OrderDetails = () => {
     };
 
     const handleVoidOrder = async () => {
-        if (role !== 'admin' && role !== 'ceo') return setToast({ message: "Unauthorized", type: "error" });
+        if (role !== 'admin' && role !== 'ceo' && role !== 'secretary') return setToast({ message: "Unauthorized", type: "error" });
         setIsUpdating(true);
         try { 
             await runTransaction(db, async (t) => {
@@ -434,7 +434,7 @@ const OrderDetails = () => {
     const handleStatusChange = async (e) => {
         const newStatus = e.target.value;
         if (newStatus === 'Void') {
-            if (role !== 'admin' && role !== 'ceo') return setToast({ message: "Unauthorized", type: "error" });
+            if (role !== 'admin' && role !== 'ceo' && role !== 'secretary') return setToast({ message: "Unauthorized", type: "error" });
             setConfirmConfig({ isOpen: true, title: "Void Order?", message: "Cancels order & zeros balance.", confirmText: "Void", confirmColor: "bg-red-600", action: handleVoidOrder }); 
             return; 
         }
