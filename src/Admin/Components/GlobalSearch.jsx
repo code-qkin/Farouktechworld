@@ -52,12 +52,22 @@ const GlobalSearch = () => {
 
             try {
                 // We'll perform multiple targeted queries. 
-                // Since Firestore doesn't support full-text search out of the box natively, we do basic matching.
-                
-                const qOrderTicket = query(collection(db, "Orders"), where("ticketId", ">=", term), where("ticketId", "<=", term + "\uf8ff"), limit(5));
+                const qOrderTicket = query(
+                    collection(db, "Orders"), 
+                    where("ticketId", ">=", term), 
+                    where("ticketId", "<=", term + "\uf8ff"), 
+                    limit(20)
+                );
                 const [orderTicketSnap] = await Promise.all([ getDocs(qOrderTicket) ]);
                 
-                const orderResults = orderTicketSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                // Sort orders by createdAt (descending) manually as composite indexes might be missing for complex where/orderBy combos
+                const orderResults = orderTicketSnap.docs
+                    .map(d => ({ id: d.id, ...d.data() }))
+                    .sort((a, b) => {
+                        const timeA = a.createdAt?.seconds || 0;
+                        const timeB = b.createdAt?.seconds || 0;
+                        return timeB - timeA;
+                    });
 
                 // Fetch a small chunk of inventory and customers for local filtering (since we can't full text search easily)
                 const qInv = query(collection(db, "Inventory"), limit(50));

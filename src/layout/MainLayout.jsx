@@ -1,13 +1,16 @@
 import Navbar from "../components/NavBar.jsx";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import Footer from "../components/Footer.jsx";
 
 const MainLayout = () => {
+  const location = useLocation();
+  const isAdminPath = location.pathname.startsWith('/admin');
+
   return (
     <>
         <Navbar />
         <Outlet />
-        <Footer />
+        {!isAdminPath && <Footer />}
     </>
   )
 }
