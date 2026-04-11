@@ -4,7 +4,7 @@ import {
     User, Phone, Mail, FileText, History, 
     ArrowLeft, DollarSign, Calendar, Clock, 
     CheckCircle, AlertCircle, Package, Wrench, ExternalLink,
-    TrendingUp, ShoppingBag, Edit2, MessageSquare
+    TrendingUp, ShoppingBag, Edit2, MessageSquare, ArrowRight
 } from 'lucide-react';
 import { 
     doc, getDoc, collection, query, where, orderBy, onSnapshot 
