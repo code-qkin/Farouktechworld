@@ -7,11 +7,12 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { 
     collection, onSnapshot, query, orderBy, doc, 
-    addDoc, updateDoc, deleteDoc, serverTimestamp 
+    addDoc, updateDoc, deleteDoc, serverTimestamp, getDocs
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../AdminContext';
 import { Toast, ConfirmModal } from '../Components/Feedback';
+import { RefreshCw } from 'lucide-react';
 
 const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
 
@@ -37,8 +38,11 @@ const CustomerManagement = () => {
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
+    const [isRecalculating, setIsRecalculating] = useState(false);
+
     const isAdmin = role === 'admin' || role === 'ceo';
     const isSecretary = role === 'secretary';
+    const canManage = isAdmin || role === 'manager' || isSecretary;
 
     useEffect(() => {
         const unsubCustomers = onSnapshot(query(collection(db, "Customers"), orderBy("name")), (snap) => {
@@ -47,14 +51,66 @@ const CustomerManagement = () => {
         });
 
         let unsubRequests = () => {};
-        if (isAdmin || isSecretary) {
+        if (isAdmin) {
             unsubRequests = onSnapshot(query(collection(db, "CustomerRequests"), orderBy("requestedAt", "desc")), (snap) => {
                 setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             });
         }
 
         return () => { unsubCustomers(); unsubRequests(); };
-    }, [isAdmin, isSecretary]);
+    }, [isAdmin]);
+
+    const recalculateAllStats = async () => {
+        if (!isAdmin) return;
+        setIsRecalculating(true);
+        setToast({ message: "Recalculating all customer stats...", type: "info" });
+        try {
+            const ordersSnap = await getDocs(collection(db, "Orders"));
+            const orders = ordersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            
+            // Maps for fast lookup
+            const customerPhoneMap = {}; // { phone: customerId }
+            customers.forEach(c => { if(c.phone) customerPhoneMap[c.phone] = c.id; });
+
+            const statsMap = {}; // { customerId: { count, total } }
+            
+            orders.forEach(order => {
+                if (order.status === 'Void') return;
+                
+                // Try to find the correct customer ID
+                let cId = order.customer?.id;
+                if (!cId && order.customer?.phone) {
+                    cId = customerPhoneMap[order.customer.phone];
+                }
+                
+                if (!cId) return;
+                
+                if (!statsMap[cId]) statsMap[cId] = { count: 0, total: 0 };
+                statsMap[cId].count += 1;
+                statsMap[cId].total += (Number(order.totalCost) || 0);
+            });
+
+            const batchSize = 100;
+            const customerIds = customers.map(c => c.id);
+            
+            for (let i = 0; i < customerIds.length; i += batchSize) {
+                const chunk = customerIds.slice(i, i + batchSize);
+                await Promise.all(chunk.map(id => {
+                    const stats = statsMap[id] || { count: 0, total: 0 };
+                    return updateDoc(doc(db, "Customers", id), {
+                        ticketCount: stats.count,
+                        totalSpent: stats.total
+                    });
+                }));
+            }
+
+            setToast({ message: "Stats successfully synchronized!", type: "success" });
+        } catch (e) {
+            console.error(e);
+            setToast({ message: "Recalculation failed", type: "error" });
+        }
+        setIsRecalculating(false);
+    };
 
     const filteredCustomers = useMemo(() => {
         return customers.filter(c => {
@@ -69,6 +125,11 @@ const CustomerManagement = () => {
     const handleCreateCustomer = async (e) => {
         if (e) e.preventDefault();
         if (!formData.name || !formData.phone) return setToast({ message: "Name and Phone required", type: "error" });
+        
+        // 🔥 PREVENT DUPLICATES
+        const isDuplicate = customers.find(c => c.phone === formData.phone && c.id !== editingId);
+        if (isDuplicate) return setToast({ message: `Customer with phone ${formData.phone} already exists!`, type: "error" });
+
         setIsSubmitting(true);
         try {
             if (isEditing && editingId) {
@@ -115,6 +176,11 @@ const CustomerManagement = () => {
     const handleRequestCustomer = async (e) => {
         if (e) e.preventDefault();
         if (!formData.name || !formData.phone) return setToast({ message: "Name and Phone required", type: "error" });
+        
+        // 🔥 PREVENT DUPLICATES IN REQUESTS TOO
+        const isDuplicate = customers.find(c => c.phone === formData.phone);
+        if (isDuplicate) return setToast({ message: "A customer with this phone number already exists.", type: "error" });
+
         setIsSubmitting(true);
         try {
             await addDoc(collection(db, "CustomerRequests"), {
@@ -132,6 +198,23 @@ const CustomerManagement = () => {
     };
 
     const handleApproveRequest = async (request) => {
+        // 🔥 PREVENT DUPLICATES ON APPROVAL
+        const isDuplicate = customers.find(c => c.phone === request.phone);
+        if (isDuplicate) {
+            setConfirmConfig({
+                isOpen: true,
+                title: "Duplicate Found",
+                message: `A profile for ${request.phone} already exists. Reject this request?`,
+                confirmText: "Reject Request",
+                confirmColor: "bg-red-600",
+                action: async () => {
+                    await updateDoc(doc(db, "CustomerRequests", request.id), { status: 'rejected' });
+                    setConfirmConfig({ ...confirmConfig, isOpen: false });
+                }
+            });
+            return;
+        }
+
         setConfirmConfig({
             isOpen: true,
             title: "Approve Request?",
@@ -205,15 +288,20 @@ const CustomerManagement = () => {
                 </div>
                 
                 <div className="flex gap-3">
-                    {isAdmin ? (
+                    {isAdmin && (
+                        <button 
+                            onClick={recalculateAllStats} 
+                            disabled={isRecalculating}
+                            className="bg-white border border-slate-200 text-slate-600 px-4 py-3 rounded-xl font-bold text-sm hover:bg-gray-50 flex items-center gap-2 shadow-sm transition disabled:opacity-50"
+                        >
+                            <RefreshCw size={18} className={isRecalculating ? 'animate-spin' : ''} /> Recalculate Stats
+                        </button>
+                    )}
+                    {canManage && (
                         <button onClick={() => { resetForm(); setShowCreateModal(true); }} className="bg-slate-900 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-black transition shadow-lg shadow-slate-200">
                             <UserPlus size={20} /> Create Profile
                         </button>
-                    ) : isSecretary ? (
-                        <button onClick={() => { resetForm(); setShowRequestModal(true); }} className="bg-purple-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-purple-700 transition shadow-lg shadow-purple-200">
-                            <MessageSquare size={20} /> Request Profile
-                        </button>
-                    ) : null}
+                    )}
                 </div>
             </div>
 
@@ -307,7 +395,7 @@ const CustomerManagement = () => {
                                     <td className="px-8 py-5 text-right">
                                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition">
                                             <button onClick={() => navigate(`/admin/customers/${customer.id}`)} className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition" title="View History"><History size={18}/></button>
-                                            {(isAdmin || role === 'manager') && <button onClick={() => handleEditCustomer(customer)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition" title="Edit Profile"><Edit2 size={18}/></button>}
+                                            {canManage && <button onClick={() => handleEditCustomer(customer)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition" title="Edit Profile"><Edit2 size={18}/></button>}
                                             {isAdmin && <button onClick={() => handleDeleteCustomer(customer.id, customer.name)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition" title="Delete"><Trash2 size={18}/></button>}
                                         </div>
                                     </td>

@@ -291,7 +291,16 @@ const OrderDetails = () => {
                 let newRefunded = data.refundedAmount || 0;
                 if (finalPaid > newTotalCost) { newRefunded += (finalPaid - newTotalCost); finalPaid = newTotalCost; }
                 const newBalance = newTotalCost - finalPaid;
+                
                 t.update(ref, { discount: val, totalCost: newTotalCost, amountPaid: finalPaid, refundedAmount: newRefunded, balance: newBalance, paymentStatus: finalPaid >= newTotalCost ? 'Paid' : (finalPaid > 0 ? 'Part Payment' : 'Unpaid'), paid: finalPaid >= newTotalCost });
+
+                // Update Customer Stats
+                if (data.customer?.id) {
+                    const costDiff = newTotalCost - (data.totalCost || 0);
+                    t.update(doc(db, "Customers", data.customer.id), {
+                        totalSpent: increment(costDiff)
+                    });
+                }
             });
             setToast({ message: "Discount Applied", type: "success" });
             setShowDiscountModal(false);
@@ -344,6 +353,13 @@ const OrderDetails = () => {
                     balance: newBalance,
                     paymentStatus: newBalance < 0 ? 'Refund Due' : (newBalance === 0 ? 'Paid' : 'Part Payment')
                 });
+
+                // Update Customer Stats
+                if (data.customer?.id) {
+                    t.update(doc(db, "Customers", data.customer.id), {
+                        totalSpent: increment(-deduction)
+                    });
+                }
             });
             setToast({ message: "Item Returned & Restocked", type: 'success' });
         } catch (e) { setToast({ message: "Failed", type: 'error' }); }
@@ -362,6 +378,7 @@ const OrderDetails = () => {
                         const newItems = JSON.parse(JSON.stringify(data.items));
                         newItems[i].services[s].status = 'Void';
                         newItems[i].services[s].worker = 'Unassigned';
+                        const voidedCost = Number(newItems[i].services[s].cost || 0);
                         if (newItems[i].type === 'repair') newItems[i].total = newItems[i].services.reduce((acc, curr) => acc + (curr.status !== 'Void' ? Number(curr.cost || 0) : 0), 0);
                         const newSubtotal = newItems.reduce((acc, item) => acc + (Number(item.total) || 0), 0);
                         const currentDiscount = data.discount || 0;
@@ -370,7 +387,15 @@ const OrderDetails = () => {
                         let newRefundedAmount = data.refundedAmount || 0;
                         if (newAmountPaid > newTotalCost) { newRefundedAmount += (data.amountPaid - newTotalCost); newAmountPaid = newTotalCost; }
                         const newBalance = newTotalCost - newAmountPaid;
+                        
                         t.update(ref, { items: newItems, subtotal: newSubtotal, totalCost: newTotalCost, amountPaid: newAmountPaid, refundedAmount: newRefundedAmount, balance: newBalance });
+
+                        // Update Customer Stats
+                        if (data.customer?.id) {
+                            t.update(doc(db, "Customers", data.customer.id), {
+                                totalSpent: increment(-voidedCost)
+                            });
+                        }
                     });
                     setToast({ message: "Service Voided", type: 'success' });
                 } catch (e) { setToast({ message: "Failed", type: 'error' }); }
@@ -384,7 +409,21 @@ const OrderDetails = () => {
         if (role !== 'admin' && role !== 'ceo') return setToast({ message: "Unauthorized", type: "error" });
         setIsUpdating(true);
         try { 
-            await updateDoc(doc(db, "Orders", order.id), { status: 'Void', paymentStatus: 'Voided', balance: 0 }); 
+            await runTransaction(db, async (t) => {
+                const ref = doc(db, "Orders", order.id);
+                const data = (await t.get(ref)).data();
+                if (data.status === 'Void') return;
+
+                t.update(ref, { status: 'Void', paymentStatus: 'Voided', balance: 0 }); 
+
+                // Update Customer Stats
+                if (data.customer?.id) {
+                    t.update(doc(db, "Customers", data.customer.id), {
+                        ticketCount: increment(-1),
+                        totalSpent: increment(-(data.totalCost || 0))
+                    });
+                }
+            });
             navigate('/admin/orders'); 
         }
         catch (e) { setToast({ message: "Void Failed", type: 'error' }); }
@@ -491,7 +530,32 @@ const OrderDetails = () => {
             setRequestModalOpen(true); 
             return; 
         }
-        setConfirmConfig({ isOpen: true, title: "Delete Order?", message: "Permanent.", confirmText: "Delete", confirmColor: "bg-red-600", action: async () => { try { await deleteDoc(doc(db, "Orders", order.id)); setToast({ message: "Deleted", type: "success" }); setTimeout(() => navigate('/admin/orders'), 1000); } catch (e) { setToast({ message: "Failed", type: "error" }); } setConfirmConfig({ ...confirmConfig, isOpen: false }); } });
+        setConfirmConfig({ 
+            isOpen: true, title: "Delete Order?", message: "Permanent.", confirmText: "Delete", confirmColor: "bg-red-600", 
+            action: async () => { 
+                try { 
+                    await runTransaction(db, async (t) => {
+                        const ref = doc(db, "Orders", order.id);
+                        const data = (await t.get(ref)).data();
+                        
+                        // Decrement Customer Stats if not already void
+                        if (data.status !== 'Void' && data.customer?.id) {
+                            t.update(doc(db, "Customers", data.customer.id), {
+                                ticketCount: increment(-1),
+                                totalSpent: increment(-(data.totalCost || 0))
+                            });
+                        }
+                        
+                        t.delete(ref);
+                    });
+                    setToast({ message: "Deleted", type: "success" }); 
+                    setTimeout(() => navigate('/admin/orders'), 1000); 
+                } catch (e) { 
+                    setToast({ message: "Failed", type: "error" }); 
+                } 
+                setConfirmConfig({ ...confirmConfig, isOpen: false }); 
+            } 
+        });
     };
 
     const handleSubmitRequest = async (e) => {
@@ -742,9 +806,27 @@ const OrderDetails = () => {
                 {/* RIGHT COLUMN - Payment */}
                 <div className="space-y-6">
                     <div className="bg-purple-50 p-6 rounded-2xl h-fit border border-purple-100">
-                        <h3 className="text-xs font-bold text-purple-800 uppercase tracking-wider mb-4 flex items-center gap-2"><User size={16} /> Customer</h3>
+                        <div className="flex justify-between items-start mb-4">
+                            <h3 className="text-xs font-bold text-purple-800 uppercase tracking-wider flex items-center gap-2"><User size={16} /> Customer</h3>
+                            {order.customer?.id && (
+                                <button 
+                                    onClick={() => navigate(`/admin/customers/${order.customer.id}`)}
+                                    className="text-[10px] font-black text-purple-600 bg-white px-2 py-1 rounded-md border border-purple-100 hover:bg-purple-600 hover:text-white transition flex items-center gap-1 shadow-sm"
+                                >
+                                    View Profile <ArrowRight size={10}/>
+                                </button>
+                            )}
+                        </div>
                         <div className="space-y-4">
-                            <div><p className="text-xs text-purple-400 font-bold uppercase">Name</p><p className="font-bold text-slate-800 text-lg">{order.customer?.name}</p></div>
+                            <div>
+                                <p className="text-xs text-purple-400 font-bold uppercase">Name</p>
+                                <p 
+                                    className={`font-bold text-slate-800 text-lg ${order.customer?.id ? 'cursor-pointer hover:text-purple-700 transition' : ''}`}
+                                    onClick={() => order.customer?.id && navigate(`/admin/customers/${order.customer.id}`)}
+                                >
+                                    {order.customer?.name}
+                                </p>
+                            </div>
                             <div><p className="text-xs text-purple-400 font-bold uppercase">Phone</p><p className="font-bold text-slate-800">{order.customer?.phone || 'N/A'}</p></div>
                         </div>
                     </div>

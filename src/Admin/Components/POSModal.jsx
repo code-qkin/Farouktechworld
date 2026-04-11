@@ -44,10 +44,15 @@ const POSModal = ({
     const handleTabSwitch = (tab) => { setActiveTab(tab); setReturnOrder(null); setWarrantyTicketSearch(''); setSelectedReturnItems([]); };
 
     const handleCustomerNameChange = (val) => {
-        setCustomer({ ...customer, name: val });
+        setCustomer(prev => ({ ...prev, name: val }));
         const match = savedCustomers.find(c => c.name.toLowerCase() === val.toLowerCase());
         if (match) {
-            setCustomer({ name: match.name, phone: match.phone || '', email: match.email || '' });
+            setCustomer({ id: match.id, name: match.name, phone: match.phone || '', email: match.email || '' });
+        } else {
+            setCustomer(prev => {
+                const { id, ...rest } = prev;
+                return { ...rest, name: val };
+            });
         }
     };
 
@@ -228,6 +233,17 @@ const POSModal = ({
                         paymentStatus: balance <= 0 ? 'Paid' : (oldPaid > 0 ? 'Part Payment' : 'Unpaid'), 
                         paid: balance <= 0 
                     });
+
+                    // Update Customer Stats if Customer changed or Total changed
+                    if (customer.id) {
+                        const oldTotal = Number(oldOrderData.totalCost) || 0;
+                        const costDiff = Number(totalCost) - oldTotal;
+                        if (!isNaN(costDiff) && costDiff !== 0) {
+                            t.update(doc(db, "Customers", customer.id), {
+                                totalSpent: increment(costDiff)
+                            });
+                        }
+                    }
                 } else {
                     const ticketId = generateTicketId();
                     const newRef = doc(collection(db, "Orders"));
@@ -237,6 +253,15 @@ const POSModal = ({
                         createdAt: serverTimestamp(), orderType: cart.some(i=>i.type==='repair') ? 'repair' : 'store_sale',
                         warrantyExpiry: Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
                     });
+
+                    // Update Customer Stats
+                    if (customer.id) {
+                        const amount = Number(totalCost) || 0;
+                        t.update(doc(db, "Customers", customer.id), {
+                            ticketCount: increment(1),
+                            totalSpent: increment(amount)
+                        });
+                    }
                 }
             });
 

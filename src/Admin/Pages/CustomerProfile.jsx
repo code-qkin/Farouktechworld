@@ -34,19 +34,51 @@ const CustomerProfile = () => {
                     const customerData = docSnap.data();
                     setCustomer({ id: docSnap.id, ...customerData });
 
-                    // Query orders by phone match to capture all history
-                    const q = query(
+                    // Improved Query: Try ID first, then phone for fallback
+                    const qId = query(
+                        collection(db, "Orders"), 
+                        where("customer.id", "==", customerId),
+                        orderBy("createdAt", "desc")
+                    );
+
+                    const qPhone = query(
                         collection(db, "Orders"), 
                         where("customer.phone", "==", customerData.phone),
                         orderBy("createdAt", "desc")
                     );
                     
-                    const unsubscribe = onSnapshot(q, (orderSnap) => {
-                        setOrders(orderSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+                    const handleSnaps = (snaps) => {
+                        const allOrders = [];
+                        const seenIds = new Set();
+                        
+                        snaps.forEach(snap => {
+                            snap.docs.forEach(doc => {
+                                if (!seenIds.has(doc.id)) {
+                                    allOrders.push({ id: doc.id, ...doc.data() });
+                                    seenIds.add(doc.id);
+                                }
+                            });
+                        });
+                        
+                        // Sort by date descending
+                        allOrders.sort((a, b) => {
+                            const dateA = a.createdAt?.seconds || 0;
+                            const dateB = b.createdAt?.seconds || 0;
+                            return dateB - dateA;
+                        });
+                        
+                        setOrders(allOrders);
                         setLoading(false);
+                    };
+
+                    const unsubId = onSnapshot(qId, (snapId) => {
+                        // We need both, but if qId is empty we still want qPhone
+                        onSnapshot(qPhone, (snapPhone) => {
+                            handleSnaps([snapId, snapPhone]);
+                        });
                     });
 
-                    return unsubscribe;
+                    return unsubId;
                 } else {
                     navigate('/admin/customers');
                 }
@@ -60,12 +92,16 @@ const CustomerProfile = () => {
     }, [customerId, navigate]);
 
     const stats = useMemo(() => {
-        const total = orders.reduce((acc, o) => acc + (o.totalCost || 0), 0);
-        const paid = orders.reduce((acc, o) => acc + (o.amountPaid || 0), 0);
-        const balance = total - paid;
-        const activeRepairs = orders.filter(o => o.status === 'Pending' || o.status === 'In Progress').length;
-        const unpaidOrders = orders.filter(o => (o.totalCost - (o.amountPaid || 0)) > 0);
-        return { total, paid, balance, count: orders.length, activeRepairs, unpaidOrders };
+        // 🔥 EXCLUDE VOID ORDERS FROM STATS
+        const validOrders = orders.filter(o => o.status !== 'Void');
+        
+        const total = validOrders.reduce((acc, o) => acc + (o.totalCost || 0), 0);
+        const paid = validOrders.reduce((acc, o) => acc + (o.amountPaid || 0), 0);
+        const balance = Math.max(0, total - paid);
+        const activeRepairs = validOrders.filter(o => o.status === 'Pending' || o.status === 'In Progress').length;
+        const unpaidOrders = validOrders.filter(o => (o.totalCost - (o.amountPaid || 0)) > 0);
+        
+        return { total, paid, balance, count: validOrders.length, activeRepairs, unpaidOrders };
     }, [orders]);
 
     if (loading) return (
