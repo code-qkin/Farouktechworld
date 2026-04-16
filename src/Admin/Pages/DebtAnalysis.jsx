@@ -302,10 +302,10 @@ const DebtAnalysis = () => {
 
         const exportData = [];
         const lead = customerOrders[0];
-        const clientName = forceIds ? "Multiple Selection" : (lead.customer?.name || "Customer");
+        const clientName = lead.customer?.name || "Customer";
         
         exportData.push({ "STATEMENT OF ACCOUNT": `Identity: ${clientName}` });
-        if (!forceIds && lead.customer?.phone) exportData.push({ "STATEMENT OF ACCOUNT": `Phone: ${lead.customer.phone}` });
+        if (lead.customer?.phone) exportData.push({ "STATEMENT OF ACCOUNT": `Phone: ${lead.customer.phone}` });
         exportData.push({ "STATEMENT OF ACCOUNT": `Generated: ${new Date().toLocaleString()}` });
         exportData.push({}); // Spacer
 
@@ -358,7 +358,7 @@ const DebtAnalysis = () => {
         const totalPaid = customerOrders.reduce((s, o) => s + (Number(o.amountPaid) || 0), 0);
 
         setStatementData({
-            customer: forceIds ? { name: 'Multiple Selection', phone: 'Various' } : (customerOrders[0].customer || { name: 'Customer', phone: 'N/A' }),
+            customer: customerOrders[0].customer || { name: 'Customer', phone: 'N/A' },
             orders: customerOrders,
             summary: { totalBilled, totalPaid, netBalance: totalBilled - totalPaid }
         });
