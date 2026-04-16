@@ -485,15 +485,17 @@ const DebtAnalysis = () => {
                                                 <td className="py-8 px-4 align-top">
                                                     <p className="font-black text-lg tracking-tight text-slate-900 mb-2">TICKET: {order.ticketId || 'NO_ID'}</p>
                                                     <div className="space-y-1">
-                                                        {(order.items || []).map((item, idx) => (
-                                                            <p key={idx} className="text-sm font-bold text-slate-500 uppercase tracking-tight">
-                                                                {item.type === 'repair' ? 
-                                                                    `• ${item.deviceModel || 'Unknown Device'} Repair` : 
-                                                                    `• ${(item.name || 'Unknown Product').replace('Used: ', '')} (x${item.qty || 1})`
-                                                                }
-                                                            </p>
-                                                        ))}
-                                                        {(!order.items || order.items.length === 0) && (
+                                                        {(order.items || [])
+                                                            .filter(item => item.type !== 'part_usage' && !item.name?.includes('Used:'))
+                                                            .map((item, idx) => (
+                                                                <p key={idx} className="text-sm font-bold text-slate-500 uppercase tracking-tight">
+                                                                    {item.type === 'repair' ? 
+                                                                        `• ${item.deviceModel || 'Unknown Device'} Repair` : 
+                                                                        `• ${item.name || 'Unknown Product'} (x${item.qty || 1})`
+                                                                    }
+                                                                </p>
+                                                            ))}
+                                                        {(!order.items || order.items.filter(item => item.type !== 'part_usage' && !item.name?.includes('Used:')).length === 0) && (
                                                             <p className="text-sm font-bold text-slate-500 uppercase tracking-tight">• Service Transaction</p>
                                                         )}
                                                     </div>
