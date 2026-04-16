@@ -799,7 +799,6 @@ const DebtAnalysis = () => {
                                 <th className="px-6 py-4">Customer</th>
                                 <th className="px-6 py-4">Ticket</th>
                                 <th className="px-6 py-4">Date</th>
-                                <th className="px-6 py-4 text-center">Status</th>
                                 <th className="px-6 py-4 text-right">Balance</th>
                                 <th className="px-6 py-4 text-center">Action</th>
                             </tr>
@@ -823,16 +822,6 @@ const DebtAnalysis = () => {
                                         <span className="font-mono text-xs font-bold bg-slate-100 px-2 py-1 rounded text-slate-600">{order.ticketId}</span>
                                     </td>
                                     <td className="px-6 py-4 text-slate-500">{order.date.toLocaleDateString()}</td>
-                                    <td className="px-6 py-4 text-center">
-                                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
-                                            order.balance < 0 ? 'bg-green-100 text-green-700' :
-                                            order.riskLevel === 'High' ? 'bg-red-100 text-red-700' : 
-                                            order.riskLevel === 'Medium' ? 'bg-orange-100 text-orange-700' : 
-                                            'bg-blue-100 text-blue-700'
-                                        }`}>
-                                            {order.balance < 0 ? 'Overpaid' : `${order.daysOld} Days`}
-                                        </span>
-                                    </td>
                                     <td className={`px-6 py-4 text-right font-black ${order.balance < 0 ? 'text-green-600' : 'text-red-600'}`}>
                                         {order.balance < 0 ? '+' : ''}{formatCurrency(Math.abs(order.balance))}
                                     </td>
