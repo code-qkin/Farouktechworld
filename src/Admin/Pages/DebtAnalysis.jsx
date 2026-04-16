@@ -488,12 +488,23 @@ const DebtAnalysis = () => {
                                                         {(order.items || [])
                                                             .filter(item => item.type !== 'part_usage' && !item.name?.includes('Used:'))
                                                             .map((item, idx) => (
-                                                                <p key={idx} className="text-sm font-bold text-slate-500 uppercase tracking-tight">
-                                                                    {item.type === 'repair' ? 
-                                                                        `• ${item.deviceModel || 'Unknown Device'} Repair` : 
-                                                                        `• ${item.name || 'Unknown Product'} (x${item.qty || 1})`
-                                                                    }
-                                                                </p>
+                                                                <div key={idx} className="mb-2">
+                                                                    <p className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                                                                        {item.type === 'repair' ? 
+                                                                            `• ${item.deviceModel || 'Unknown Device'} Repair` : 
+                                                                            `• ${item.name || 'Unknown Product'} (x${item.qty || 1})`
+                                                                        }
+                                                                    </p>
+                                                                    {item.type === 'repair' && item.services && item.services.length > 0 && (
+                                                                        <div className="ml-4 space-y-0.5 mt-0.5">
+                                                                            {item.services.map((svc, sIdx) => (
+                                                                                <p key={sIdx} className="text-[10px] font-bold text-slate-500 uppercase italic">
+                                                                                    - {svc.service || 'General Service'}
+                                                                                </p>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                             ))}
                                                         {(!order.items || order.items.filter(item => item.type !== 'part_usage' && !item.name?.includes('Used:')).length === 0) && (
                                                             <p className="text-sm font-bold text-slate-500 uppercase tracking-tight">• Service Transaction</p>
