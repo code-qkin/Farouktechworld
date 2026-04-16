@@ -36,47 +36,94 @@ html {
     animation: slideIn 0.4s ease-out forwards;
 }
 
-/* 🔥 PRINT STYLES - FIXES CUT OFF RECEIPTS 🔥 */
+/* 🔥 PRINT STYLES - ELIMINATES BLANK PAGES & SUPPORTS MULTI-PAGE 🔥 */
 @media print {
-    /* Hide everything by default */
-    body * {
-        visibility: hidden;
-    }
-
-    /* Make the receipt/payslip container visible */
-    .printable-receipt,
-    .printable-receipt *,
-    .printable-payslip,
-    .printable-payslip * {
-        visibility: visible;
-    }
-
-    /* Position the receipt at the very top left of the page */
-    .printable-receipt, .printable-payslip {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100% !important;
-        max-width: 100% !important;
+    /* 1. Reset root documents to allow natural flow */
+    html, body {
         height: auto !important;
-        max-height: none !important;
         overflow: visible !important;
         margin: 0 !important;
         padding: 0 !important;
-        box-shadow: none !important;
-        border: none !important;
         background: white !important;
     }
 
-    /* Ensure close buttons and other UI elements are hidden */
-    .print\:hidden,
-    button {
+    /* 2. Hide everything by default using visibility to maintain flow structure */
+    body * {
+        visibility: hidden !important;
+    }
+
+    /* 3. Show the receipt and its ancestors so it can render in the document flow */
+    /* This avoids 'position: absolute' clipping issues */
+    .printable-receipt,
+    .printable-receipt *,
+    .fixed,
+    .inset-0,
+    .bg-black\/80,
+    .no-scrollbar-print,
+    .my-auto {
+        visibility: visible !important;
+    }
+
+    /* 4. Remove modal-specific constraints from all parent wrappers */
+    .fixed, 
+    .inset-0,
+    .bg-black\/80,
+    .no-scrollbar-print,
+    .my-auto {
+        position: static !important;
+        display: block !important;
+        overflow: visible !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        transform: none !important;
+    }
+
+    /* 5. Style the printable area itself */
+    .printable-receipt {
+        display: block !important;
+        width: 100% !important;
+        padding: 2cm !important; /* Standard print margins */
+        margin: 0 !important;
+        background: white !important;
+    }
+
+    /* 6. Fix Flex/Grid layouts inside the receipt */
+    .printable-receipt .flex {
+        display: flex !important;
+        flex-direction: row !important;
+        justify-content: space-between !important;
+        align-items: flex-start !important;
+    }
+
+    .printable-receipt .grid {
+        display: grid !important;
+        grid-template-columns: repeat(3, 1fr) !important;
+        gap: 20px !important;
+    }
+
+    /* 7. Hide non-print controls */
+    header, 
+    nav, 
+    footer,
+    button,
+    .print\:hidden {
         display: none !important;
     }
-    
-    /* Force color accuracy for badges/headers */
-    * {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
+
+    /* 8. Page styling */
+    @page {
+        size: A4;
+        margin: 0; /* Handled by .printable-receipt padding */
+    }
+
+    /* Avoid breaking elements across pages */
+    tr, .grid, h1, h2 {
+        page-break-inside: avoid;
     }
 }
