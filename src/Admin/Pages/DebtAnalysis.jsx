@@ -426,122 +426,125 @@ const DebtAnalysis = () => {
                     </div>
 
                     {/* Actual Paper Content */}
-                    <div ref={printRef} className="p-10 printable-receipt font-serif text-slate-900 bg-white">
+                    <div ref={printRef} className="p-8 md:p-12 printable-receipt font-sans text-slate-900 bg-white">
                         {/* Letterhead */}
-                        <div className="flex justify-between items-start border-b-4 border-slate-900 pb-8 mb-10" style={{ pageBreakInside: 'avoid' }}>
-                            <div>
-                                <h1 className="text-4xl font-black uppercase tracking-tighter">Farouk Techworld</h1>
-                                <div className="mt-6 text-sm space-y-1 font-sans">
-                                    <p>Anjola House beside Gastab filling station Mokola Ibadan</p>
+                        <div className="flex flex-col md:flex-row justify-between items-start border-b-[6px] border-slate-900 pb-10 mb-12" style={{ pageBreakInside: 'avoid' }}>
+                            <div className="mb-6 md:mb-0">
+                                <h1 className="text-5xl font-black uppercase tracking-tighter text-slate-900">Farouk Techworld</h1>
+                                <div className="mt-6 text-base space-y-2 text-slate-600 font-medium">
+                                    <p className="flex items-center gap-2">Anjola House beside Gastab filling station Mokola Ibadan</p>
                                     <p>Phone: +234 812 345 6789</p>
                                     <p>Email: farouktechworld@gmail.com</p>
                                 </div>
                             </div>
-                            <div className="text-right">
-                                <h2 className="text-3xl font-black text-slate-400 uppercase tracking-tighter">Statement</h2>
-                                <p className="text-sm font-bold text-slate-400 mt-1 font-sans">Date: {new Date().toLocaleDateString()}</p>
-                                <div className="mt-10 p-4 border-2 border-slate-100 rounded-xl inline-block bg-slate-50 text-left min-w-[200px]">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1 font-sans">Account For:</p>
-                                    <p className="text-xl font-black uppercase tracking-tight leading-none">{customer?.name || 'Walk-in Client'}</p>
-                                    <p className="text-sm font-bold text-slate-600 mt-1 font-sans">{customer?.phone || 'No Phone Registered'}</p>
+                            <div className="text-left md:text-right w-full md:w-auto">
+                                <h2 className="text-4xl font-black text-slate-300 uppercase tracking-tighter leading-none mb-2">Statement</h2>
+                                <p className="text-lg font-bold text-slate-500 mb-8">Date: {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                                <div className="p-6 border-2 border-slate-200 rounded-2xl bg-slate-50 text-left min-w-[280px]">
+                                    <p className="text-xs font-black text-slate-400 uppercase mb-2 tracking-widest">Account Holder</p>
+                                    <p className="text-2xl font-black uppercase tracking-tight text-slate-900">{customer?.name || 'Walk-in Client'}</p>
+                                    <p className="text-lg font-bold text-slate-600 mt-1">{customer?.phone || 'No Phone Registered'}</p>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Summary Cards */}
-                        <div className="grid grid-cols-3 gap-6 mb-12 font-sans" style={{ pageBreakInside: 'avoid' }}>
-                            <div className="p-5 border-2 border-slate-100 rounded-2xl">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Total Billed</p>
-                                <p className="text-2xl font-black text-slate-900">{formatCurrency(summary.totalBilled || 0)}</p>
+                        {/* Summary Section - Bold & High Contrast */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16" style={{ pageBreakInside: 'avoid' }}>
+                            <div className="p-8 bg-white border-2 border-slate-100 rounded-3xl shadow-sm">
+                                <p className="text-xs font-black text-slate-400 uppercase mb-2 tracking-widest">Total Billed</p>
+                                <p className="text-3xl font-black text-slate-900">{formatCurrency(summary.totalBilled || 0)}</p>
                             </div>
-                            <div className="p-5 border-2 border-slate-100 rounded-2xl">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Total Paid</p>
-                                <p className="text-2xl font-black text-green-600">{formatCurrency(summary.totalPaid || 0)}</p>
+                            <div className="p-8 bg-green-50/50 border-2 border-green-100 rounded-3xl shadow-sm">
+                                <p className="text-xs font-black text-green-600/60 uppercase mb-2 tracking-widest">Total Paid</p>
+                                <p className="text-3xl font-black text-green-700">{formatCurrency(summary.totalPaid || 0)}</p>
                             </div>
-                            <div className="p-5 border-2 border-slate-900 rounded-2xl bg-slate-900 text-white">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Total Balance</p>
-                                <p className="text-2xl font-black">{formatCurrency(summary.netBalance || 0)}</p>
+                            <div className="p-8 bg-slate-900 rounded-3xl shadow-xl shadow-slate-200">
+                                <p className="text-xs font-black text-slate-400 uppercase mb-2 tracking-widest">Outstanding Balance</p>
+                                <p className="text-3xl font-black text-white">{formatCurrency(summary.netBalance || 0)}</p>
                             </div>
                         </div>
 
-                        {/* Transaction Table */}
-                        <table className="w-full text-left mb-10 border-collapse">
-                            <thead>
-                                <tr className="border-b-2 border-slate-900 text-[10px] font-black uppercase tracking-widest text-slate-400 font-sans">
-                                    <th className="py-4 px-2">Date</th>
-                                    <th className="py-4 px-2">Transaction Details</th>
-                                    <th className="py-4 px-2 text-right">Debit (₦)</th>
-                                    <th className="py-4 px-2 text-right">Credit (₦)</th>
-                                    <th className="py-4 px-2 text-right">Balance (₦)</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {orders.map(order => (
-                                    <React.Fragment key={order.id}>
-                                        {/* Order Main Row */}
-                                        <tr className="bg-slate-50/30" style={{ pageBreakInside: 'avoid' }}>
-                                            <td className="py-4 px-2 text-xs font-bold font-sans">{order.date ? order.date.toLocaleDateString() : 'N/A'}</td>
-                                            <td className="py-4 px-2">
-                                                <p className="font-black text-sm tracking-tight">TICKET: {order.ticketId || 'NO_ID'}</p>
-                                                <div className="space-y-1 mt-1">
-                                                    {(order.items || []).map((item, idx) => (
-                                                        <p key={idx} className="text-[10px] font-medium text-slate-500 font-sans italic">
-                                                            {item.type === 'repair' ? 
-                                                                `• ${item.deviceModel || 'Unknown Device'} Repair` : 
-                                                                `• ${item.name || 'Unknown Product'} (x${item.qty || 1})`
-                                                            }
-                                                        </p>
-                                                    ))}
-                                                    {(!order.items || order.items.length === 0) && (
-                                                        <p className="text-[10px] font-medium text-slate-500 font-sans italic">• Service Transaction</p>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="py-4 px-2 text-right font-black text-sm">{formatCurrency(order.totalCost || 0)}</td>
-                                            <td className="py-4 px-2 text-right font-bold text-sm text-slate-200">-</td>
-                                            <td className="py-4 px-2 text-right font-black text-sm">{formatCurrency(order.totalCost || 0)}</td>
-                                        </tr>
-                                        {/* Payment History */}
-                                        {(order.paymentHistory || []).map((p, idx) => (
-                                            <tr key={`${order.id}-pay-${idx}`} className="text-xs" style={{ pageBreakInside: 'avoid' }}>
-                                                <td className="py-3 px-2 text-[10px] text-green-600 font-bold font-sans italic">{p.date ? new Date(p.date).toLocaleDateString() : 'N/A'}</td>
-                                                <td className="py-3 px-6 text-green-700 font-bold font-sans">
-                                                    Payment Received [{p.method || 'General'}]
+                        {/* Transaction Table - Clean & Wide */}
+                        <div className="mb-16">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="border-b-4 border-slate-900 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
+                                        <th className="py-6 px-4">Date</th>
+                                        <th className="py-6 px-4">Transaction Details</th>
+                                        <th className="py-6 px-4 text-right">Debit</th>
+                                        <th className="py-6 px-4 text-right">Credit</th>
+                                        <th className="py-6 px-4 text-right">Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="text-base">
+                                    {orders.map(order => (
+                                        <React.Fragment key={order.id}>
+                                            {/* Order Entry */}
+                                            <tr className="bg-slate-50/50" style={{ pageBreakInside: 'avoid' }}>
+                                                <td className="py-8 px-4 font-bold text-slate-500 align-top">{order.date ? order.date.toLocaleDateString() : 'N/A'}</td>
+                                                <td className="py-8 px-4 align-top">
+                                                    <p className="font-black text-lg tracking-tight text-slate-900 mb-2">TICKET: {order.ticketId || 'NO_ID'}</p>
+                                                    <div className="space-y-1">
+                                                        {(order.items || []).map((item, idx) => (
+                                                            <p key={idx} className="text-sm font-bold text-slate-500 uppercase tracking-tight">
+                                                                {item.type === 'repair' ? 
+                                                                    `• ${item.deviceModel || 'Unknown Device'} Repair` : 
+                                                                    `• ${item.name || 'Unknown Product'} (x${item.qty || 1})`
+                                                                }
+                                                            </p>
+                                                        ))}
+                                                        {(!order.items || order.items.length === 0) && (
+                                                            <p className="text-sm font-bold text-slate-500 uppercase tracking-tight">• Service Transaction</p>
+                                                        )}
+                                                    </div>
                                                 </td>
-                                                <td className="text-right text-slate-200">-</td>
-                                                <td className="py-3 px-2 text-right font-black text-green-600">{formatCurrency(p.amount || 0)}</td>
-                                                <td className="py-3 px-2 text-right font-black text-green-700">
-                                                    {formatCurrency((order.totalCost || 0) - (order.paymentHistory.slice(0, idx+1).reduce((s, pay) => s + (pay.amount || 0), 0)))}
-                                                </td>
+                                                <td className="py-8 px-4 text-right font-black text-lg text-slate-900 align-top">{formatCurrency(order.totalCost || 0)}</td>
+                                                <td className="py-8 px-4 text-right font-bold text-slate-200 align-top">-</td>
+                                                <td className="py-8 px-4 text-right font-black text-lg text-slate-900 align-top">{formatCurrency(order.totalCost || 0)}</td>
                                             </tr>
-                                        ))}
-                                        {/* Fallback Initial Payment */}
-                                        {(!order.paymentHistory || order.paymentHistory.length === 0) && order.amountPaid > 0 && (
-                                            <tr className="text-xs" style={{ pageBreakInside: 'avoid' }}>
-                                                <td className="py-3 px-2 text-[10px] text-green-600 font-bold font-sans italic">{order.date ? order.date.toLocaleDateString() : 'N/A'}</td>
-                                                <td className="py-3 px-6 text-green-700 font-bold font-sans">Initial Payment Received</td>
-                                                <td className="text-right text-slate-200">-</td>
-                                                <td className="py-3 px-2 text-right font-black text-green-600">{formatCurrency(order.amountPaid || 0)}</td>
-                                                <td className="py-3 px-2 text-right font-black text-green-700">{formatCurrency(order.balance || 0)}</td>
-                                            </tr>
-                                        )}
-                                    </React.Fragment>
-                                ))}
-                            </tbody>
-                        </table>
+                                            {/* Payments for this order */}
+                                            {(order.paymentHistory || []).map((p, idx) => (
+                                                <tr key={`${order.id}-pay-${idx}`} className="border-b border-slate-100" style={{ pageBreakInside: 'avoid' }}>
+                                                    <td className="py-6 px-4 text-sm text-green-600 font-black italic">{p.date ? new Date(p.date).toLocaleDateString() : 'N/A'}</td>
+                                                    <td className="py-6 px-8 text-green-700 font-black uppercase text-sm tracking-wide">
+                                                        Payment Received — {p.method || 'General'}
+                                                    </td>
+                                                    <td className="py-6 px-4 text-right text-slate-200 font-bold">-</td>
+                                                    <td className="py-6 px-4 text-right font-black text-green-600 text-lg">{formatCurrency(p.amount || 0)}</td>
+                                                    <td className="py-6 px-4 text-right font-black text-slate-500 text-lg">
+                                                        {formatCurrency((order.totalCost || 0) - (order.paymentHistory.slice(0, idx+1).reduce((s, pay) => s + (pay.amount || 0), 0)))}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {/* Initial payment fallback */}
+                                            {(!order.paymentHistory || order.paymentHistory.length === 0) && order.amountPaid > 0 && (
+                                                <tr className="border-b border-slate-100" style={{ pageBreakInside: 'avoid' }}>
+                                                    <td className="py-6 px-4 text-sm text-green-600 font-black italic">{order.date ? order.date.toLocaleDateString() : 'N/A'}</td>
+                                                    <td className="py-6 px-8 text-green-700 font-black uppercase text-sm tracking-wide">Initial Payment Received</td>
+                                                    <td className="py-6 px-4 text-right text-slate-200 font-bold">-</td>
+                                                    <td className="py-6 px-4 text-right font-black text-green-600 text-lg">{formatCurrency(order.amountPaid || 0)}</td>
+                                                    <td className="py-6 px-4 text-right font-black text-slate-500 text-lg">{formatCurrency(order.balance || 0)}</td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
 
                         {/* Footer Notes */}
-                        <div className="mt-20 border-t pt-8 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest space-y-2 font-sans" style={{ pageBreakInside: 'avoid' }}>
-                            <p>This is a formal computer generated statement of account.</p>
-                            <p>Please report any discrepancies to management within 48 hours.</p>
-                            <div className="flex justify-center gap-12 mt-12 text-slate-900 border-t border-slate-50 pt-8">
+                        <div className="mt-32 border-t-2 border-slate-100 pt-12 text-center" style={{ pageBreakInside: 'avoid' }}>
+                            <p className="text-xs font-black text-slate-400 uppercase tracking-[0.3em] mb-4">Official Computer Generated Statement</p>
+                            <p className="text-sm font-bold text-slate-500 max-w-2xl mx-auto leading-relaxed">This is a formal record of your transactions. Please ensure all payments are verified against your receipts. Report any discrepancies within 48 hours.</p>
+                            
+                            <div className="flex flex-col md:flex-row justify-center gap-16 mt-24 text-slate-900">
                                 <div className="text-center">
-                                    <div className="w-32 border-b border-slate-300 h-8 mb-2 mx-auto"></div>
-                                    <p>Authorized Signature</p>
+                                    <div className="w-48 border-b-2 border-slate-900 h-12 mb-4 mx-auto"></div>
+                                    <p className="text-xs font-black uppercase tracking-widest">Authorized Signature</p>
                                 </div>
                                 <div className="text-center">
-                                    <div className="w-32 border-b border-slate-300 h-8 mb-2 mx-auto"></div>
-                                    <p>Customer Signature</p>
+                                    <div className="w-48 border-b-2 border-slate-900 h-12 mb-4 mx-auto"></div>
+                                    <p className="text-xs font-black uppercase tracking-widest">Customer Acknowledgement</p>
                                 </div>
                             </div>
                         </div>
