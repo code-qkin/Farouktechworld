@@ -379,15 +379,10 @@ const DebtAnalysis = () => {
             try {
                 const element = printRef.current;
                 const opt = {
-                    margin: [15, 15, 15, 15],
+                    margin: [10, 10, 10, 10],
                     filename: `Statement_${customer?.name?.replace(/\s+/g, '_') || 'Customer'}.pdf`,
                     image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { 
-                        scale: 2, 
-                        useCORS: true, 
-                        letterRendering: true,
-                        logging: false
-                    },
+                    html2canvas: { scale: 2, useCORS: true, letterRendering: true, logging: false },
                     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                     pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
                 };
@@ -404,12 +399,12 @@ const DebtAnalysis = () => {
         
         return (
             <div className="fixed inset-0 bg-black/80 z-[60] flex justify-center p-4 overflow-y-auto no-scrollbar">
-                <div className="bg-white w-full max-w-4xl min-h-[90vh] rounded-lg shadow-2xl relative flex flex-col no-scrollbar-print my-auto">
+                <div className="bg-white w-full max-w-4xl h-fit rounded-lg shadow-2xl relative flex flex-col no-scrollbar-print my-auto">
                     {/* Header Controls */}
                     <div className="p-4 border-b flex justify-between items-center print:hidden bg-slate-50 rounded-t-lg">
                         <div className="flex flex-col">
                             <h3 className="font-bold text-slate-700 flex items-center gap-2"><FileText size={18}/> Statement Preview</h3>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase">View and download your statement</p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">Optimized for A4 & Mobile</p>
                         </div>
                         <div className="flex gap-2">
                             <button 
@@ -426,119 +421,96 @@ const DebtAnalysis = () => {
                     </div>
 
                     {/* Actual Paper Content */}
-                    <div ref={printRef} className="p-8 md:p-12 printable-receipt font-sans text-slate-900 bg-white">
+                    <div ref={printRef} className="p-4 md:p-8 printable-receipt font-sans text-slate-900 bg-white">
                         {/* Letterhead */}
-                        <div className="flex flex-col md:flex-row justify-between items-start border-b-[6px] border-slate-900 pb-10 mb-12" style={{ pageBreakInside: 'avoid' }}>
-                            <div className="mb-6 md:mb-0">
-                                <h1 className="text-5xl font-black uppercase tracking-tighter text-slate-900">Farouk Techworld</h1>
-                                <div className="mt-6 text-base space-y-2 text-slate-600 font-medium">
-                                    <p className="flex items-center gap-2">Anjola House beside Gastab filling station Mokola Ibadan</p>
+                        <div className="flex flex-col md:flex-row justify-between items-start border-b-2 border-slate-900 pb-4 mb-6" style={{ pageBreakInside: 'avoid' }}>
+                            <div className="mb-4 md:mb-0">
+                                <h1 className="text-2xl font-black uppercase tracking-tighter text-slate-900">Farouk Techworld</h1>
+                                <div className="mt-2 text-xs space-y-0.5 text-slate-500 font-bold uppercase">
+                                    <p>Anjola House beside Gastab filling station Mokola Ibadan</p>
                                     <p>Phone: +234 812 345 6789</p>
                                     <p>Email: farouktechworld@gmail.com</p>
                                 </div>
                             </div>
                             <div className="text-left md:text-right w-full md:w-auto">
-                                <h2 className="text-4xl font-black text-slate-300 uppercase tracking-tighter leading-none mb-2">Statement</h2>
-                                <p className="text-lg font-bold text-slate-500 mb-8">Date: {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                                <div className="p-6 border-2 border-slate-200 rounded-2xl bg-slate-50 text-left min-w-[280px]">
-                                    <p className="text-xs font-black text-slate-400 uppercase mb-2 tracking-widest">Account Holder</p>
-                                    <p className="text-2xl font-black uppercase tracking-tight text-slate-900">{customer?.name || 'Walk-in Client'}</p>
-                                    <p className="text-lg font-bold text-slate-600 mt-1">{customer?.phone || 'No Phone Registered'}</p>
+                                <h2 className="text-xl font-black text-slate-300 uppercase tracking-widest leading-none mb-1">Statement</h2>
+                                <p className="text-[10px] font-black text-slate-400 mb-4 uppercase">Date: {new Date().toLocaleDateString('en-GB')}</p>
+                                <div className="text-left">
+                                    <p className="text-lg font-black uppercase tracking-tight text-slate-900">{customer?.name || 'Walk-in Client'}</p>
+                                    <p className="text-xs font-bold text-slate-500">{customer?.phone || 'No Phone Registered'}</p>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Summary Section - Bold & High Contrast */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16" style={{ pageBreakInside: 'avoid' }}>
-                            <div className="p-8 bg-white border-2 border-slate-100 rounded-3xl shadow-sm">
-                                <p className="text-xs font-black text-slate-400 uppercase mb-2 tracking-widest">Total Billed</p>
-                                <p className="text-3xl font-black text-slate-900">{formatCurrency(summary.totalBilled || 0)}</p>
+                        {/* Summary Section */}
+                        <div className="grid grid-cols-3 gap-3 mb-8" style={{ pageBreakInside: 'avoid' }}>
+                            <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                                <p className="text-[8px] font-black text-slate-400 uppercase mb-1 tracking-widest">Billed</p>
+                                <p className="text-base font-black text-slate-900">{formatCurrency(summary.totalBilled || 0)}</p>
                             </div>
-                            <div className="p-8 bg-green-50/50 border-2 border-green-100 rounded-3xl shadow-sm">
-                                <p className="text-xs font-black text-green-600/60 uppercase mb-2 tracking-widest">Total Paid</p>
-                                <p className="text-3xl font-black text-green-700">{formatCurrency(summary.totalPaid || 0)}</p>
+                            <div className="p-4 bg-green-50/30 border border-green-100 rounded-xl">
+                                <p className="text-[8px] font-black text-green-600/60 uppercase mb-1 tracking-widest">Paid</p>
+                                <p className="text-base font-black text-green-700">{formatCurrency(summary.totalPaid || 0)}</p>
                             </div>
-                            <div className="p-8 bg-slate-900 rounded-3xl shadow-xl shadow-slate-200">
-                                <p className="text-xs font-black text-slate-400 uppercase mb-2 tracking-widest">Outstanding Balance</p>
-                                <p className="text-3xl font-black text-white">{formatCurrency(summary.netBalance || 0)}</p>
+                            <div className="p-4 bg-slate-900 rounded-xl shadow-lg shadow-slate-100 text-white">
+                                <p className="text-[8px] font-black text-slate-400 uppercase mb-1 tracking-widest">Balance</p>
+                                <p className="text-base font-black">{formatCurrency(summary.netBalance || 0)}</p>
                             </div>
                         </div>
 
-                        {/* Transaction Table - Clean & Wide */}
-                        <div className="mb-16">
+                        {/* Transaction Table */}
+                        <div className="mb-8 overflow-x-hidden">
                             <table className="w-full text-left border-collapse">
                                 <thead>
-                                    <tr className="border-b-4 border-slate-900 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
-                                        <th className="py-6 px-4">Date</th>
-                                        <th className="py-6 px-4">Transaction Details</th>
-                                        <th className="py-6 px-4 text-right">Debit</th>
-                                        <th className="py-6 px-4 text-right">Credit</th>
-                                        <th className="py-6 px-4 text-right">Balance</th>
+                                    <tr className="border-b border-slate-900 text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">
+                                        <th className="py-2 px-1 w-20">Date</th>
+                                        <th className="py-2 px-1">Details</th>
+                                        <th className="py-2 px-1 text-right w-24">Debit</th>
+                                        <th className="py-2 px-1 text-right w-24">Credit</th>
+                                        <th className="py-2 px-1 text-right w-24">Balance</th>
                                     </tr>
                                 </thead>
-                                <tbody className="text-base">
+                                <tbody className="text-[11px]">
                                     {orders.map(order => (
                                         <React.Fragment key={order.id}>
-                                            {/* Order Entry */}
-                                            <tr className="bg-slate-50/50" style={{ pageBreakInside: 'avoid' }}>
-                                                <td className="py-8 px-4 font-bold text-slate-500 align-top">{order.date ? order.date.toLocaleDateString() : 'N/A'}</td>
-                                                <td className="py-8 px-4 align-top">
-                                                    <p className="font-black text-lg tracking-tight text-slate-900 mb-2">TICKET: {order.ticketId || 'NO_ID'}</p>
-                                                    <div className="space-y-1">
+                                            <tr className="border-b border-slate-50" style={{ pageBreakInside: 'avoid' }}>
+                                                <td className="py-3 px-1 font-bold text-slate-400 align-top">{order.date ? order.date.toLocaleDateString() : 'N/A'}</td>
+                                                <td className="py-3 px-1 align-top">
+                                                    <p className="font-black text-slate-900 mb-0.5">TICKET: {order.ticketId || 'NO_ID'}</p>
+                                                    <div className="space-y-0.5">
                                                         {(order.items || [])
                                                             .filter(item => item.type !== 'part_usage' && !item.name?.includes('Used:'))
                                                             .map((item, idx) => (
-                                                                <div key={idx} className="mb-2">
-                                                                    <p className="text-sm font-black text-slate-900 uppercase tracking-tight">
-                                                                        {item.type === 'repair' ? 
-                                                                            `• ${item.deviceModel || 'Unknown Device'} Repair` : 
-                                                                            `• ${item.name || 'Unknown Product'} (x${item.qty || 1})`
-                                                                        }
+                                                                <div key={idx}>
+                                                                    <p className="text-[10px] font-bold text-slate-600 uppercase">
+                                                                        {item.type === 'repair' ? `• ${item.deviceModel || 'Unknown'} Repair` : `• ${item.name || 'Unknown'} (x${item.qty || 1})`}
                                                                     </p>
                                                                     {item.type === 'repair' && item.services && item.services.length > 0 && (
-                                                                        <div className="ml-4 space-y-0.5 mt-0.5">
+                                                                        <div className="ml-2">
                                                                             {item.services.map((svc, sIdx) => (
-                                                                                <p key={sIdx} className="text-[10px] font-bold text-slate-500 uppercase italic">
-                                                                                    - {svc.service || 'General Service'}
-                                                                                </p>
+                                                                                <p key={sIdx} className="text-[8px] font-medium text-slate-400 uppercase italic">- {svc.service}</p>
                                                                             ))}
                                                                         </div>
                                                                     )}
                                                                 </div>
                                                             ))}
-                                                        {(!order.items || order.items.filter(item => item.type !== 'part_usage' && !item.name?.includes('Used:')).length === 0) && (
-                                                            <p className="text-sm font-bold text-slate-500 uppercase tracking-tight">• Service Transaction</p>
-                                                        )}
                                                     </div>
                                                 </td>
-                                                <td className="py-8 px-4 text-right font-black text-lg text-slate-900 align-top">{formatCurrency(order.totalCost || 0)}</td>
-                                                <td className="py-8 px-4 text-right font-bold text-slate-200 align-top">-</td>
-                                                <td className="py-8 px-4 text-right font-black text-lg text-slate-900 align-top">{formatCurrency(order.totalCost || 0)}</td>
+                                                <td className="py-3 px-1 text-right font-black text-slate-900 align-top">{formatCurrency(order.totalCost || 0)}</td>
+                                                <td className="py-3 px-1 text-right text-slate-100 align-top">-</td>
+                                                <td className="py-3 px-1 text-right font-black text-slate-900 align-top">{formatCurrency(order.totalCost || 0)}</td>
                                             </tr>
-                                            {/* Payments for this order */}
                                             {(order.paymentHistory || []).map((p, idx) => (
-                                                <tr key={`${order.id}-pay-${idx}`} className="border-b border-slate-100" style={{ pageBreakInside: 'avoid' }}>
-                                                    <td className="py-6 px-4 text-sm text-green-600 font-black italic">{p.date ? new Date(p.date).toLocaleDateString() : 'N/A'}</td>
-                                                    <td className="py-6 px-8 text-green-700 font-black uppercase text-sm tracking-wide">
-                                                        Payment Received — {p.method || 'General'}
-                                                    </td>
-                                                    <td className="py-6 px-4 text-right text-slate-200 font-bold">-</td>
-                                                    <td className="py-6 px-4 text-right font-black text-green-600 text-lg">{formatCurrency(p.amount || 0)}</td>
-                                                    <td className="py-6 px-4 text-right font-black text-slate-500 text-lg">
+                                                <tr key={`${order.id}-pay-${idx}`} className="border-b border-slate-50/50" style={{ pageBreakInside: 'avoid' }}>
+                                                    <td className="py-2 px-1 text-[8px] text-green-500 font-bold italic">{p.date ? new Date(p.date).toLocaleDateString() : 'N/A'}</td>
+                                                    <td className="py-2 px-4 text-green-600 font-bold uppercase text-[9px]">Payment Received [{p.method || 'Cash'}]</td>
+                                                    <td className="py-2 px-1 text-right text-slate-50">-</td>
+                                                    <td className="py-2 px-1 text-right font-black text-green-600">{formatCurrency(p.amount || 0)}</td>
+                                                    <td className="py-2 px-1 text-right font-black text-slate-400">
                                                         {formatCurrency((order.totalCost || 0) - (order.paymentHistory.slice(0, idx+1).reduce((s, pay) => s + (pay.amount || 0), 0)))}
                                                     </td>
                                                 </tr>
                                             ))}
-                                            {/* Initial payment fallback */}
-                                            {(!order.paymentHistory || order.paymentHistory.length === 0) && order.amountPaid > 0 && (
-                                                <tr className="border-b border-slate-100" style={{ pageBreakInside: 'avoid' }}>
-                                                    <td className="py-6 px-4 text-sm text-green-600 font-black italic">{order.date ? order.date.toLocaleDateString() : 'N/A'}</td>
-                                                    <td className="py-6 px-8 text-green-700 font-black uppercase text-sm tracking-wide">Initial Payment Received</td>
-                                                    <td className="py-6 px-4 text-right text-slate-200 font-bold">-</td>
-                                                    <td className="py-6 px-4 text-right font-black text-green-600 text-lg">{formatCurrency(order.amountPaid || 0)}</td>
-                                                    <td className="py-6 px-4 text-right font-black text-slate-500 text-lg">{formatCurrency(order.balance || 0)}</td>
-                                                </tr>
-                                            )}
                                         </React.Fragment>
                                     ))}
                                 </tbody>
@@ -546,18 +518,16 @@ const DebtAnalysis = () => {
                         </div>
 
                         {/* Footer Notes */}
-                        <div className="mt-32 border-t-2 border-slate-100 pt-12 text-center" style={{ pageBreakInside: 'avoid' }}>
-                            <p className="text-xs font-black text-slate-400 uppercase tracking-[0.3em] mb-4">Official Computer Generated Statement</p>
-                            <p className="text-sm font-bold text-slate-500 max-w-2xl mx-auto leading-relaxed">This is a formal record of your transactions. Please ensure all payments are verified against your receipts. Report any discrepancies within 48 hours.</p>
-                            
-                            <div className="flex flex-col md:flex-row justify-center gap-16 mt-24 text-slate-900">
+                        <div className="mt-12 border-t pt-4 text-center" style={{ pageBreakInside: 'avoid' }}>
+                            <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mb-1">Official Statement of Account</p>
+                            <div className="flex flex-row justify-center gap-12 mt-10 text-slate-900">
                                 <div className="text-center">
-                                    <div className="w-48 border-b-2 border-slate-900 h-12 mb-4 mx-auto"></div>
-                                    <p className="text-xs font-black uppercase tracking-widest">Authorized Signature</p>
+                                    <div className="w-24 border-b border-slate-900 h-6 mb-1 mx-auto"></div>
+                                    <p className="text-[7px] font-black uppercase tracking-widest">Authorized</p>
                                 </div>
                                 <div className="text-center">
-                                    <div className="w-48 border-b-2 border-slate-900 h-12 mb-4 mx-auto"></div>
-                                    <p className="text-xs font-black uppercase tracking-widest">Customer Acknowledgement</p>
+                                    <div className="w-24 border-b border-slate-900 h-6 mb-1 mx-auto"></div>
+                                    <p className="text-[7px] font-black uppercase tracking-widest">Customer</p>
                                 </div>
                             </div>
                         </div>
