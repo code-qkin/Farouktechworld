@@ -437,7 +437,6 @@ const DebtAnalysis = () => {
                                 <p className="text-[10px] font-black text-slate-400 mb-4 uppercase">Date: {new Date().toLocaleDateString('en-GB')}</p>
                                 <div className="text-left">
                                     <p className="text-lg font-black uppercase tracking-tight text-slate-900">{customer?.name || 'Walk-in Client'}</p>
-                                    {customer?.phone && <p className="text-xs font-bold text-slate-500">{customer.phone}</p>}
                                 </div>
                             </div>
                         </div>
