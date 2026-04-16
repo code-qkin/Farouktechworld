@@ -489,7 +489,7 @@ const DebtAnalysis = () => {
                                                             <p key={idx} className="text-sm font-bold text-slate-500 uppercase tracking-tight">
                                                                 {item.type === 'repair' ? 
                                                                     `• ${item.deviceModel || 'Unknown Device'} Repair` : 
-                                                                    `• ${item.name || 'Unknown Product'} (x${item.qty || 1})`
+                                                                    `• ${(item.name || 'Unknown Product').replace('Used: ', '')} (x${item.qty || 1})`
                                                                 }
                                                             </p>
                                                         ))}
