@@ -36,7 +36,7 @@ html {
     animation: slideIn 0.4s ease-out forwards;
 }
 
-/* 🔥 PRINT STYLES - FIXES BLANK PAGES & SUPPORTS MULTI-PAGE 🔥 */
+/* 🔥 PRINT STYLES - FIXES BLANK PAGES & ALIGNMENT 🔥 */
 @media print {
     /* 1. Reset root documents */
     html, body {
@@ -47,88 +47,63 @@ html {
         background: white !important;
     }
 
-    /* 2. Hide everything by default using visibility to maintain structural flow */
+    /* 2. Hide everything by default using visibility */
     body * {
-        visibility: hidden !important;
+        visibility: hidden;
     }
 
-    /* 3. Show the receipt and its ancestors */
+    /* 3. Show only the receipt and its content */
     .printable-receipt,
-    .printable-receipt *,
-    .fixed,
-    .inset-0,
-    .bg-black\/80,
-    .no-scrollbar-print,
-    .my-auto {
+    .printable-receipt * {
         visibility: visible !important;
-        opacity: 1 !important;
     }
 
-    /* 4. CRITICAL: Remove layout constraints and space-taking hidden elements */
+    /* 4. CRITICAL: Remove layout constraints from modal parents */
     .fixed, 
     .inset-0,
     .bg-black\/80,
     .no-scrollbar-print,
     .my-auto {
+        visibility: visible !important;
         position: static !important;
         display: block !important;
         overflow: visible !important;
         height: auto !important;
-        min-height: 0 !important;
         max-height: none !important;
         background: transparent !important;
-        border: none !important;
         box-shadow: none !important;
+        border: none !important;
+        transform: none !important;
         margin: 0 !important;
         padding: 0 !important;
-        transform: none !important;
     }
 
-    /* 5. Force the printable area to the top of the document */
+    /* 5. Force the receipt to the very top of the page */
     .printable-receipt {
         position: absolute !important;
         top: 0 !important;
         left: 0 !important;
-        display: block !important;
         width: 100% !important;
-        padding: 1cm !important;
-        margin: 0 !important;
+        display: block !important;
         background: white !important;
-        overflow: visible !important;
-        height: auto !important;
+        margin: 0 !important;
+        padding: 1cm !important;
     }
 
-    /* 6. Fix internal layout for flex/grid items in receipts */
-    .printable-receipt .flex {
-        display: flex !important;
-    }
-    
-    .printable-receipt .grid {
-        display: grid !important;
-    }
-
-    /* 7. Aggressively hide non-print UI to clear space */
-    header, 
-    nav, 
-    aside,
-    footer,
-    button,
-    .no-print,
-    .print\:hidden {
+    /* 6. Aggressively remove sidebar/header space */
+    aside, header, nav, footer, .no-print, .print\:hidden, button {
         display: none !important;
         height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
+        width: 0 !important;
     }
 
-    /* 8. Page styling */
     @page {
+        margin: 0;
         size: auto;
-        margin: 1cm;
     }
 
     /* Avoid breaking elements across pages */
-    tr, .grid, h1, h2, .p-8 {
+    tr, .grid, h1, h2 {
         page-break-inside: avoid;
     }
 }
