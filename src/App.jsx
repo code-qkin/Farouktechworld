@@ -16,7 +16,6 @@ import UserManagement from './Admin/Pages/UserManagement';
 import StoreInventory from './Admin/Pages/StoreInventory';
 import CustomerManagement from './Admin/Pages/CustomerManagement';
 import CustomerProfile from './Admin/Pages/CustomerProfile';
-// import CompleteSignupPage from './Admin/Pages/CompleteSignUp';
 import OrderDetails from './Admin/Pages/OrderDetails';
 import Settings from './Admin/Components/Settings';
 import PerformancePage from './Admin/Pages/PerformancePage';
@@ -54,7 +53,7 @@ const router = createBrowserRouter(
      
       <Route path="admin">
         <Route path="login" element={<LoginPage />} />
-       <Route path="register" element={<SignUp />} />
+        <Route path="register" element={<SignUp />} />
         <Route element={<AdminAuthGuard />}>
           <Route path="system-reset" element={<SystemReset />} />
           <Route element={<AdminLayout />}>

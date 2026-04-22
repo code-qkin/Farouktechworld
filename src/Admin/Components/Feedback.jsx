@@ -15,13 +15,15 @@ export const Toast = ({ message, type = 'success', onClose }) => {
   const styles = {
     success: 'bg-green-100 text-green-800 border-green-200',
     error: 'bg-red-100 text-red-800 border-red-200',
-    info: 'bg-blue-100 text-blue-800 border-blue-200'
+    info: 'bg-blue-100 text-blue-800 border-blue-200',
+    warning: 'bg-yellow-100 text-yellow-800 border-yellow-200'
   };
 
   const Icons = {
     success: CheckCircle,
     error: AlertTriangle,
-    info: Info
+    info: Info,
+    warning: AlertTriangle
   };
 
   const Icon = Icons[type] || Info;
@@ -82,26 +84,34 @@ export const PromptModal = ({ isOpen, title, message, max, onConfirm, onCancel }
         setValue("1"); // Reset
     };
 
-    return (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-fade-in-up">
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{title}</h3>
-                <p className="text-gray-500 text-sm mb-4">{message}</p>
-                
-                <input 
-                    type="number" 
-                    autoFocus
-                    className="w-full p-3 border-2 border-gray-200 rounded-xl text-xl font-bold text-center mb-6 focus:border-purple-500 outline-none"
-                    value={value}
-                    onChange={e => setValue(e.target.value)}
-                    min="1"
-                    max={max}
-                />
+// --- 4. STATUS MODAL (Alert/Information) ---
+export const StatusModal = ({ isOpen, title, message, type = 'success', onConfirm, confirmText = "Got it!" }) => {
+    if (!isOpen) return null;
 
-                <div className="flex gap-3">
-                    <button onClick={onCancel} className="flex-1 py-3 rounded-xl font-bold text-gray-500 hover:bg-gray-100">Cancel</button>
-                    <button onClick={handleSubmit} className="flex-1 py-3 rounded-xl font-bold bg-purple-600 text-white hover:bg-purple-700">Confirm</button>
+    const colors = {
+        success: { bg: 'bg-green-100', text: 'text-green-600', button: 'bg-green-600', icon: CheckCircle },
+        error: { bg: 'bg-red-100', text: 'text-red-600', button: 'bg-red-600', icon: AlertTriangle },
+        info: { bg: 'bg-blue-100', text: 'text-blue-600', button: 'bg-blue-600', icon: Info },
+        warning: { bg: 'bg-yellow-100', text: 'text-yellow-600', button: 'bg-yellow-600', icon: AlertTriangle }
+    };
+
+    const config = colors[type] || colors.success;
+    const Icon = config.icon;
+
+    return (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-8 text-center animate-fade-in-up">
+                <div className={`${config.bg} w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6`}>
+                    <Icon size={40} className={config.text} />
                 </div>
+                <h3 className="text-2xl font-black text-gray-900 mb-2">{title}</h3>
+                <p className="text-gray-500 mb-8 leading-relaxed">{message}</p>
+                <button 
+                    onClick={onConfirm} 
+                    className={`w-full py-4 rounded-xl text-white font-bold text-lg shadow-lg hover:opacity-90 transition ${config.button}`}
+                >
+                    {confirmText}
+                </button>
             </div>
         </div>
     );

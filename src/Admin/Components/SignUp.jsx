@@ -10,12 +10,13 @@ import {
 import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebaseConfig'; 
 import { useNavigate, Link } from 'react-router-dom';
-import { Toast } from '../Components/Feedback';
+import { Toast, StatusModal } from '../Components/Feedback';
 
 const SignupPage = () => {
     const [formData, setFormData] = useState({ name: '', email: '', password: '' });
     const [loading, setLoading] = useState(false);
     const [toast, setToast] = useState({ message: '', type: '' }); 
+    const [statusModal, setStatusModal] = useState({ isOpen: false, title: '', message: '', type: 'success' });
     
     // UI State
     const [showVerification, setShowVerification] = useState(false);
@@ -23,6 +24,17 @@ const SignupPage = () => {
     const [resending, setResending] = useState(false);
 
     const navigate = useNavigate();
+
+    // 🔥 NEW: Detect if user is already logged in but unverified
+    React.useEffect(() => {
+        const unsubscribe = auth.onAuthStateChanged((user) => {
+            if (user && !user.emailVerified) {
+                setShowVerification(true);
+                setFormData(prev => ({ ...prev, email: user.email }));
+            }
+        });
+        return () => unsubscribe();
+    }, []);
 
     // Helper: Create profile (Starts as Unverified)
     const createUserProfile = async (user) => {
@@ -56,12 +68,23 @@ const SignupPage = () => {
             await createUserProfile(user);
 
             // 3. Send Verification
-            try { await sendEmailVerification(user); } catch (e) { console.warn("Email send issue:", e); }
+            try { 
+                await sendEmailVerification(user); 
+                setToast({ message: "Verification link sent!", type: 'success' });
+                setStatusModal({
+                    isOpen: true,
+                    title: "Check Your Email",
+                    message: `We've sent a verification link to ${formData.email}. Please check your inbox (and spam) to activate your account.`,
+                    type: 'success'
+                });
+            } catch (e) { 
+                console.error("❌ [Firebase Auth Error] Full Error Object:", e);
+                console.warn("Email send issue code:", e.code);
+                setToast({ message: `Account created, but verification email failed: ${e.message}`, type: 'error' });
+            }
             
             // 4. SHOW SCREEN (Force this to happen)
             setShowVerification(true);
-            setToast({ message: "Account created! Please verify email.", type: 'success' });
-
         } catch (err) {
             console.error("Signup Error:", err);
 
@@ -155,6 +178,13 @@ const SignupPage = () => {
     return (
         <div className="min-h-screen flex items-center justify-center bg-purple-50 p-4">
             <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: '' })} />
+            <StatusModal 
+                isOpen={statusModal.isOpen} 
+                title={statusModal.title} 
+                message={statusModal.message} 
+                type={statusModal.type} 
+                onConfirm={() => setStatusModal({ ...statusModal, isOpen: false })} 
+            />
 
             <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl border-t-4 border-purple-600">
                 {showVerification ? (

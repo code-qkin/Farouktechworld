@@ -62,7 +62,10 @@ const UserManagement = () => {
     // 1. Pending: Must be verified to show up (Anti-Spam)
     const pendingUsers = useMemo(() => allUsers.filter(u => u.role === 'pending' && u.isVerified), [allUsers]);
     
-    // 2. Active Staff: Show everyone (even if unverified legacy accounts)
+    // 2. Unverified: Logged in but hasn't clicked email link
+    const unverifiedUsers = useMemo(() => allUsers.filter(u => u.role === 'pending' && !u.isVerified), [allUsers]);
+
+    // 3. Active Staff: Show everyone (even if unverified legacy accounts)
     const activeStaff = useMemo(() => allUsers.filter(u => u.role !== 'pending'), [allUsers]);
     
     const existingCEO = useMemo(() => allUsers.find(u => u.role === 'ceo'), [allUsers]);
@@ -336,16 +339,36 @@ const UserManagement = () => {
             {pendingUsers.length > 0 && (
                 <div className="bg-yellow-50 border-l-4 border-yellow-400 p-6 rounded-r-xl shadow-sm animate-in slide-in-from-top-4">
                     <div className="flex items-center gap-3 mb-4">
-                        <UserPlus className="text-yellow-600" size={24} />
+                        <CheckCircle className="text-green-600" size={24} />
                         <div>
-                            <h2 className="text-xl font-bold text-yellow-800">Pending Approvals ({pendingUsers.length})</h2>
-                            <p className="text-sm text-yellow-700">These users are waiting for role assignment.</p>
+                            <h2 className="text-xl font-bold text-yellow-800">Verified & Pending Approval ({pendingUsers.length})</h2>
+                            <p className="text-sm text-yellow-700">These users have verified their email. Assign a role to grant access.</p>
                         </div>
                     </div>
                     <div className="bg-white rounded-lg shadow-sm border border-yellow-200 overflow-hidden">
                         <table className="min-w-full divide-y divide-gray-100">
                             <tbody className="bg-white divide-y divide-gray-100">
                                 {pendingUsers.map(member => <UserRow key={member.id} member={member} />)}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* UNVERIFIED SIGNUPS */}
+            {unverifiedUsers.length > 0 && (
+                <div className="bg-slate-50 border-l-4 border-slate-400 p-6 rounded-r-xl shadow-sm opacity-80">
+                    <div className="flex items-center gap-3 mb-4">
+                        <Mail className="text-slate-500" size={24} />
+                        <div>
+                            <h2 className="text-xl font-bold text-slate-800">Waiting for Verification ({unverifiedUsers.length})</h2>
+                            <p className="text-sm text-slate-600">These users haven't clicked the email link yet.</p>
+                        </div>
+                    </div>
+                    <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                        <table className="min-w-full divide-y divide-gray-100">
+                            <tbody className="bg-white divide-y divide-gray-100">
+                                {unverifiedUsers.map(member => <UserRow key={member.id} member={member} />)}
                             </tbody>
                         </table>
                     </div>

@@ -11,6 +11,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore'; // 🔥 Use setDoc for safer sync
 import { auth, db } from '../../firebaseConfig';
+import { Toast } from '../Components/Feedback'; // 🔥 Added Toast
 
 const ALLOWED_DASHBOARD_ROLES = ['admin', 'secretary', 'worker', 'ceo', 'manager'];
 const googleProvider = new GoogleAuthProvider();
@@ -20,6 +21,7 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState({ message: '', type: '' }); // 🔥 Added Toast State
   
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
@@ -27,6 +29,7 @@ const LoginPage = () => {
 
   const [isUnverified, setIsUnverified] = useState(false);
   const [resendStatus, setResendStatus] = useState({ loading: false, sent: false });
+  const [verifying, setVerifying] = useState(false); // 🔥 Added verifying state
 
   const navigate = useNavigate();
 
@@ -62,7 +65,17 @@ const LoginPage = () => {
           setError("Access Denied: Account pending Admin approval.");
         }
       } else {
-        setError("Account not found. Please contact Admin.");
+        // 🔥 NEW: If doc missing for an authenticated user, create a pending one
+        await setDoc(userDocRef, {
+            uid: user.uid,
+            email: user.email,
+            name: user.displayName || 'Staff Member',
+            role: 'pending',
+            status: 'active',
+            isVerified: user.emailVerified,
+            createdAt: new Date().toISOString()
+        }, { merge: true });
+        setError("Account created! Access Denied: Account pending Admin approval.");
       }
     } catch (dbError) {
       console.error("Role Check Error:", dbError);
@@ -123,11 +136,29 @@ const LoginPage = () => {
           if (auth.currentUser) {
               await sendEmailVerification(auth.currentUser);
               setResendStatus({ loading: false, sent: true });
+              setToast({ message: "Verification link resent!", type: 'success' });
           }
       } catch (e) {
           setError("Failed to resend. Try again later.");
           setResendStatus({ loading: false, sent: false });
       }
+  };
+
+  const handleCheckVerification = async () => {
+    setVerifying(true);
+    try {
+        await auth.currentUser.reload();
+        if (auth.currentUser.emailVerified) {
+            setToast({ message: "Email verified! Checking access...", type: 'success' });
+            await checkUserAccess(auth.currentUser);
+        } else {
+            setToast({ message: "Email not verified yet.", type: 'warning' });
+        }
+    } catch (e) {
+        setToast({ message: "Error refreshing status.", type: 'error' });
+    } finally {
+        setVerifying(false);
+    }
   };
 
   const handleBackToLogin = async () => {
@@ -138,6 +169,8 @@ const LoginPage = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-purple-50 p-4 sm:p-6 relative">
+      <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: '' })} />
+
       {/* Forgot Password Modal */}
       {showForgotModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
@@ -168,6 +201,13 @@ const LoginPage = () => {
                 <h2 className="text-2xl font-extrabold text-slate-900 mb-2">Verify Your Email</h2>
                 <p className="text-sm text-slate-500 mb-6 px-4">We sent a verification link to <strong>{auth.currentUser?.email}</strong>.<br/>Please check your inbox (and spam) to continue.</p>
                 <div className="space-y-3">
+                    <button 
+                        onClick={handleCheckVerification} 
+                        disabled={verifying}
+                        className="w-full bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 transition shadow-md flex justify-center items-center gap-2"
+                    >
+                        {verifying ? <RefreshCw className="animate-spin" size={18}/> : 'I Have Verified'}
+                    </button>
                     <button onClick={handleResendVerification} disabled={resendStatus.loading || resendStatus.sent} className={`w-full flex justify-center items-center gap-2 py-3 px-4 rounded-lg shadow-sm text-sm font-bold text-white transition ${resendStatus.sent ? 'bg-green-600 cursor-default' : 'bg-purple-700 hover:bg-purple-800'}`}>{resendStatus.loading ? 'Sending...' : resendStatus.sent ? 'Link Sent! Check Inbox' : <><RefreshCw size={16}/> Resend Link</>}</button>
                     <button onClick={handleBackToLogin} className="w-full flex justify-center items-center gap-2 py-3 px-4 rounded-lg border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 transition"><ArrowLeft size={16}/> Back to Login</button>
                 </div>
