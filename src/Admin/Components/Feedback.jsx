@@ -84,6 +84,31 @@ export const PromptModal = ({ isOpen, title, message, max, onConfirm, onCancel }
         setValue("1"); // Reset
     };
 
+    return (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-fade-in-up">
+                <h3 className="text-xl font-bold text-gray-900 mb-2">{title}</h3>
+                <p className="text-gray-500 text-sm mb-4">{message}</p>
+
+                <input
+                    type="number"
+                    autoFocus
+                    className="w-full p-3 border-2 border-gray-200 rounded-xl text-xl font-bold text-center mb-6 focus:border-purple-500 outline-none"
+                    value={value}
+                    onChange={e => setValue(e.target.value)}
+                    min="1"
+                    max={max}
+                />
+
+                <div className="flex gap-3">
+                    <button onClick={onCancel} className="flex-1 py-3 rounded-xl font-bold text-gray-500 hover:bg-gray-100">Cancel</button>
+                    <button onClick={handleSubmit} className="flex-1 py-3 rounded-xl font-bold bg-purple-600 text-white hover:bg-purple-700">Confirm</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- 4. STATUS MODAL (Alert/Information) ---
 export const StatusModal = ({ isOpen, title, message, type = 'success', onConfirm, confirmText = "Got it!" }) => {
     if (!isOpen) return null;
