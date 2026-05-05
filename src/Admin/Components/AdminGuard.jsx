@@ -5,7 +5,7 @@ import { db, auth } from '../../firebaseConfig';
 import { useAuth } from '../AdminContext'; 
 
 // 🔥 ADDED 'manager'
-const ALLOWED_DASHBOARD_ROLES = ['admin', 'secretary', 'worker', 'ceo', 'manager'];
+const ALLOWED_DASHBOARD_ROLES = ['admin', 'secretary', 'worker', 'ceo', 'manager', 'content_creator'];
 
 const AdminGuard = () => {
   const { user, role, loading, setUser, setRole, setViewRole } = useAuth();

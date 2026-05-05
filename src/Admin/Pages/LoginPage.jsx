@@ -13,7 +13,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore'; // 🔥 Use setDoc for
 import { auth, db } from '../../firebaseConfig';
 import { Toast } from '../Components/Feedback'; // 🔥 Added Toast
 
-const ALLOWED_DASHBOARD_ROLES = ['admin', 'secretary', 'worker', 'ceo', 'manager'];
+const ALLOWED_DASHBOARD_ROLES = ['admin', 'secretary', 'worker', 'ceo', 'manager', 'content_creator'];
 const googleProvider = new GoogleAuthProvider();
 
 const LoginPage = () => {

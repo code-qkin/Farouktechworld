@@ -43,17 +43,17 @@ const AdminLayout = () => {
     };
 
     const menuItems = [
-        { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'manager', 'secretary', 'ceo', 'worker'] },
+        { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'manager', 'secretary', 'ceo', 'worker', 'content_creator'] },
         { path: '/admin/orders', icon: ClipboardList, label: 'Orders (POS)', roles: ['admin', 'manager', 'secretary', 'ceo', 'worker'] },
-        { path: '/admin/store', icon: Package, label: 'Inventory', roles: ['admin', 'manager', 'ceo'] },
+        { path: '/admin/store', icon: Package, label: 'Inventory', roles: ['admin', 'manager', 'ceo', 'content_creator'] },
         { path: '/admin/devices', icon: Smartphone, label: 'Devices', roles: ['admin', 'manager', 'secretary', 'ceo'] },
         { path: '/admin/users', icon: Users, label: 'Staff', roles: ['admin', 'manager', 'ceo'] },
         { path: '/admin/customers', icon: Users, label: 'Customers', roles: ['admin', 'manager', 'secretary', 'ceo'] },
         { path: '/admin/performance', icon: TrendingUp, label: 'Performance', roles: ['admin', 'manager', 'ceo'] },
         { path: '/admin/job-history', icon: Briefcase, label: 'Job History', roles: ['admin', 'manager', 'ceo', 'worker'] },
         { path: '/admin/payroll', icon: Banknote, label: 'Payroll', roles: ['admin', 'manager', 'ceo'] },
-        { path: '/admin/pricing', icon: DollarSign, label: 'Pricing', roles: ['admin', 'manager', 'ceo'] },
-        { path: '/admin/manage-proof-of-work', icon: ImageIcon, label: 'Portfolio', roles: ['admin', 'manager', 'ceo'] },
+        { path: '/admin/pricing', icon: DollarSign, label: 'Pricing', roles: ['admin', 'manager', 'ceo', 'content_creator'] },
+        { path: '/admin/manage-proof-of-work', icon: ImageIcon, label: 'Portfolio', roles: ['admin', 'manager', 'ceo', 'content_creator'] },
         { path: '/admin/debt-analysis', icon: Activity, label: 'Debt Analysis', roles: ['admin', 'ceo'] },
     ];
 

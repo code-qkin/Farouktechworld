@@ -17,6 +17,7 @@ const getRoleBadge = (role) => {
         case 'admin': return 'bg-red-100 text-red-700 border border-red-200';
         case 'manager': return 'bg-indigo-100 text-indigo-700 border border-indigo-200';
         case 'secretary': return 'bg-purple-100 text-purple-700 border border-purple-200';
+        case 'content_creator': return 'bg-pink-100 text-pink-700 border border-pink-200';
         case 'worker': return 'bg-blue-100 text-blue-700 border border-blue-200';
         case 'pending': return 'bg-yellow-100 text-yellow-700 border border-yellow-200 animate-pulse';
         default: return 'bg-gray-100 text-gray-600 border border-gray-200';
@@ -258,6 +259,7 @@ const UserManagement = () => {
                             <option value="worker">Worker</option>
                             <option value="secretary">Secretary</option>
                             <option value="manager">Manager</option>
+                            <option value="content_creator">Content Creator</option>
                             {!isManager && <option value="admin">Admin</option>}
                             {!isManager && <option value="ceo" disabled={existingCEO && existingCEO.id !== member.id}>CEO</option>}
                         </select>

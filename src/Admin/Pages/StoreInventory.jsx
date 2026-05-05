@@ -601,7 +601,10 @@ const StoreInventory = () => {
         XLSX.writeFile(wb, "FTW_Inventory.xlsx");
     };
 
-    if (role !== 'admin' && role !== 'manager' && role !== 'ceo') return <Navigate to="/admin/dashboard" replace />;
+    const isEditor = ['admin', 'manager', 'ceo'].includes(role);
+    const isViewer = role === 'content_creator';
+
+    if (!isEditor && !isViewer) return <Navigate to="/admin/dashboard" replace />;
 
     return (
         <div className="min-h-screen bg-gray-50 p-4 sm:p-8 font-sans text-slate-900">
@@ -663,7 +666,9 @@ const StoreInventory = () => {
                             />
 
                             <select className="px-3 py-2.5 bg-gray-50 rounded-lg text-sm font-bold outline-none border border-transparent focus:border-purple-500" value={filterStock} onChange={e => setFilterStock(e.target.value)}><option value="All">All Stock</option><option value="Low">Low</option><option value="Out">Out</option></select>
-                            <button onClick={() => setIsCreating(true)} className="col-span-2 md:col-span-1 bg-purple-900 text-white px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-purple-800 transition flex items-center justify-center gap-2 shadow-sm"><Plus size={18}/> Add</button>
+                            {isEditor && (
+                                <button onClick={() => setIsCreating(true)} className="col-span-2 md:col-span-1 bg-purple-900 text-white px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-purple-800 transition flex items-center justify-center gap-2 shadow-sm"><Plus size={18}/> Add</button>
+                            )}
                         </div>
                          {/* DEVICE FILTER DROPDOWN */}
                          <div className="relative min-w-[140px]">
@@ -688,7 +693,7 @@ const StoreInventory = () => {
                     </div>
                     
                     {/* BULK ACTION BAR */}
-                    {selectedIds.length > 0 && (
+                    {selectedIds.length > 0 && isEditor && (
                         <div className="bg-purple-50 border border-purple-100 p-3 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in shadow-sm mb-4">
                             <div className="flex items-center gap-3 w-full sm:w-auto">
                                 <span className="text-xs font-bold text-purple-700 bg-purple-100 px-3 py-1 rounded-full whitespace-nowrap">{selectedIds.length} Selected</span>
@@ -743,7 +748,19 @@ const StoreInventory = () => {
                                                 {/* 🔥 HIDE PRICE CELL */}
                                                 {canSeePrice && <td className="px-6 py-4 text-right font-mono font-bold text-slate-800">{formatCurrency(p.price)}</td>}
                                                 <td className="px-6 py-4"><StockHealth stock={p.stock}/></td>
-                                                <td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}><div className="flex items-center justify-end gap-2"><button onClick={() => setRestockItem(p)} className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100"><ArrowUpCircle size={16}/></button><button onClick={() => setEditingItem(p)} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"><Edit2 size={16}/></button><button onClick={() => handleDelete(p)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"><Trash2 size={16}/></button></div></td>
+                                                <td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}>
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        {isEditor ? (
+                                                            <>
+                                                                <button onClick={() => setRestockItem(p)} className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100"><ArrowUpCircle size={16}/></button>
+                                                                <button onClick={() => setEditingItem(p)} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"><Edit2 size={16}/></button>
+                                                                <button onClick={() => handleDelete(p)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"><Trash2 size={16}/></button>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-xs text-slate-300 italic">View Only</span>
+                                                        )}
+                                                    </div>
+                                                </td>
                                             </tr>
                                         ); 
                                     })}
@@ -751,7 +768,7 @@ const StoreInventory = () => {
                             </table>
                         </div>
                         {/* Mobile Cards */}
-                        <div className="md:hidden divide-y divide-gray-100">{currentProducts.map((p) => { const isSelected = selectedIds.includes(p.id); return (<div key={p.id} onClick={() => handleSelectOne(p.id)} className={`p-4 flex flex-col gap-3 cursor-pointer ${isSelected ? 'bg-purple-50' : ''}`}><div className="flex justify-between items-start"><div className="flex gap-3"><input type="checkbox" className="w-5 h-5 accent-purple-600 mt-1" checked={isSelected} onChange={() => handleSelectOne(p.id)} onClick={e => e.stopPropagation()} /><div><h4 className="font-bold text-slate-900 text-sm">{p.name}</h4><div className="text-xs text-slate-500 mt-1 flex items-center gap-1"><Smartphone size={10}/> {p.model}{p.color && <span className="ml-1 bg-slate-100 px-1 rounded flex items-center gap-0.5"><Palette size={8}/> {p.color}</span>}</div></div></div><div className="text-right">{/* 🔥 HIDE MOBILE PRICE */}{canSeePrice && <p className="font-mono font-bold text-slate-800 text-sm">{formatCurrency(p.price)}</p>}<span className="text-[10px] font-bold text-slate-400 uppercase">{p.category}</span></div></div><div className="flex items-center gap-4 pl-8"><div className="flex-1"><StockHealth stock={p.stock}/></div><div className="flex gap-2" onClick={e => e.stopPropagation()}><button onClick={() => setRestockItem(p)} className="p-2 bg-green-50 text-green-600 rounded-lg"><ArrowUpCircle size={16}/></button><button onClick={() => setEditingItem(p)} className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Edit2 size={16}/></button><button onClick={() => handleDelete(p)} className="p-2 bg-red-50 text-red-600 rounded-lg"><Trash2 size={16}/></button></div></div></div>); })}</div>
+                        <div className="md:hidden divide-y divide-gray-100">{currentProducts.map((p) => { const isSelected = selectedIds.includes(p.id); return (<div key={p.id} onClick={() => handleSelectOne(p.id)} className={`p-4 flex flex-col gap-3 cursor-pointer ${isSelected ? 'bg-purple-50' : ''}`}><div className="flex justify-between items-start"><div className="flex gap-3"><input type="checkbox" className="w-5 h-5 accent-purple-600 mt-1" checked={isSelected} onChange={() => handleSelectOne(p.id)} onClick={e => e.stopPropagation()} /><div><h4 className="font-bold text-slate-900 text-sm">{p.name}</h4><div className="text-xs text-slate-500 mt-1 flex items-center gap-1"><Smartphone size={10}/> {p.model}{p.color && <span className="ml-1 bg-slate-100 px-1 rounded flex items-center gap-0.5"><Palette size={8}/> {p.color}</span>}</div></div></div><div className="text-right">{/* 🔥 HIDE MOBILE PRICE */}{canSeePrice && <p className="font-mono font-bold text-slate-800 text-sm">{formatCurrency(p.price)}</p>}<span className="text-[10px] font-bold text-slate-400 uppercase">{p.category}</span></div></div><div className="flex items-center gap-4 pl-8"><div className="flex-1"><StockHealth stock={p.stock}/></div><div className="flex gap-2" onClick={e => e.stopPropagation()}>{isEditor ? (<><button onClick={() => setRestockItem(p)} className="p-2 bg-green-50 text-green-600 rounded-lg"><ArrowUpCircle size={16}/></button><button onClick={() => setEditingItem(p)} className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Edit2 size={16}/></button><button onClick={() => handleDelete(p)} className="p-2 bg-red-50 text-red-600 rounded-lg"><Trash2 size={16}/></button></>) : (<span className="text-xs text-slate-300 italic">View Only</span>)}</div></div></div>); })}</div>
                         {/* Pagination */}
                         {filteredProducts.length > 0 && (<div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-between"><span className="text-sm text-gray-500 hidden sm:block">Showing <span className="font-bold">{currentPage}</span> of <span className="font-bold">{totalPages}</span> pages</span><div className="flex items-center gap-2"><button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:hover:bg-transparent transition"><ChevronLeft size={18}/></button><span className="text-xs font-bold bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">Page {currentPage} of {totalPages}</span><button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:hover:bg-transparent transition"><ChevronRight size={18}/></button></div></div>)}
                     </div>

@@ -247,7 +247,10 @@ const ServicePrices = () => {
         setNewServiceData({ ...newServiceData, [e.target.name]: e.target.value });
     };
 
-    if (role !== 'admin' && role !== 'ceo') return <div className="p-10">Access Denied</div>;
+    const isEditor = role === 'admin' || role === 'ceo';
+    const isViewer = role === 'content_creator';
+
+    if (!isEditor && !isViewer) return <div className="p-10">Access Denied</div>;
 
     return (
         <div className="min-h-screen bg-gray-50 p-4 sm:p-8 relative">
@@ -264,12 +267,14 @@ const ServicePrices = () => {
                     </div>
                 </div>
                 
-                <button 
-                    onClick={() => setIsAddModalOpen(true)}
-                    className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-md transition-all"
-                >
-                    <Plus size={18} /> Add Service
-                </button>
+                {isEditor && (
+                    <button 
+                        onClick={() => setIsAddModalOpen(true)}
+                        className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-md transition-all"
+                    >
+                        <Plus size={18} /> Add Service
+                    </button>
+                )}
             </div>
 
             {/* Controls */}
@@ -348,7 +353,7 @@ const ServicePrices = () => {
                                             <td className="px-6 py-3 font-medium text-slate-900">{item.service}</td>
                                             <td className="px-6 py-3 text-slate-600 font-bold">{item.model}</td>
                                             <td className="px-6 py-3 text-right font-mono font-bold text-slate-800">
-                                                {editingId === item.id ? (
+                                                {editingId === item.id && isEditor ? (
                                                     <input 
                                                         autoFocus
                                                         className="w-24 p-1.5 border-2 border-purple-500 rounded text-right outline-none bg-white"
@@ -357,25 +362,30 @@ const ServicePrices = () => {
                                                         onKeyDown={e => e.key === 'Enter' && handleSave(item.id)}
                                                     />
                                                 ) : (
-                                                    <span onClick={() => startEdit(item)} className="cursor-pointer hover:text-purple-600 border-b border-transparent hover:border-purple-300">
+                                                    <span onClick={() => isEditor && startEdit(item)} className={`${isEditor ? 'cursor-pointer hover:text-purple-600 border-b border-transparent hover:border-purple-300' : ''}`}>
                                                         {formatCurrency(item.price)}
                                                     </span>
                                                 )}
                                             </td>
                                             <td className="px-6 py-3 text-right">
                                                 <div className="flex items-center justify-end gap-2">
-                                                    {editingId === item.id ? (
-                                                        <button onClick={() => handleSave(item.id)} disabled={saving} className="text-green-600 hover:text-green-700 bg-green-50 p-2 rounded-lg transition">
-                                                            {saving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>}
-                                                        </button>
-                                                    ) : (
-                                                        <button onClick={() => startEdit(item)} className="text-slate-400 hover:text-blue-600 p-2 hover:bg-blue-50 rounded-lg transition">
-                                                            <DollarSign size={16}/>
-                                                        </button>
+                                                    {isEditor && (
+                                                        <>
+                                                            {editingId === item.id ? (
+                                                                <button onClick={() => handleSave(item.id)} disabled={saving} className="text-green-600 hover:text-green-700 bg-green-50 p-2 rounded-lg transition">
+                                                                    {saving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>}
+                                                                </button>
+                                                            ) : (
+                                                                <button onClick={() => startEdit(item)} className="text-slate-400 hover:text-blue-600 p-2 hover:bg-blue-50 rounded-lg transition">
+                                                                    <DollarSign size={16}/>
+                                                                </button>
+                                                            )}
+                                                            <button onClick={() => handleDelete(item)} className="text-slate-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition">
+                                                                <Trash2 size={16}/>
+                                                            </button>
+                                                        </>
                                                     )}
-                                                    <button onClick={() => handleDelete(item)} className="text-slate-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition">
-                                                        <Trash2 size={16}/>
-                                                    </button>
+                                                    {!isEditor && <span className="text-xs text-slate-300 italic">View Only</span>}
                                                 </div>
                                             </td>
                                         </tr>

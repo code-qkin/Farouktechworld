@@ -7,6 +7,7 @@ import AdminDashboard from './Dashboard';
 import SecretaryDashboard from './SecretaryDashboard';
 import WorkerDashboard from './WorkerDashboard';
 import ManagerDashboard from './ManagerDashboard'; // 🔥 NEW IMPORT
+import ContentCreatorDashboard from './ContentCreatorDashboard';
 
 const DashboardHandler = () => {
     const { user, role, viewRole, setViewRole } = useAuth();
@@ -35,6 +36,9 @@ const DashboardHandler = () => {
             break;
         case 'secretary':
             DashboardComponent = <SecretaryDashboard user={user} />;
+            break;
+        case 'content_creator':
+            DashboardComponent = <ContentCreatorDashboard user={user} />;
             break;
         case 'worker':
             DashboardComponent = <WorkerDashboard user={user} isViewMode={true} />;
