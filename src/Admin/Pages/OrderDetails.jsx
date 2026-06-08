@@ -70,7 +70,11 @@ const OrderDetails = () => {
                     setOrder({ id: docSnap.id, ...data });
                     // Conflict Detection Update
                     if (data.activeEditors) {
-                        setActiveEditors(data.activeEditors.filter(e => e.uid !== user?.uid));
+                        const now = Date.now();
+                        const activeOnly = data.activeEditors.filter(e => 
+                            e.uid !== user?.uid && (now - (e.time || 0)) < 300000
+                        );
+                        setActiveEditors(activeOnly);
                     }
                 }
                 else navigate('/admin/orders');
