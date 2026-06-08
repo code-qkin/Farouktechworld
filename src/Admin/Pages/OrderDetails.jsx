@@ -177,6 +177,14 @@ const OrderDetails = () => {
                     paymentStatus: newBal <= 0 ? 'Paid' : 'Part Payment', paid: newBal <= 0,
                     paymentHistory: arrayUnion(paymentRecord)
                 });
+
+                if (role !== 'admin' && role !== 'ceo') {
+                    t.set(doc(collection(db, "ActivityLogs")), {
+                        action: 'PAYMENT_RECEIVED', ticketId: order.ticketId,
+                        user: user?.name || user?.email || 'Secretary', role: role || 'secretary',
+                        timestamp: serverTimestamp(), details: `Collected ₦${amt.toLocaleString()} via ${paymentMethod}`
+                    });
+                }
             });
             setToast({ message: "Payment Recorded", type: "success" });
         } catch (e) { setToast({ message: "Failed", type: "error" }); }
@@ -276,6 +284,15 @@ const OrderDetails = () => {
             }
 
             await updateDoc(doc(db, "Orders", order.id), updateData);
+            
+            if (role !== 'admin' && role !== 'ceo') {
+                await addDoc(collection(db, "ActivityLogs"), {
+                    action: 'REFUND_PROCESSED', ticketId: order.ticketId,
+                    user: user?.name || user?.email || 'Secretary', role: role || 'secretary',
+                    timestamp: serverTimestamp(), details: `Processed refund. Reason: ${reason}`
+                });
+            }
+            
             setToast({ message: "Refund Processed", type: "success" });
         } catch (e) { setToast({ message: "Failed to process refund", type: "error" }); }
         setIsUpdating(false); setConfirmConfig({ ...confirmConfig, isOpen: false });
@@ -300,10 +317,21 @@ const OrderDetails = () => {
                     newItems[index] = { ...newItems[index], collected: newStatus };
                     const allCollected = newItems.every(i => i.collected || i.type === 'part_usage');
                     const updates = { items: newItems };
-                    if (allCollected && order.status !== 'Collected') updates.status = 'Collected';
-                    else if (!allCollected && order.status === 'Collected') updates.status = 'Ready for Pickup';
+                    if (allCollected && order.status !== 'Collected' && order.status !== 'Completed' && order.status !== 'Void') {
+                        updates.status = 'Ready for Pickup'; 
+                    }
                     await updateDoc(doc(db, "Orders", order.id), updates);
-                    setToast({ message: "Item updated", type: "success" });
+
+                    if (role !== 'admin' && role !== 'ceo') {
+                        await addDoc(collection(db, "ActivityLogs"), {
+                            action: newStatus ? 'ITEM_COLLECTED' : 'COLLECTION_UNDONE', 
+                            ticketId: order.ticketId,
+                            user: user?.name || user?.email || 'Secretary', role: role || 'secretary',
+                            timestamp: serverTimestamp(), details: `${newStatus ? 'Signed out' : 'Undid collection for'} ${item.name || item.deviceModel}`
+                        });
+                    }
+
+                    setToast({ message: newStatus ? "Marked Collected" : "Collection Undone", type: "success" });
                 } catch (e) { setToast({ message: "Failed", type: "error" }); } finally { setIsUpdating(false); setConfirmConfig({ ...confirmConfig, isOpen: false }); }
             }
         });
@@ -406,6 +434,14 @@ const OrderDetails = () => {
                         totalSpent: increment(-deduction)
                     });
                 }
+
+                if (role !== 'admin' && role !== 'ceo') {
+                    t.set(doc(collection(db, "ActivityLogs")), {
+                        action: 'PRODUCT_RETURNED', ticketId: data.ticketId,
+                        user: user?.name || user?.email || 'Secretary', role: role || 'secretary',
+                        timestamp: serverTimestamp(), details: `Returned ${returnQty}x ${item.name}`
+                    });
+                }
             });
             setToast({ message: "Item Returned & Restocked", type: 'success' });
         } catch (e) { setToast({ message: "Failed", type: 'error' }); }
@@ -440,6 +476,14 @@ const OrderDetails = () => {
                         if (data.customer?.id) {
                             t.update(doc(db, "Customers", data.customer.id), {
                                 totalSpent: increment(-voidedCost)
+                            });
+                        }
+
+                        if (role !== 'admin' && role !== 'ceo') {
+                            t.set(doc(collection(db, "ActivityLogs")), {
+                                action: 'SERVICE_VOIDED', ticketId: data.ticketId,
+                                user: user?.name || user?.email || 'Secretary', role: role || 'secretary',
+                                timestamp: serverTimestamp(), details: `Voided ${newItems[i].services[s].service} for ${newItems[i].deviceModel}`
                             });
                         }
                     });
@@ -481,6 +525,14 @@ const OrderDetails = () => {
                     t.update(doc(db, "Customers", data.customer.id), {
                         ticketCount: increment(-1),
                         totalSpent: increment(-(data.totalCost || 0))
+                    });
+                }
+
+                if (role !== 'admin' && role !== 'ceo') {
+                    t.set(doc(collection(db, "ActivityLogs")), {
+                        action: 'ORDER_VOIDED', ticketId: order.ticketId,
+                        user: user?.name || user?.email || 'Secretary', role: role || 'secretary',
+                        timestamp: serverTimestamp(), details: `Voided entire ticket (Total: ₦${(data.totalCost || 0).toLocaleString()})`
                     });
                 }
             });

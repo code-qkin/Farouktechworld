@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { collection, doc, query, where, getDocs, serverTimestamp, runTransaction, Timestamp, addDoc, increment } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
+import { useAuth } from '../AdminContext.jsx';
 
 const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
 
@@ -15,6 +16,7 @@ const POSModal = ({
     currentDeviceServices, setCurrentDeviceServices,
     activeTab, setActiveTab, setToast
 }) => {
+    const { role, user } = useAuth();
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [mobilePosTab, setMobilePosTab] = useState('input');
@@ -391,6 +393,14 @@ const POSModal = ({
                 if (data.customer?.id) {
                     t.update(doc(db, "Customers", data.customer.id), {
                         totalSpent: increment(-refund)
+                    });
+                }
+
+                if (role !== 'admin' && role !== 'ceo') {
+                    t.set(doc(collection(db, "ActivityLogs")), {
+                        action: 'WARRANTY_RETURN', ticketId: returnOrder.ticketId,
+                        user: user?.name || user?.email || 'Secretary', role: role || 'secretary',
+                        timestamp: serverTimestamp(), details: `Processed return/warranty. Refunded ₦${refund.toLocaleString()}`
                     });
                 }
             });

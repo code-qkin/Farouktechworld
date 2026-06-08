@@ -523,6 +523,18 @@ const OrdersManagement = () => {
                         warrantyExpiry: Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
                     });
 
+                    // Log Activity
+                    if (role !== 'admin' && role !== 'ceo') {
+                        t.set(doc(collection(db, "ActivityLogs")), {
+                            action: 'ORDER_CREATED',
+                            ticketId,
+                            user: user?.name || user?.email || 'Secretary',
+                            role: role || 'secretary',
+                            timestamp: serverTimestamp(),
+                            details: `Created new ${cart.some(i=>i.type==='repair') ? 'repair' : 'store'} order (Total: ₦${totalCost.toLocaleString()})`
+                        });
+                    }
+
                     // Update Customer Stats
                     if (customer.id) {
                         const amount = Number(totalCost) || 0;
