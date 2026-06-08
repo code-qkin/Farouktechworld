@@ -61,7 +61,10 @@ const JobHistoryPage = () => {
 
     // 3. Generate Secretary/Admin Activity Logs (Merging legacy with new)
     const combinedActivityLogs = useMemo(() => {
-        let logs = [...activityLogs]; // Start with new dedicated logs
+        let logs = activityLogs.map(log => {
+            const order = rawOrders.find(o => o.ticketId === log.ticketId);
+            return { ...log, customer: order?.customer?.name || 'Unknown' };
+        });
 
         // Generate Legacy Logs from rawOrders
         rawOrders.forEach(order => {
@@ -74,6 +77,7 @@ const JobHistoryPage = () => {
                     ticketId: order.ticketId,
                     user: 'Legacy / Secretary',
                     timestamp: order.createdAt,
+                    customer: order.customer?.name || 'Unknown',
                     details: `Created legacy ticket (Total: ₦${(order.totalCost || 0).toLocaleString()})`,
                     orderId: order.id
                 });
@@ -90,6 +94,7 @@ const JobHistoryPage = () => {
                         ticketId: order.ticketId,
                         user: payment.receivedBy || 'Secretary',
                         timestamp: { toDate: () => new Date(payment.date) }, // Mock Firestore Timestamp
+                        customer: order.customer?.name || 'Unknown',
                         details: `Collected ₦${Number(payment.amount).toLocaleString()} via ${payment.method}`,
                         orderId: order.id
                     });
@@ -213,7 +218,7 @@ const JobHistoryPage = () => {
                             ) : (
                                 <tr>
                                     <th className="p-4 border-b">Date & Time</th>
-                                    <th className="p-4 border-b">Ticket ID</th>
+                                    <th className="p-4 border-b">Ticket / Customer</th>
                                     <th className="p-4 border-b">Action Performed</th>
                                     <th className="p-4 border-b">Staff Member</th>
                                 </tr>
@@ -279,6 +284,7 @@ const JobHistoryPage = () => {
                                             {log.ticketId ? (
                                                 <span className="font-mono font-bold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded text-xs">{log.ticketId}</span>
                                             ) : <span className="text-gray-400">-</span>}
+                                            <div className="font-bold text-gray-800 mt-1">{log.customer}</div>
                                         </td>
                                         <td className="p-4">
                                             <div className="font-bold text-gray-800">{log.action.replace(/_/g, ' ')}</div>
