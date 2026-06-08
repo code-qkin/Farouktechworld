@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { 
     LayoutDashboard, ClipboardList, Package, Users, Settings, 
     LogOut, Menu, X, Smartphone, TrendingUp, Briefcase, 
-    Banknote, DollarSign, Image as ImageIcon, Activity, Search
+    Banknote, DollarSign, Image as ImageIcon, Activity, Search, ClipboardCheck
 } from 'lucide-react';
 import { useAuth } from '../AdminContext';
 import { signOut } from 'firebase/auth';
@@ -55,6 +55,7 @@ const AdminLayout = () => {
         { path: '/admin/pricing', icon: DollarSign, label: 'Pricing', roles: ['admin', 'manager', 'ceo', 'content_creator'] },
         { path: '/admin/manage-proof-of-work', icon: ImageIcon, label: 'Portfolio', roles: ['admin', 'manager', 'ceo', 'content_creator'] },
         { path: '/admin/debt-analysis', icon: Activity, label: 'Debt Analysis', roles: ['admin', 'ceo'] },
+        { path: '/admin/approvals', icon: ClipboardCheck, label: 'Approvals', roles: ['admin', 'ceo'] },
     ];
 
     const visibleMenu = menuItems.filter(item => item.roles.includes(viewRole || role));

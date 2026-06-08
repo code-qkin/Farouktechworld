@@ -37,6 +37,7 @@ import DeviceManager from "./Admin/Pages/DeviceManager";
 import DebtAnalysis from "./Admin/Pages/DebtAnalysis";
 import PaymentRegister from "./Admin/Pages/PaymentRegister";
 import WorkerStat from "./Admin/Pages/WorkerStat";
+import PendingApprovals from "./Admin/Pages/PendingApprovals";
 
 import AdminLayout from './Admin/Components/AdminLayout';
 
@@ -74,6 +75,7 @@ const router = createBrowserRouter(
             <Route path="debt-analysis" element={<DebtAnalysis />} />
             <Route path="payments" element={<PaymentRegister />} />
             <Route path="worker-stats" element={<WorkerStat />} />
+            <Route path="approvals" element={<PendingApprovals />} />
           </Route>
         </Route>
       </Route>

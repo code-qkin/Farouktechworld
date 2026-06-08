@@ -39,9 +39,13 @@ const OrderDetails = () => {
     const [discountInput, setDiscountInput] = useState('');
     const [editingCondition, setEditingCondition] = useState({ index: -1, value: '' });
 
-    // Delete Request
+    // Request Modals
     const [requestModalOpen, setRequestModalOpen] = useState(false);
     const [deleteReason, setDeleteReason] = useState('');
+    const [editRequestModalOpen, setEditRequestModalOpen] = useState(false);
+    const [editReason, setEditReason] = useState('');
+    const [resetPaymentModalOpen, setResetPaymentModalOpen] = useState(false);
+    const [resetPaymentReason, setResetPaymentReason] = useState('');
     const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
 
     const [toast, setToast] = useState({ message: '', type: '' });
@@ -134,6 +138,10 @@ const OrderDetails = () => {
 
     const handleEditOrder = () => {
         if (isLocked) return setToast({ message: "Order is locked (Paid/Collected)", type: "error" });
+        if (role === 'secretary' && !order.editUnlocked) {
+            setEditRequestModalOpen(true);
+            return;
+        }
         const safeOrder = {
             id: order.id, ticketId: order.ticketId, discount: order.discount || 0,
             customer: { ...order.customer },
@@ -213,6 +221,11 @@ const OrderDetails = () => {
     // Reset ALL Payments
     const handleResetPayment = async () => {
         if (role !== 'admin' && role !== 'ceo' && role !== 'secretary') return setToast({ message: "Unauthorized", type: "error" });
+        if (role === 'secretary') {
+            setConfirmConfig({ ...confirmConfig, isOpen: false });
+            setResetPaymentModalOpen(true);
+            return;
+        }
         setIsUpdating(true);
         try {
             await updateDoc(doc(db, "Orders", order.id), { 
@@ -594,6 +607,60 @@ const OrderDetails = () => {
         }
     };
 
+    const handleSubmitEditRequest = async (e) => {
+        e.preventDefault();
+        if (!editReason.trim()) return;
+        setIsSubmittingRequest(true);
+        try { 
+            await addDoc(collection(db, "ApprovalRequests"), { 
+                type: 'edit_order',
+                orderId: order.id, 
+                ticketId: order.ticketId, 
+                customer: order.customer?.name, 
+                reason: editReason, 
+                requestedBy: user?.name || "Secretary", 
+                role: role,
+                requestedAt: serverTimestamp(), 
+                status: 'pending' 
+            }); 
+            setToast({ message: "Edit Request Sent Successfully", type: "success" }); 
+            setEditRequestModalOpen(false); 
+            setEditReason(''); 
+        } catch (error) { 
+            console.error(error);
+            setToast({ message: "Failed to send request", type: "error" }); 
+        } finally { 
+            setIsSubmittingRequest(false); 
+        }
+    };
+
+    const handleSubmitResetPaymentRequest = async (e) => {
+        e.preventDefault();
+        if (!resetPaymentReason.trim()) return;
+        setIsSubmittingRequest(true);
+        try { 
+            await addDoc(collection(db, "ApprovalRequests"), { 
+                type: 'reset_payment',
+                orderId: order.id, 
+                ticketId: order.ticketId, 
+                customer: order.customer?.name, 
+                reason: resetPaymentReason, 
+                requestedBy: user?.name || "Secretary", 
+                role: role,
+                requestedAt: serverTimestamp(), 
+                status: 'pending' 
+            }); 
+            setToast({ message: "Reset Payment Request Sent Successfully", type: "success" }); 
+            setResetPaymentModalOpen(false); 
+            setResetPaymentReason(''); 
+        } catch (error) { 
+            console.error(error);
+            setToast({ message: "Failed to send request", type: "error" }); 
+        } finally { 
+            setIsSubmittingRequest(false); 
+        }
+    };
+
     const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
 
     const dateStr = order?.createdAt?.seconds
@@ -639,6 +706,70 @@ const OrderDetails = () => {
                             <div className="flex gap-2">
                                 <button type="button" onClick={() => setRequestModalOpen(false)} className="flex-1 py-3 text-slate-500 font-bold bg-gray-100 rounded-xl hover:bg-gray-200 transition">Cancel</button>
                                 <button type="submit" disabled={isSubmittingRequest} className="flex-1 py-3 bg-orange-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-orange-700 transition">
+                                    {isSubmittingRequest ? <Loader2 className="animate-spin" size={18}/> : <Send size={18}/>} Send Request
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* 🔥 REQUEST EDIT MODAL */}
+            {editRequestModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 transform transition-all scale-100">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <Edit2 className="text-purple-500"/> Request Edit
+                            </h3>
+                            <button onClick={() => setEditRequestModalOpen(false)}><X size={20} className="text-slate-400 hover:text-red-500"/></button>
+                        </div>
+                        <p className="text-sm text-slate-500 mb-4">Please provide a reason for editing ticket <b>{order.ticketId}</b>. This will be sent to the admin for approval.</p>
+                        <form onSubmit={handleSubmitEditRequest}>
+                            <textarea 
+                                className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm mb-4 bg-slate-50" 
+                                rows="3" 
+                                placeholder="Reason for editing..." 
+                                value={editReason} 
+                                onChange={e => setEditReason(e.target.value)} 
+                                required 
+                                autoFocus 
+                            />
+                            <div className="flex gap-2">
+                                <button type="button" onClick={() => setEditRequestModalOpen(false)} className="flex-1 py-3 text-slate-500 font-bold bg-gray-100 rounded-xl hover:bg-gray-200 transition">Cancel</button>
+                                <button type="submit" disabled={isSubmittingRequest} className="flex-1 py-3 bg-purple-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-purple-700 transition">
+                                    {isSubmittingRequest ? <Loader2 className="animate-spin" size={18}/> : <Send size={18}/>} Send Request
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* 🔥 REQUEST PAYMENT RESET MODAL */}
+            {resetPaymentModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 transform transition-all scale-100">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <RotateCcw className="text-red-500"/> Request Payment Reset
+                            </h3>
+                            <button onClick={() => setResetPaymentModalOpen(false)}><X size={20} className="text-slate-400 hover:text-red-500"/></button>
+                        </div>
+                        <p className="text-sm text-slate-500 mb-4">Please provide a reason for resetting payments on ticket <b>{order.ticketId}</b>. This will be sent to the admin for approval.</p>
+                        <form onSubmit={handleSubmitResetPaymentRequest}>
+                            <textarea 
+                                className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-red-500 text-sm mb-4 bg-slate-50" 
+                                rows="3" 
+                                placeholder="Reason for resetting payment..." 
+                                value={resetPaymentReason} 
+                                onChange={e => setResetPaymentReason(e.target.value)} 
+                                required 
+                                autoFocus 
+                            />
+                            <div className="flex gap-2">
+                                <button type="button" onClick={() => setResetPaymentModalOpen(false)} className="flex-1 py-3 text-slate-500 font-bold bg-gray-100 rounded-xl hover:bg-gray-200 transition">Cancel</button>
+                                <button type="submit" disabled={isSubmittingRequest} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-red-700 transition">
                                     {isSubmittingRequest ? <Loader2 className="animate-spin" size={18}/> : <Send size={18}/>} Send Request
                                 </button>
                             </div>
@@ -697,7 +828,7 @@ const OrderDetails = () => {
                             <h3 className="text-xs font-bold text-gray-500 uppercase">Items & Services</h3>
                             {!isLocked && (
                                 <button onClick={handleEditOrder} className="bg-purple-100 text-purple-700 px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-200 transition flex items-center gap-1">
-                                    <Edit2 size={14} /> Edit Order
+                                    <Edit2 size={14} /> {(role === 'secretary' && !order.editUnlocked) ? 'Request Edit' : 'Edit Order'}
                                 </button>
                             )}
                         </div>
@@ -911,7 +1042,7 @@ const OrderDetails = () => {
 
                             {/* 🔥 RESET PAYMENT (Undo All) */}
                             {order.amountPaid > 0 && order.status !== 'Void' && (
-                                <button onClick={() => setConfirmConfig({ isOpen: true, title: "Reset Payment?", message: "Clear payment history?", confirmText: "Reset", action: handleResetPayment })} className="w-full text-gray-400 text-xs hover:text-red-600 py-2">Undo All Payments</button>
+                                <button onClick={() => setConfirmConfig({ isOpen: true, title: role === 'secretary' ? "Request Payment Reset?" : "Reset Payment?", message: role === 'secretary' ? "Request to clear payment history?" : "Clear payment history?", confirmText: role === 'secretary' ? "Request" : "Reset", action: handleResetPayment })} className="w-full text-gray-400 text-xs hover:text-red-600 py-2">{role === 'secretary' ? 'Request Payment Reset' : 'Undo All Payments'}</button>
                             )}
                         </div>
                     </div>

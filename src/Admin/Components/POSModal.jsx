@@ -159,6 +159,28 @@ const POSModal = ({
         if (isSubmitting || !customer.name || cart.length === 0) return setToast({message: "Details missing!", type: "error"});
         setIsSubmitting(true);
         try {
+            // Find the latest approved edit request for this order before transaction
+            let targetApprovalRequestId = null;
+            if (editOrderId) {
+                const q = query(
+                    collection(db, "ApprovalRequests"), 
+                    where("orderId", "==", editOrderId), 
+                    where("type", "==", "edit_order"), 
+                    where("status", "==", "approved")
+                );
+                const snap = await getDocs(q);
+                let latestReq = null;
+                snap.forEach(d => {
+                    const data = d.data();
+                    if (!latestReq || (data.requestedAt && latestReq.requestedAt && data.requestedAt.toMillis() > latestReq.requestedAt.toMillis())) {
+                        latestReq = { id: d.id, ...data };
+                    }
+                });
+                if (latestReq && !latestReq.editsMade) {
+                    targetApprovalRequestId = latestReq.id;
+                }
+            }
+
             await runTransaction(db, async (t) => {
                 let oldOrderData = null;
                 const inventoryChanges = new Map();
@@ -231,8 +253,28 @@ const POSModal = ({
                         items: finalItems,
                         balance, 
                         paymentStatus: balance <= 0 ? 'Paid' : (oldPaid > 0 ? 'Part Payment' : 'Unpaid'), 
-                        paid: balance <= 0 
+                        paid: balance <= 0,
+                        editUnlocked: false
                     });
+
+                    if (targetApprovalRequestId) {
+                        let editSummary = [];
+                        if (Number(oldOrderData.totalCost) !== Number(totalCost)) {
+                            editSummary.push(`Total changed from ₦${oldOrderData.totalCost} to ₦${totalCost}`);
+                        }
+                        if (Number(oldOrderData.discount) !== Number(discount)) {
+                            editSummary.push(`Discount changed from ₦${oldOrderData.discount || 0} to ₦${discount}`);
+                        }
+                        if (oldOrderData.items?.length !== finalItems.length) {
+                            editSummary.push(`Items count changed from ${oldOrderData.items?.length || 0} to ${finalItems.length}`);
+                        }
+                        const finalSummary = editSummary.length > 0 ? editSummary.join(' | ') : 'Order contents modified (no cost changes).';
+                        
+                        t.update(doc(db, "ApprovalRequests", targetApprovalRequestId), {
+                            editsMade: finalSummary,
+                            editedAt: serverTimestamp()
+                        });
+                    }
 
                     // Update Customer Stats if Customer changed or Total changed
                     if (customer.id) {

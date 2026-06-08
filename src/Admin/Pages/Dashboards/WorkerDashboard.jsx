@@ -9,7 +9,7 @@ import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import { 
     collection, query, orderBy, onSnapshot, updateDoc, doc, 
-    runTransaction, increment, arrayUnion, arrayRemove 
+    runTransaction, increment, arrayUnion, arrayRemove, addDoc 
 } from 'firebase/firestore';
 import { Toast, ConfirmModal } from '../../Components/Feedback.jsx'; 
 import { 
@@ -62,6 +62,8 @@ const WorkerDashboard = ({ user: propUser }) => {
   // Modals
   const [showPartModal, setShowPartModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false); // 🔥 Added loading state for buttons
+  const [showNoPartModal, setShowNoPartModal] = useState(false);
+  const [noPartReason, setNoPartReason] = useState('');
   
   // Selection State
   const [selectedTask, setSelectedTask] = useState(null);
@@ -284,30 +286,41 @@ const WorkerDashboard = ({ user: propUser }) => {
     }
   };
 
-  const handleLogNoPart = async () => {
-    if (isSubmitting) return; // 🔥 Prevent duplicate clicks
-    if (!selectedTask || selectedDeviceIndex === null) return;
+  const handleLogNoPart = () => {
+      setShowPartModal(false);
+      setShowNoPartModal(true);
+  };
 
-    setIsSubmitting(true);
-    try {
-         const myIdentity = user.name || user.email || "Technician";
-         const usageEntry = {
-             type: 'part_usage',
-             name: `Log: No Part Needed (${selectedDeviceName})`, 
-             worker: myIdentity,
-             cost: 0,
-             partId: 'no-part-log',
-             usedAt: new Date().toISOString(),
-             targetItemIndex: selectedDeviceIndex 
-         };
-         await updateDoc(doc(db, "Orders", selectedTask.id), { items: arrayUnion(usageEntry) });
-         setShowPartModal(false);
-         setToast({ message: "Logged: No Part Needed", type: 'success' });
-    } catch (e) { 
-        setToast({ message: `Error: ${e}`, type: 'error' }); 
-    } finally {
-        setIsSubmitting(false); // 🔥 Re-enable
-    }
+  const handleSubmitNoPartRequest = async (e) => {
+      e.preventDefault();
+      if (isSubmitting) return; // 🔥 Prevent duplicate clicks
+      if (!selectedTask || selectedDeviceIndex === null || !noPartReason.trim()) return;
+
+      setIsSubmitting(true);
+      try {
+          const myIdentity = user.name || user.email || "Technician";
+          
+          await addDoc(collection(db, "ApprovalRequests"), {
+              type: 'no_part_needed',
+              orderId: selectedTask.id,
+              ticketId: selectedTask.ticketId,
+              customer: selectedTask.customer?.name,
+              reason: noPartReason,
+              deviceName: selectedDeviceName,
+              requestedBy: myIdentity,
+              role: user.role || 'worker',
+              requestedAt: new Date().toISOString(),
+              status: 'pending'
+          });
+
+          setShowNoPartModal(false);
+          setNoPartReason('');
+          setToast({ message: "No Part Needed Request Sent for Approval", type: 'success' });
+      } catch (e) { 
+          setToast({ message: `Error: ${e}`, type: 'error' }); 
+      } finally {
+          setIsSubmitting(false); // 🔥 Re-enable
+      }
   };
 
   const handleUndoPart = (orderId, partItem) => {
@@ -559,6 +572,36 @@ const WorkerDashboard = ({ user: propUser }) => {
                             {isSubmitting ? <Loader2 size={16} className="animate-spin"/> : "Confirm Usage"}
                         </button>
                   </div>
+              </div>
+          </div>
+      )}
+
+      {/* NO PART REASON MODAL */}
+      {showNoPartModal && (
+          <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white p-5 rounded-2xl shadow-2xl w-full max-w-sm">
+                  <div className="flex justify-between items-center mb-4">
+                      <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><ShieldOff className="text-gray-500"/> Reason Needed</h3>
+                      <button onClick={() => setShowNoPartModal(false)} className="bg-gray-100 p-1.5 rounded-full text-gray-500"><X size={18}/></button>
+                  </div>
+                  <p className="text-sm text-slate-500 mb-4">Please provide a reason why no part is needed for <b>{selectedDeviceName}</b>. This will be sent to the admin for approval.</p>
+                  <form onSubmit={handleSubmitNoPartRequest}>
+                      <textarea 
+                          className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm mb-4 bg-slate-50" 
+                          rows="3" 
+                          placeholder="Why is no part needed?..." 
+                          value={noPartReason} 
+                          onChange={e => setNoPartReason(e.target.value)} 
+                          required 
+                          autoFocus 
+                      />
+                      <div className="flex gap-2">
+                          <button type="button" onClick={() => setShowNoPartModal(false)} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold hover:bg-gray-200 transition text-sm">Cancel</button>
+                          <button type="submit" disabled={isSubmitting} className="flex-1 bg-purple-600 text-white py-3 rounded-xl font-bold hover:bg-purple-700 shadow-lg transition disabled:opacity-50 text-sm flex items-center justify-center gap-2">
+                              {isSubmitting ? <Loader2 size={16} className="animate-spin"/> : "Send Request"}
+                          </button>
+                      </div>
+                  </form>
               </div>
           </div>
       )}

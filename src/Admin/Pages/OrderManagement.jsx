@@ -499,7 +499,8 @@ const OrdersManagement = () => {
                         items: finalItems,
                         balance, 
                         paymentStatus: balance <= 0 ? 'Paid' : (oldPaid > 0 ? 'Part Payment' : 'Unpaid'), 
-                        paid: balance <= 0 
+                        paid: balance <= 0,
+                        editUnlocked: false
                     });
 
                     // Update Customer Stats if Customer changed or Total changed
