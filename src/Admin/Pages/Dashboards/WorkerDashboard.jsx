@@ -46,8 +46,9 @@ const StatCard = ({ title, value, icon: Icon, color }) => (
 );
 
 const WorkerDashboard = ({ user: propUser }) => {
-  const { user: contextUser } = useAuth(); 
+  const { user: contextUser, role: contextRole } = useAuth(); 
   const user = propUser || contextUser; 
+  const userRole = propUser?.role || contextRole || user?.role || 'worker';
   const navigate = useNavigate();
   
   // Data State
@@ -286,9 +287,33 @@ const WorkerDashboard = ({ user: propUser }) => {
     }
   };
 
-  const handleLogNoPart = () => {
-      setShowPartModal(false);
-      setShowNoPartModal(true);
+  const handleLogNoPart = async () => {
+      if (userRole === 'admin' || userRole === 'ceo') {
+          if (isSubmitting) return;
+          setIsSubmitting(true);
+          try {
+              const myIdentity = user.name || user.email || "Admin";
+              const usageEntry = {
+                  type: 'part_usage',
+                  name: `Log: No Part Needed (${selectedDeviceName})`,
+                  worker: myIdentity,
+                  cost: 0,
+                  partId: 'no-part-log',
+                  usedAt: new Date().toISOString(),
+                  targetItemIndex: selectedDeviceIndex
+              };
+              await updateDoc(doc(db, "Orders", selectedTask.id), { items: arrayUnion(usageEntry) });
+              setShowPartModal(false);
+              setToast({ message: "No Part Needed logged instantly", type: 'success' });
+          } catch (e) {
+              setToast({ message: `Error: ${e}`, type: 'error' });
+          } finally {
+              setIsSubmitting(false);
+          }
+      } else {
+          setShowPartModal(false);
+          setShowNoPartModal(true);
+      }
   };
 
   const handleSubmitNoPartRequest = async (e) => {
@@ -308,7 +333,7 @@ const WorkerDashboard = ({ user: propUser }) => {
               reason: noPartReason,
               deviceName: selectedDeviceName,
               requestedBy: myIdentity,
-              role: user.role || 'worker',
+              role: userRole,
               requestedAt: new Date().toISOString(),
               status: 'pending'
           });
