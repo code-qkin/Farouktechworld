@@ -75,6 +75,25 @@ const POSModal = ({
         setServiceInput({ type: svc, cost: match ? match.price : '' });
     };
 
+    const handleDeviceModelChange = (e) => {
+        const newModel = e.target.value;
+        setRepairInput(prev => ({ ...prev, deviceModel: newModel }));
+        
+        const modelLower = newModel.trim().toLowerCase();
+
+        if (serviceInput.type) {
+            const match = dbServices.find(p => p.service === serviceInput.type && p.model.trim().toLowerCase() === modelLower);
+            if (match) setServiceInput(prev => ({ ...prev, cost: match.price }));
+        }
+
+        if (currentDeviceServices.length > 0) {
+            setCurrentDeviceServices(prev => prev.map(s => {
+                const match = dbServices.find(p => p.service === s.service && p.model.trim().toLowerCase() === modelLower);
+                return match ? { ...s, cost: Number(match.price) } : s;
+            }));
+        }
+    };
+
     const addServiceToDevice = () => {
         if (!serviceInput.type || !serviceInput.cost) return setToast({message: "Select service and cost.", type: "error"});
         setCurrentDeviceServices([...currentDeviceServices, { id: Date.now(), service: serviceInput.type, cost: Number(serviceInput.cost), worker: 'Unassigned', status: 'Pending' }]);
@@ -408,7 +427,7 @@ const POSModal = ({
                         {activeTab === 'repair' && (
                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <input list="models" placeholder="Device Model (e.g. iPhone 13)" className="w-full p-3 border rounded-xl font-bold bg-gray-50 focus:bg-white transition" value={repairInput.deviceModel} onChange={e=>setRepairInput({...repairInput, deviceModel:e.target.value})}/>
+                                    <input list="models" placeholder="Device Model (e.g. iPhone 13)" className="w-full p-3 border rounded-xl font-bold bg-gray-50 focus:bg-white transition" value={repairInput.deviceModel} onChange={handleDeviceModelChange}/>
                                     <datalist id="models">{Array.from(new Set(dbServices.map(s => s.model))).sort().map(m=><option key={m} value={m}/>)}</datalist>
                                     
                                     <div className="relative">
