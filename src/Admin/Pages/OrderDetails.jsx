@@ -247,13 +247,35 @@ const OrderDetails = () => {
         if (!reason) return;
         setIsUpdating(true);
         try {
-            await updateDoc(doc(db, "Orders", order.id), { 
-                amountPaid: 0, 
-                refundedAmount: order.amountPaid, 
-                paymentStatus: 'Refunded', 
-                balance: 0, 
-                refundReason: reason 
-            });
+            let updateData = {};
+            if (order.status === 'Void') {
+                updateData = {
+                    amountPaid: 0,
+                    refundedAmount: (order.refundedAmount || 0) + order.amountPaid,
+                    paymentStatus: 'Refunded',
+                    balance: 0,
+                    refundReason: reason
+                };
+            } else if (order.balance < 0) {
+                const refundAmount = Math.abs(order.balance);
+                updateData = {
+                    amountPaid: order.totalCost,
+                    refundedAmount: (order.refundedAmount || 0) + refundAmount,
+                    paymentStatus: 'Paid',
+                    balance: 0,
+                    refundReason: reason
+                };
+            } else {
+                updateData = {
+                    amountPaid: 0,
+                    refundedAmount: (order.refundedAmount || 0) + order.amountPaid,
+                    paymentStatus: 'Refunded',
+                    balance: 0,
+                    refundReason: reason
+                };
+            }
+
+            await updateDoc(doc(db, "Orders", order.id), updateData);
             setToast({ message: "Refund Processed", type: "success" });
         } catch (e) { setToast({ message: "Failed to process refund", type: "error" }); }
         setIsUpdating(false); setConfirmConfig({ ...confirmConfig, isOpen: false });
@@ -438,7 +460,21 @@ const OrderDetails = () => {
                 const data = (await t.get(ref)).data();
                 if (data.status === 'Void') return;
 
-                t.update(ref, { status: 'Void', paymentStatus: 'Voided', balance: 0 }); 
+                // Restock any products that were not returned
+                const newItems = JSON.parse(JSON.stringify(data.items || []));
+                newItems.forEach(item => {
+                    if (item.type === 'product' && !item.returned && item.productId) {
+                        t.update(doc(db, "Inventory", item.productId), { stock: increment(item.qty || 1) });
+                        item.returned = true;
+                    } else if (item.type === 'repair' && item.services) {
+                        item.services.forEach(s => {
+                            s.status = 'Void';
+                            s.returned = true;
+                        });
+                    }
+                });
+
+                t.update(ref, { items: newItems, status: 'Void', paymentStatus: 'Voided', balance: 0 }); 
 
                 // Update Customer Stats
                 if (data.customer?.id) {

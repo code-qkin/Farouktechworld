@@ -83,13 +83,13 @@ const POSModal = ({
 
         if (serviceInput.type) {
             const match = dbServices.find(p => p.service === serviceInput.type && p.model.trim().toLowerCase() === modelLower);
-            if (match) setServiceInput(prev => ({ ...prev, cost: match.price }));
+            setServiceInput(prev => ({ ...prev, cost: match ? match.price : '' }));
         }
 
         if (currentDeviceServices.length > 0) {
             setCurrentDeviceServices(prev => prev.map(s => {
                 const match = dbServices.find(p => p.service === s.service && p.model.trim().toLowerCase() === modelLower);
-                return match ? { ...s, cost: Number(match.price) } : s;
+                return { ...s, cost: match ? Number(match.price) : 0 };
             }));
         }
     };
@@ -374,7 +374,25 @@ const POSModal = ({
                 
                 const retId = `FTW-RET-${Date.now().toString().slice(-6)}`;
                 t.set(doc(collection(db, "Orders")), { ticketId: retId, originalTicketId: returnOrder.ticketId, customer: returnOrder.customer, orderType: 'return', items: selectedReturnItems.map(k => ({ key: k, note: "Returned" })), totalCost: -refund, status: 'Completed', createdAt: serverTimestamp() });
-                t.update(ref, { items: newItems, lastUpdated: serverTimestamp() });
+                
+                // Update Original Order Total and Balance
+                const newTotalCost = Math.max(0, (data.totalCost || 0) - refund);
+                const newBalance = newTotalCost - (data.amountPaid || 0);
+                
+                t.update(ref, { 
+                    items: newItems, 
+                    totalCost: newTotalCost,
+                    balance: newBalance,
+                    paymentStatus: newBalance < 0 ? 'Refund Due' : (newBalance === 0 ? 'Paid' : 'Part Payment'),
+                    lastUpdated: serverTimestamp() 
+                });
+
+                // Update Customer Lifetime Spent
+                if (data.customer?.id) {
+                    t.update(doc(db, "Customers", data.customer.id), {
+                        totalSpent: increment(-refund)
+                    });
+                }
             });
             setToast({message: "Return Processed", type: "success"});
             setReturnOrder(null); setSelectedReturnItems([]);
