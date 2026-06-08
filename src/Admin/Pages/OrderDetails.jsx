@@ -90,31 +90,37 @@ const OrderDetails = () => {
 
         const updatePresence = async (isEntering) => {
             try {
-                const ref = doc(db, "Orders", order.id);
-                if (isEntering) {
-                    await updateDoc(ref, { 
-                        activeEditors: arrayUnion({ uid: user.uid, name: user.name || user.email, time: Date.now() }) 
-                    });
-                } else {
-                    // Need to get the document to filter out this specific user safely or use a trick, 
-                    // Since arrayRemove needs exact object match, we fetch and update.
-                    const snap = await getDocs(query(collection(db, "Orders"), where("ticketId", "==", order.ticketId)));
-                    if (!snap.empty) {
-                        const currentEditors = snap.docs[0].data().activeEditors || [];
-                        const newEditors = currentEditors.filter(e => e.uid !== user.uid);
-                        await updateDoc(doc(db, "Orders", order.id), { activeEditors: newEditors });
+                await runTransaction(db, async (t) => {
+                    const ref = doc(db, "Orders", order.id);
+                    const snap = await t.get(ref);
+                    if (!snap.exists()) return;
+                    
+                    let currentEditors = snap.data().activeEditors || [];
+                    // Remove ghosts (older than 5 minutes) and remove current user
+                    const now = Date.now();
+                    currentEditors = currentEditors.filter(e => (now - e.time) < 300000 && e.uid !== user.uid);
+
+                    if (isEntering) {
+                        currentEditors.push({ uid: user.uid, name: user.name || user.email || 'Admin', time: now });
                     }
-                }
+
+                    t.update(ref, { activeEditors: currentEditors });
+                });
             } catch (e) { console.error("Presence error", e); }
         };
 
         updatePresence(true);
         
-        window.addEventListener("beforeunload", () => updatePresence(false));
+        const handleUnload = () => updatePresence(false);
+        window.addEventListener("beforeunload", handleUnload);
+
+        // Ping presence every 2 minutes to stay alive
+        const pingInterval = setInterval(() => updatePresence(true), 120000);
 
         return () => {
+            window.removeEventListener("beforeunload", handleUnload);
+            clearInterval(pingInterval);
             updatePresence(false);
-            window.removeEventListener("beforeunload", () => updatePresence(false));
         };
     }, [order?.id, user?.uid, user?.name, user?.email]);
 

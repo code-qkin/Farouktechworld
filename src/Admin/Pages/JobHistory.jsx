@@ -126,9 +126,6 @@ const JobHistoryPage = () => {
         ? [...new Set(flatTaskList.map(t => t.worker))].sort()
         : [...new Set(combinedActivityLogs.map(l => l.user))].sort();
 
-    // Extract unique workers for filter dropdown
-    const uniqueWorkers = [...new Set(flatTaskList.map(t => t.worker))].sort();
-
     return (
         <div className="min-h-screen bg-gray-50 p-6 sm:p-10">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
