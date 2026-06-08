@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, Search, User, Filter, Wrench, CheckCircle, XCircle, Clock, Activity, ArrowRightLeft } from 'lucide-react';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Calendar, Search, User, Filter, Wrench, CheckCircle, XCircle, Clock, Activity, ArrowRightLeft, RefreshCw } from 'lucide-react';
+import { collection, query, orderBy, getDocs, where } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useNavigate } from 'react-router-dom';
 
@@ -12,25 +12,55 @@ const JobHistoryPage = () => {
     const [filterWorker, setFilterWorker] = useState('All');
     const [filterStatus, setFilterStatus] = useState('All');
     const [activeTab, setActiveTab] = useState('technician'); // 'technician' or 'secretary'
+    const [timeFilter, setTimeFilter] = useState('day');
+    const [customStart, setCustomStart] = useState('');
+    const [customEnd, setCustomEnd] = useState('');
     const navigate = useNavigate();
 
-    // 1. Fetch Orders and ActivityLogs real-time
+    // 1. Fetch Orders and ActivityLogs on demand
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        let startDate = new Date();
+        startDate.setHours(0, 0, 0, 0);
+        let endDate = null;
+
+        if (timeFilter === 'week') startDate.setDate(startDate.getDate() - startDate.getDay());
+        else if (timeFilter === 'month') startDate.setDate(1);
+        else if (timeFilter === 'all') startDate = null;
+        else if (timeFilter === 'custom') {
+            if (customStart) { startDate = new Date(customStart); startDate.setHours(0,0,0,0); }
+            if (customEnd) { endDate = new Date(customEnd); endDate.setHours(23,59,59,999); }
+        }
+
+        try {
+            let qOrders = query(collection(db, "Orders"));
+            let qLogs = query(collection(db, "ActivityLogs"));
+
+            if (startDate) {
+                qOrders = query(qOrders, where("createdAt", ">=", startDate));
+                qLogs = query(qLogs, where("timestamp", ">=", startDate));
+            }
+            if (endDate) {
+                qOrders = query(qOrders, where("createdAt", "<=", endDate));
+                qLogs = query(qLogs, where("timestamp", "<=", endDate));
+            }
+
+            qOrders = query(qOrders, orderBy("createdAt", "desc"));
+            qLogs = query(qLogs, orderBy("timestamp", "desc"));
+
+            const [ordersSnap, logsSnap] = await Promise.all([getDocs(qOrders), getDocs(qLogs)]);
+            
+            setRawOrders(ordersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setActivityLogs(logsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        } catch (error) {
+            console.error("Failed to fetch history:", error);
+        }
+        setLoading(false);
+    }, [timeFilter, customStart, customEnd]);
+
     useEffect(() => {
-        const qOrders = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
-        const unsubOrders = onSnapshot(qOrders, (snap) => {
-            const orders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setRawOrders(orders);
-            setLoading(false);
-        });
-
-        const qLogs = query(collection(db, "ActivityLogs"), orderBy("timestamp", "desc"));
-        const unsubLogs = onSnapshot(qLogs, (snap) => {
-            const logs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setActivityLogs(logs);
-        });
-
-        return () => { unsubOrders(); unsubLogs(); };
-    }, []);
+        fetchData();
+    }, [fetchData]);
 
     // 2. Flatten Orders into "Tasks" for Technician Tab
     const flatTaskList = useMemo(() => {
@@ -139,8 +169,12 @@ const JobHistoryPage = () => {
                         <Activity className="text-purple-600"/> Job History & Activity
                     </h1>
                     <p className="text-gray-500 text-sm mt-1">Detailed log of repairs and administrative actions.</p>
+                <div className="flex items-center gap-2">
+                    <button onClick={fetchData} className="px-4 py-2 bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-sm font-bold hover:bg-purple-200 flex items-center gap-2 transition">
+                        <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> Refresh
+                    </button>
+                    <button onClick={() => navigate('/admin/dashboard')} className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-bold hover:bg-gray-50">Back to Dashboard</button>
                 </div>
-                <button onClick={() => navigate('/admin/dashboard')} className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-bold hover:bg-gray-50">Back to Dashboard</button>
             </div>
 
             {/* Tabs */}
@@ -161,20 +195,40 @@ const JobHistoryPage = () => {
 
             {/* Filters */}
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row gap-4">
-                <div className="relative flex-1">
+                <div className="relative flex-1 min-w-[200px]">
                     <Search className="absolute left-3 top-3 text-gray-400" size={18}/>
                     <input 
-                        className="w-full pl-10 p-2.5 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" 
+                        className="w-full pl-10 p-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-sm font-bold transition" 
                         placeholder="Search Ticket, Device or Customer..." 
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0 no-scrollbar items-center">
+                    
+                    {/* SMART CALENDAR FILTER */}
+                    <div className="flex items-center gap-2 bg-white border border-gray-200 px-3 py-1 rounded-xl">
+                        <Calendar className="text-gray-400" size={16}/>
+                        <select className="bg-transparent font-bold text-sm text-slate-600 outline-none cursor-pointer py-1.5" value={timeFilter} onChange={e => setTimeFilter(e.target.value)}>
+                            <option value="day">Today</option>
+                            <option value="week">This Week</option>
+                            <option value="month">This Month</option>
+                            <option value="custom">Custom Range</option>
+                            <option value="all">All Time</option>
+                        </select>
+                        {timeFilter === 'custom' && (
+                            <div className="flex items-center gap-2 ml-2 animate-in fade-in slide-in-from-left-4">
+                                <input type="date" className="text-xs border rounded p-1" value={customStart} onChange={e => setCustomStart(e.target.value)} />
+                                <span className="text-slate-400">-</span>
+                                <input type="date" className="text-xs border rounded p-1" value={customEnd} onChange={e => setCustomEnd(e.target.value)} />
+                            </div>
+                        )}
+                    </div>
+
                     <div className="relative">
                         <User className="absolute left-3 top-3 text-gray-400" size={18}/>
                         <select 
-                            className="pl-10 p-2.5 border rounded-lg bg-white outline-none cursor-pointer"
+                            className="pl-10 p-2.5 border border-gray-200 rounded-xl bg-white outline-none cursor-pointer text-sm font-bold text-slate-600"
                             value={filterWorker}
                             onChange={e => setFilterWorker(e.target.value)}
                         >
@@ -186,7 +240,7 @@ const JobHistoryPage = () => {
                         <div className="relative">
                             <Filter className="absolute left-3 top-3 text-gray-400" size={18}/>
                             <select 
-                                className="pl-10 p-2.5 border rounded-lg bg-white outline-none cursor-pointer"
+                                className="pl-10 p-2.5 border border-gray-200 rounded-xl bg-white outline-none cursor-pointer text-sm font-bold text-slate-600"
                                 value={filterStatus}
                                 onChange={e => setFilterStatus(e.target.value)}
                             >
