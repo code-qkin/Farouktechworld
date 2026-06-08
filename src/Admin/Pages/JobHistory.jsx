@@ -169,6 +169,7 @@ const JobHistoryPage = () => {
                         <Activity className="text-purple-600"/> Job History & Activity
                     </h1>
                     <p className="text-gray-500 text-sm mt-1">Detailed log of repairs and administrative actions.</p>
+                </div>
                 <div className="flex items-center gap-2">
                     <button onClick={fetchData} className="px-4 py-2 bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-sm font-bold hover:bg-purple-200 flex items-center gap-2 transition">
                         <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> Refresh
