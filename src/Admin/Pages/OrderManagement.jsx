@@ -138,6 +138,42 @@ const OrdersManagement = () => {
     // PERMISSION CHECK
     const isManager = role === 'manager';
 
+    // 🔥 PRESENCE TRACKING FOR EDIT MODE
+    useEffect(() => {
+        if (!editOrderId || !user?.uid) return;
+
+        const updatePresence = async (isEntering) => {
+            try {
+                await runTransaction(db, async (t) => {
+                    const ref = doc(db, "Orders", editOrderId);
+                    const snap = await t.get(ref);
+                    if (!snap.exists()) return;
+                    
+                    let currentEditors = snap.data().activeEditors || [];
+                    const now = Date.now();
+                    currentEditors = currentEditors.filter(e => (now - (e.time || 0)) < 300000 && e.uid !== user.uid);
+
+                    if (isEntering) {
+                        currentEditors.push({ uid: user.uid, name: user.name || user.email || 'Admin', time: now });
+                    }
+
+                    t.update(ref, { activeEditors: currentEditors });
+                });
+            } catch (e) { console.error("Presence error", e); }
+        };
+
+        updatePresence(true);
+        const handleUnload = () => updatePresence(false);
+        window.addEventListener("beforeunload", handleUnload);
+        const pingInterval = setInterval(() => updatePresence(true), 120000);
+
+        return () => {
+            window.removeEventListener("beforeunload", handleUnload);
+            clearInterval(pingInterval);
+            updatePresence(false);
+        };
+    }, [editOrderId, user?.uid, user?.name, user?.email]);
+
     // 🔥 SAVE STATE ON CHANGE
     useEffect(() => {
         const stateToSave = {
