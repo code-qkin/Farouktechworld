@@ -417,14 +417,15 @@ const OrderDetails = () => {
                     item.isPaid = false;
                 } else {
                     const totalPaidAmount = data.amountPaid || 0;
+                    const discount = data.discount || 0;
                     const allocatedAmount = newItems.reduce((sum, i) => sum + (i.isPaid ? (i.total || i.cost || 0) : 0), 0);
-                    const unallocated = totalPaidAmount - allocatedAmount;
+                    const unallocated = (totalPaidAmount + discount) - allocatedAmount;
                     const itemCost = item.total ?? item.cost ?? 0;
                     
                     if (unallocated >= itemCost) {
                         item.isPaid = true;
                     } else {
-                        throw `Not enough unallocated funds (₦${unallocated.toLocaleString()}) to mark this ₦${itemCost.toLocaleString()} item as Paid.`;
+                        throw `Not enough funds. (Available to allocate: ₦${unallocated.toLocaleString()}, Item Cost: ₦${itemCost.toLocaleString()})`;
                     }
                 }
                 
