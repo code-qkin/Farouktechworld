@@ -74,12 +74,13 @@ const PaymentRegister = () => {
     const [customStart, setCustomStart] = useState(() => getSavedState('customStart', ''));
     const [customEnd, setCustomEnd] = useState(() => getSavedState('customEnd', ''));
     const [methodFilter, setMethodFilter] = useState(() => getSavedState('methodFilter', 'All'));
+    const [typeFilter, setTypeFilter] = useState(() => getSavedState('typeFilter', 'All'));
 
     // 🔥 SAVE STATE ON CHANGE
     useEffect(() => {
-        const stateToSave = { searchTerm, dateFilter, customStart, customEnd, methodFilter };
+        const stateToSave = { searchTerm, dateFilter, customStart, customEnd, methodFilter, typeFilter };
         sessionStorage.setItem('pay_reg_state', JSON.stringify(stateToSave));
-    }, [searchTerm, dateFilter, customStart, customEnd, methodFilter]);
+    }, [searchTerm, dateFilter, customStart, customEnd, methodFilter, typeFilter]);
 
     // 1. FETCH ORDERS
     useEffect(() => {
@@ -110,7 +111,8 @@ const PaymentRegister = () => {
                         method: pay.method || 'Cash',
                         receivedBy: pay.receivedBy || 'System',
                         date: parseDate(pay.date), 
-                        status: pStatus
+                        status: pStatus,
+                        type: order.orderType || (order.items?.some(i => i.type === 'repair') ? 'repair' : 'store_sale')
                     });
                 });
             } else if (order.amountPaid > 0 && !order.paymentHistory) {
@@ -123,7 +125,8 @@ const PaymentRegister = () => {
                     method: 'Legacy',
                     receivedBy: 'System',
                     date: parseDate(order.createdAt), 
-                    status: pStatus
+                    status: pStatus,
+                    type: order.orderType || (order.items?.some(i => i.type === 'repair') ? 'repair' : 'store_sale')
                 });
             }
         });
@@ -166,9 +169,14 @@ const PaymentRegister = () => {
                 matchesDate = p.date >= start && p.date <= end;
             }
 
-            return matchesSearch && matchesMethod && matchesDate;
+            // Type Filter
+            const matchesType = typeFilter === 'All' || 
+                (typeFilter === 'Repair' && p.type === 'repair') || 
+                (typeFilter === 'Sale' && p.type === 'store_sale');
+
+            return matchesSearch && matchesMethod && matchesDate && matchesType;
         });
-    }, [allPayments, searchTerm, dateFilter, methodFilter, customStart, customEnd]);
+    }, [allPayments, searchTerm, dateFilter, methodFilter, typeFilter, customStart, customEnd]);
 
     // 4. CALCULATE STATS
     const stats = useMemo(() => {
@@ -300,6 +308,16 @@ const PaymentRegister = () => {
                         <option value="POS">POS</option>
                         <option value="Transfer">Transfer</option>
                     </select>
+
+                    <select 
+                        className="px-4 py-2.5 bg-gray-50 rounded-lg text-sm font-bold text-slate-600 outline-none cursor-pointer border border-gray-200"
+                        value={typeFilter}
+                        onChange={e => setTypeFilter(e.target.value)}
+                    >
+                        <option value="All">All Types</option>
+                        <option value="Repair">Repairs</option>
+                        <option value="Sale">Store Sales</option>
+                    </select>
                 </div>
             </div>
 
@@ -314,6 +332,7 @@ const PaymentRegister = () => {
                                 <th className="px-6 py-4">Customer</th>
                                 <th className="px-6 py-4">Received By</th>
                                 <th className="px-6 py-4 text-center">Status</th>
+                                <th className="px-6 py-4 text-center">Type</th>
                                 <th className="px-6 py-4 text-center">Method</th>
                                 <th className="px-6 py-4 text-right">Amount</th>
                             </tr>
@@ -336,6 +355,11 @@ const PaymentRegister = () => {
                                         <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold border ${pay.status === 'Paid' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-orange-100 text-orange-700 border-orange-200'}`}>
                                             {pay.status === 'Paid' ? <CheckCircle size={10} className="inline mr-1"/> : <Clock size={10} className="inline mr-1"/>}
                                             {pay.status}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                        <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold border ${pay.type === 'repair' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-indigo-100 text-indigo-700 border-indigo-200'}`}>
+                                            {pay.type === 'repair' ? 'Repair' : 'Store Sale'}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-center">
