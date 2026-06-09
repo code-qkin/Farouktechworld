@@ -213,41 +213,19 @@ const OrdersManagement = () => {
             }
         }
 
-        if (searchTerm.length >= 3) {
-            const term = searchTerm.trim();
-            const fetchSearch = async () => {
-                const qTicket = query(collection(db, "Orders"), where("ticketId", ">=", term), where("ticketId", "<=", term + "\uf8ff"), limit(50));
-                const qName = query(collection(db, "Orders"), where("customer.name", ">=", term), where("customer.name", "<=", term + "\uf8ff"), limit(50));
-                const [ts, ns] = await Promise.all([getDocs(qTicket), getDocs(qName)]);
-                const res = new Map();
-                [...ts.docs, ...ns.docs].forEach(d => res.set(d.id, { id: d.id, ...d.data() }));
-                
-                // 🔥 SORT SEARCH RESULTS BY DATE DESCENDING
-                const sortedResults = Array.from(res.values()).sort((a, b) => {
-                    const dateA = a.createdAt?.seconds || 0;
-                    const dateB = b.createdAt?.seconds || 0;
-                    return dateB - dateA;
-                });
-
-                setOrders(sortedResults);
-                setLoading(false);
-            };
-            fetchSearch();
-        } else {
-            let q = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
-            
-            if (startDate) {
-                q = query(q, where("createdAt", ">=", startDate));
-            }
-            if (endDate) {
-                q = query(q, where("createdAt", "<=", endDate));
-            }
-            
-            unsubOrders = onSnapshot(q, (snap) => {
-                setOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                setLoading(false);
-            }, (error) => console.error("Orders listener error:", error));
+        let q = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
+        
+        if (startDate) {
+            q = query(q, where("createdAt", ">=", startDate));
         }
+        if (endDate) {
+            q = query(q, where("createdAt", "<=", endDate));
+        }
+        
+        unsubOrders = onSnapshot(q, (snap) => {
+            setOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setLoading(false);
+        }, (error) => console.error("Orders listener error:", error));
         
         const unsubInv = onSnapshot(query(collection(db, "Inventory"), orderBy("name")), snap => setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() }))), (error) => console.error("Inventory listener error:", error));
         const unsubCust = onSnapshot(query(collection(db, "Customers"), orderBy("name")), snap => setSavedCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() }))), (error) => console.error("Customers listener error:", error));
