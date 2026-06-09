@@ -9,7 +9,7 @@ import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import { 
     collection, query, orderBy, onSnapshot, updateDoc, doc, 
-    runTransaction, increment, arrayUnion, arrayRemove, addDoc 
+    runTransaction, setDoc, arrayRemove, serverTimestamp, writeBatch, limit 
 } from 'firebase/firestore';
 import { Toast, ConfirmModal } from '../../Components/Feedback.jsx'; 
 import { 
@@ -66,6 +66,10 @@ const WorkerDashboard = ({ user: propUser }) => {
   const [showNoPartModal, setShowNoPartModal] = useState(false);
   const [noPartReason, setNoPartReason] = useState('');
   
+  // Damage Report State
+  const [showDamageModal, setShowDamageModal] = useState(false);
+  const [damageReason, setDamageReason] = useState('');
+  
   // Selection State
   const [selectedTask, setSelectedTask] = useState(null);
   const [selectedPart, setSelectedPart] = useState('');
@@ -115,7 +119,7 @@ const WorkerDashboard = ({ user: propUser }) => {
         setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     , (error) => console.error("Inventory listener error:", error));
 
-    const unsubOrders = onSnapshot(query(collection(db, "Orders"), orderBy("createdAt", "desc")), snap => {
+    const unsubOrders = onSnapshot(query(collection(db, "Orders"), orderBy("createdAt", "desc"), limit(300)), snap => {
         const allJobs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setOrders(allJobs);
         setLoading(false);
@@ -318,34 +322,71 @@ const WorkerDashboard = ({ user: propUser }) => {
 
   const handleSubmitNoPartRequest = async (e) => {
       e.preventDefault();
-      if (isSubmitting) return; // 🔥 Prevent duplicate clicks
-      if (!selectedTask || selectedDeviceIndex === null || !noPartReason.trim()) return;
-
+      if (!noPartReason.trim() || !selectedTask) return;
       setIsSubmitting(true);
       try {
-          const myIdentity = user.name || user.email || "Technician";
-          
-          await addDoc(collection(db, "ApprovalRequests"), {
-              type: 'no_part_needed',
-              orderId: selectedTask.id,
+          const myIdentity = user.name && user.name.trim() !== "" ? user.name : user.email;
+          await addDoc(collection(db, "Approvals"), {
+              type: "No Part Needed",
               ticketId: selectedTask.ticketId,
-              customer: selectedTask.customer?.name,
-              reason: noPartReason,
+              orderId: selectedTask.id,
               deviceName: selectedDeviceName,
-              requestedBy: myIdentity,
-              role: userRole,
-              requestedAt: new Date().toISOString(),
-              status: 'pending'
+              worker: myIdentity,
+              reason: noPartReason.trim(),
+              status: "Pending",
+              timestamp: new Date()
           });
-
+          setToast({ message: "Approval request sent to Admin.", type: "success" });
           setShowNoPartModal(false);
           setNoPartReason('');
-          setToast({ message: "No Part Needed Request Sent for Approval", type: 'success' });
-      } catch (e) { 
-          setToast({ message: `Error: ${e}`, type: 'error' }); 
-      } finally {
-          setIsSubmitting(false); // 🔥 Re-enable
+      } catch (e) {
+          setToast({ message: "Failed to send request.", type: "error" });
       }
+      setIsSubmitting(false);
+  };
+
+  const handleReportDamage = async (e) => {
+      e.preventDefault();
+      if (!damageReason.trim()) return setToast({ message: "Provide a reason first", type: "error" });
+      if (!selectedPart) return setToast({ message: "Select the replacement part", type: "error" });
+      setIsSubmitting(true);
+      try {
+          const part = inventory.find(p => p.id === selectedPart);
+          if (!part) throw "Part not found";
+          
+          const myIdentity = user.name && user.name.trim() !== "" ? user.name : user.email;
+          const partRef = doc(db, "Inventory", part.id);
+          const incidentData = {
+              ticketId: selectedTask.ticketId,
+              orderId: selectedTask.id,
+              deviceName: selectedDeviceName,
+              worker: myIdentity,
+              reason: damageReason.trim(),
+              partId: part.id,
+              partName: part.name,
+              partCost: Number(part.price || 0),
+              qty: 1,
+              timestamp: new Date()
+          };
+
+          await runTransaction(db, async (t) => {
+              const partDoc = await t.get(partRef);
+              if (!partDoc.exists()) throw "Part missing";
+              if (partDoc.data().stock < 1) throw "Out of stock";
+              t.update(partRef, { stock: increment(-1) });
+              const incidentRef = doc(collection(db, "Incidents"));
+              t.set(incidentRef, incidentData);
+          });
+
+          setToast({ message: "Damage reported. Part deducted from inventory.", type: "success" });
+          setShowDamageModal(false);
+          setDamageReason('');
+          setPartSearch('');
+          setSelectedPart('');
+      } catch (e) {
+          setToast({ message: typeof e === 'string' ? e : "Failed to report damage", type: "error" });
+      }
+      setIsSubmitting(false);
   };
 
   const handleUndoPart = (orderId, partItem) => {
@@ -450,7 +491,7 @@ const WorkerDashboard = ({ user: propUser }) => {
               <StatCard title="Pool" value={dashboardStats.poolCount} icon={Layers} color="blue" />
               <StatCard title="Completed" value={dashboardStats.myCompleted} icon={CheckCircle} color="green" />
               <div className="hidden sm:block bg-white p-4 rounded-xl border border-gray-200 shadow-sm h-24">
-                  <div className="w-full h-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={dashboardStats.chartData}><Bar dataKey="done" radius={[2,2,0,0]} fill="#cbd5e1" /></BarChart></ResponsiveContainer></div>
+                  <div className="w-full h-full min-h-[40px]"><ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}><BarChart data={dashboardStats.chartData}><Bar dataKey="done" radius={[2,2,0,0]} fill="#cbd5e1" /></BarChart></ResponsiveContainer></div>
               </div>
           </div>
 
@@ -491,7 +532,6 @@ const WorkerDashboard = ({ user: propUser }) => {
                                     <div className="flex flex-wrap items-center gap-2 mb-2">
                                         <div className="bg-slate-800 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase truncate max-w-[200px]">{item.name || item.deviceModel}</div>
                                         
-                                        {/* 🔥 ADDED COLOR DISPLAY HERE */}
                                         {item.deviceColor && (
                                             <div className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase border border-blue-100">
                                                 {item.deviceColor}
@@ -512,6 +552,7 @@ const WorkerDashboard = ({ user: propUser }) => {
                                                     {activeTab === 'pool' && <button onClick={() => claimService(order, item.iIdx, svc.sIdx)} className="flex-1 bg-blue-50 text-blue-700 py-2 rounded-lg text-xs font-bold hover:bg-blue-100 transition flex items-center justify-center gap-1 active:scale-95">Claim</button>}
                                                     {activeTab === 'my-jobs' && (
                                                         <>
+                                                            <button onClick={() => { setSelectedTask(order); setSelectedDeviceIndex(item.iIdx); setSelectedDeviceName(item.name || item.deviceModel); setShowDamageModal(true); }} className="flex-[0.5] py-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold border border-red-100 hover:bg-red-100 flex items-center justify-center" title="Report Spoilt Part"><AlertTriangle size={14}/></button>
                                                             <button onClick={() => { setSelectedTask(order); setSelectedDeviceIndex(item.iIdx); setSelectedDeviceName(item.name || item.deviceModel); setShowPartModal(true); }} className="flex-1 py-2 bg-purple-50 text-purple-700 rounded-lg text-xs font-bold border border-purple-100 hover:bg-purple-100 flex items-center justify-center gap-1 active:scale-95"><Box size={14}/> Part</button>
                                                             <button onClick={() => markServiceDone(order, item.iIdx, svc.sIdx)} className="flex-[1.5] py-2 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 shadow-sm flex items-center justify-center gap-1 active:scale-95"><CheckCircle size={14}/> Done</button>
                                                         </>
@@ -553,13 +594,11 @@ const WorkerDashboard = ({ user: propUser }) => {
                       <button onClick={() => setShowPartModal(false)} className="bg-gray-100 p-1.5 rounded-full text-gray-500"><X size={18}/></button>
                   </div>
                   
-                  {/* Search */}
                   <div className="relative mb-3 shrink-0">
                       <Search className="absolute left-3 top-2.5 text-gray-400" size={16}/>
                       <input autoFocus className="w-full pl-10 pr-4 py-2 border rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none text-sm" placeholder="Search part..." value={partSearch} onChange={e => setPartSearch(e.target.value)} />
                   </div>
 
-                  {/* 🔥 CATEGORY FILTER */}
                   <div className="mb-3 shrink-0 relative">
                         <select 
                             className="w-full p-2 pl-9 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-slate-700 outline-none appearance-none"
@@ -572,14 +611,12 @@ const WorkerDashboard = ({ user: propUser }) => {
                         <Filter className="absolute left-3 top-2.5 text-gray-400 pointer-events-none" size={14}/>
                   </div>
 
-                  {/* List */}
                   <div className="overflow-y-auto flex-1 border rounded-xl bg-gray-50 mb-4 divide-y divide-gray-200 custom-scrollbar">
                       {filteredInventory.length === 0 ? <div className="p-4 text-center text-xs text-gray-400">No parts found</div> : 
                           filteredInventory.map(part => (
                               <button key={part.id} disabled={part.stock < 1} onClick={() => setSelectedPart(part.id)} className={`w-full p-3 text-left text-sm flex justify-between items-center hover:bg-purple-50 transition active:bg-purple-100 ${selectedPart === part.id ? 'bg-purple-100 ring-1 ring-purple-500' : ''}`}>
                                   <div>
                                       <div className={`font-medium ${part.stock < 1 ? 'text-gray-400' : 'text-gray-700'}`}>{part.name}</div>
-                                      {/* 🔥 Display Category Below Name */}
                                       <div className="text-[10px] text-gray-400 uppercase font-bold mt-0.5">{part.category}</div>
                                   </div>
                                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${part.stock < 1 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-700'}`}>{part.stock} left</span>
@@ -589,7 +626,6 @@ const WorkerDashboard = ({ user: propUser }) => {
                   </div>
 
                   <div className="flex gap-2 shrink-0">
-                        {/* 🔥 Disable buttons while submitting */}
                         <button onClick={handleLogNoPart} disabled={isSubmitting} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold hover:bg-gray-200 transition flex items-center justify-center gap-1 text-sm disabled:opacity-50">
                             {isSubmitting ? <Loader2 size={16} className="animate-spin"/> : <><ShieldOff size={16}/> No Part</>}
                         </button>
@@ -630,6 +666,71 @@ const WorkerDashboard = ({ user: propUser }) => {
               </div>
           </div>
       )}
+
+      {/* DAMAGE REPORT MODAL */}
+      {showDamageModal && (
+          <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white p-5 rounded-2xl shadow-2xl w-full max-w-sm flex flex-col max-h-[90vh]">
+                  <div className="flex justify-between items-center mb-4 shrink-0">
+                      <h3 className="font-bold text-lg text-red-600 flex items-center gap-2"><AlertTriangle size={18}/> Report Damage</h3>
+                      <button onClick={() => { setShowDamageModal(false); setDamageReason(''); setPartSearch(''); setSelectedPart(''); }} className="bg-gray-100 p-1.5 rounded-full text-gray-500"><X size={18}/></button>
+                  </div>
+                  
+                  <p className="text-sm text-slate-500 mb-3 shrink-0">Report what broke and select the replacement part from inventory.</p>
+                  
+                  <textarea 
+                      className="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-red-500 text-sm mb-3 bg-slate-50 shrink-0" 
+                      rows="2" 
+                      placeholder="E.g., Screen cracked during repair..." 
+                      value={damageReason} 
+                      onChange={e => setDamageReason(e.target.value)} 
+                      required 
+                      autoFocus 
+                  />
+
+                  {/* Search */}
+                  <div className="relative mb-2 shrink-0">
+                      <Search className="absolute left-3 top-2.5 text-gray-400" size={16}/>
+                      <input className="w-full pl-10 pr-4 py-2 border rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-red-500 outline-none text-sm" placeholder="Search replacement part..." value={partSearch} onChange={e => setPartSearch(e.target.value)} />
+                  </div>
+
+                  <div className="mb-2 shrink-0 relative">
+                        <select 
+                            className="w-full p-2 pl-9 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-slate-700 outline-none appearance-none"
+                            value={partCategoryFilter}
+                            onChange={e => setPartCategoryFilter(e.target.value)}
+                        >
+                            <option value="All">All Categories</option>
+                            {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                        </select>
+                        <Filter className="absolute left-3 top-2.5 text-gray-400 pointer-events-none" size={14}/>
+                  </div>
+
+                  {/* List */}
+                  <div className="overflow-y-auto flex-1 border rounded-xl bg-gray-50 mb-4 divide-y divide-gray-200 custom-scrollbar min-h-[150px]">
+                      {filteredInventory.length === 0 ? <div className="p-4 text-center text-xs text-gray-400">No parts found</div> : 
+                          filteredInventory.map(part => (
+                              <button key={part.id} disabled={part.stock < 1} onClick={() => setSelectedPart(part.id)} className={`w-full p-2.5 text-left text-sm flex justify-between items-center hover:bg-red-50 transition active:bg-red-100 ${selectedPart === part.id ? 'bg-red-100 ring-1 ring-red-500' : ''}`}>
+                                  <div>
+                                      <div className={`font-medium text-xs ${part.stock < 1 ? 'text-gray-400' : 'text-gray-700'}`}>{part.name}</div>
+                                      <div className="text-[10px] text-gray-400 uppercase font-bold mt-0.5">{part.category}</div>
+                                  </div>
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${part.stock < 1 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-700'}`}>{part.stock} left</span>
+                              </button>
+                          ))
+                      }
+                  </div>
+
+                  <div className="flex gap-2 shrink-0">
+                      <button onClick={() => { setShowDamageModal(false); setDamageReason(''); setPartSearch(''); setSelectedPart(''); }} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold hover:bg-gray-200 transition text-sm">Cancel</button>
+                      <button onClick={handleReportDamage} disabled={!selectedPart || !damageReason.trim() || isSubmitting} className="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold hover:bg-red-700 shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2">
+                          {isSubmitting ? <Loader2 size={16} className="animate-spin"/> : "Report & Deduct"}
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
     </div>
   );
 };

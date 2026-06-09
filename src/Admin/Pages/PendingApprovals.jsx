@@ -241,7 +241,7 @@ const PendingApprovals = () => {
                             ) : (
                                 <div className="mt-auto pt-4 border-t border-slate-100">
                                     <p className="text-xs text-slate-400 font-bold text-center">
-                                        Processed on {req.requestedAt?.toDate ? req.requestedAt.toDate().toLocaleDateString() : 'Unknown'}
+                                        Processed on {req.processedAt ? (req.processedAt.toDate ? req.processedAt.toDate().toLocaleDateString() : new Date(req.processedAt).toLocaleDateString()) : (req.requestedAt?.toDate ? req.requestedAt.toDate().toLocaleDateString() : 'Unknown')}
                                     </p>
                                 </div>
                             )}

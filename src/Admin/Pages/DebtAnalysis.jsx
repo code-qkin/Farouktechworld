@@ -650,7 +650,7 @@ const DebtAnalysis = () => {
                 <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-[350px] flex flex-col">
                     <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2"><Clock size={18} className="text-purple-600"/> Debt Aging (Time Overdue)</h3>
                     <div className="flex-1 w-full min-h-0">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                             <BarChart data={analysis.chartData}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 11, fill:'#64748b'}} dy={10}/>
@@ -670,7 +670,7 @@ const DebtAnalysis = () => {
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-[350px] flex flex-col">
                     <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2"><Users size={18} className="text-blue-600"/> Balance Status</h3>
                     <div className="flex-1 relative">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                             <PieChart>
                                 <Pie 
                                     data={analysis.pieData} 

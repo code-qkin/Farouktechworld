@@ -12,7 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig.js';
 import { useAuth } from '../AdminContext.jsx';
-import { Toast, ConfirmModal, PromptModal } from '../Components/Feedback.jsx';
+import { Toast, ConfirmModal, PromptModal } from '../Components/Feedback.jsx'; // trigger reload
 
 const OrderDetails = () => {
     const { orderId } = useParams();
@@ -23,6 +23,7 @@ const OrderDetails = () => {
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
     const [workers, setWorkers] = useState([]);
+    const [incidents, setIncidents] = useState([]);
     const [isUpdating, setIsUpdating] = useState(false);
 
     // Real-time Conflict Detection
@@ -142,6 +143,16 @@ const OrderDetails = () => {
         });
         return () => unsub();
     }, []);
+
+    // 3. FETCH INCIDENTS
+    useEffect(() => {
+        if (!order?.id) return;
+        const q = query(collection(db, "Incidents"), where("orderId", "==", order.id));
+        const unsub = onSnapshot(q, snap => {
+            setIncidents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+        return () => unsub();
+    }, [order?.id]);
 
     // --- HANDLERS ---
 
@@ -1103,6 +1114,26 @@ const OrderDetails = () => {
                                     <div key={idx} className="px-6 py-3 flex justify-between items-center hover:bg-gray-50">
                                         <div><span className="text-sm font-bold text-slate-700">{part.name.replace('Used: ', '')}</span><div className="text-xs text-slate-400">By {part.worker || 'Unknown'} • {part.usedAt ? new Date(part.usedAt).toLocaleString() : ''}</div></div>
                                         <button onClick={() => handleRemovePart(part)} className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-full transition disabled:opacity-30 disabled:hover:bg-transparent" title="Remove Part" disabled={isUpdating || isLocked || (role !== 'admin' && role !== 'ceo') || order?.items?.some(i => i.collected)}><Trash2 size={16} /></button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* INTERNAL INCIDENTS SECTION (Admin/CEO only) */}
+                    {(role === 'admin' || role === 'ceo') && incidents.length > 0 && (
+                        <div className="bg-red-50 rounded-2xl shadow-sm border border-red-200 overflow-hidden mt-6">
+                            <div className="bg-red-100 px-6 py-3 border-b border-red-200 flex items-center gap-2"><AlertTriangle size={18} className="text-red-700" /><h3 className="font-bold text-red-900 text-sm uppercase">Internal Incidents (Spoilt Parts)</h3></div>
+                            <div className="divide-y divide-red-100/50">
+                                {incidents.map((inc, idx) => (
+                                    <div key={idx} className="px-6 py-3 hover:bg-red-100/50">
+                                        <div className="flex justify-between items-start mb-1">
+                                            <span className="text-sm font-bold text-red-800">{inc.reason}</span>
+                                            <span className="text-xs font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded border border-red-200">{formatCurrency(inc.partCost)} Loss</span>
+                                        </div>
+                                        <div className="text-xs text-red-600/80">
+                                            Part: <b>{inc.partName}</b> • Worker: {inc.worker || 'Unknown'} • {inc.timestamp?.toDate ? inc.timestamp.toDate().toLocaleString() : ''}
+                                        </div>
                                     </div>
                                 ))}
                             </div>

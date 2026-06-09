@@ -286,10 +286,26 @@ const POSModal = ({
                         if (Number(oldOrderData.discount) !== Number(discount)) {
                             editSummary.push(`Discount changed from ₦${oldOrderData.discount || 0} to ₦${discount}`);
                         }
+                        if (oldOrderData.customer?.name !== customer.name) {
+                            editSummary.push(`Customer changed from ${oldOrderData.customer?.name || 'None'} to ${customer.name || 'None'}`);
+                        }
                         if (oldOrderData.items?.length !== finalItems.length) {
                             editSummary.push(`Items count changed from ${oldOrderData.items?.length || 0} to ${finalItems.length}`);
+                        } else {
+                            finalItems.forEach((newItem, i) => {
+                                const oldItem = oldOrderData.items[i];
+                                if (oldItem.deviceModel !== newItem.deviceModel) {
+                                    editSummary.push(`Device ${i+1} changed from ${oldItem.deviceModel || 'N/A'} to ${newItem.deviceModel || 'N/A'}`);
+                                }
+                                if (oldItem.price !== newItem.price) {
+                                    editSummary.push(`Item ${i+1} price changed from ₦${oldItem.price} to ₦${newItem.price}`);
+                                }
+                                if (oldItem.qty !== newItem.qty) {
+                                    editSummary.push(`Item ${i+1} qty changed from ${oldItem.qty} to ${newItem.qty}`);
+                                }
+                            });
                         }
-                        const finalSummary = editSummary.length > 0 ? editSummary.join(' | ') : 'Order contents modified (no cost changes).';
+                        const finalSummary = editSummary.length > 0 ? editSummary.join(' | ') : 'Order contents modified (minor changes only).';
                         
                         t.update(doc(db, "ApprovalRequests", targetApprovalRequestId), {
                             editsMade: finalSummary,

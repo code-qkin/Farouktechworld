@@ -103,14 +103,14 @@ const ContentCreatorDashboard = () => {
                         subtext="Repair Price List" 
                         onClick={() => navigate('/admin/pricing')} 
                     />
-                    <MetricCard 
+                    {/* <MetricCard 
                         title="Portfolio" 
                         value="Manage" 
                         icon={ImageIcon} 
                         color="purple" 
                         subtext="Proof of Work Gallery" 
                         onClick={() => navigate('/admin/manage-proof-of-work')} 
-                    />
+                    /> */}
                 </div>
 
                 <div className="bg-blue-50 border border-blue-100 p-6 rounded-2xl">

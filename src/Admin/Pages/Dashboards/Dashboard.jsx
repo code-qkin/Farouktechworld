@@ -9,7 +9,7 @@ import { useAuth } from '../../AdminContext';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../../../firebaseConfig';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, orderBy, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, deleteDoc, limit } from 'firebase/firestore';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Toast } from '../../Components/Feedback';
 
@@ -115,7 +115,7 @@ const Dashboard = () => {
 
     // 2. FETCH DASHBOARD DATA
     useEffect(() => {
-        const qOrders = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
+        const qOrders = query(collection(db, "Orders"), orderBy("createdAt", "desc"), limit(500));
         const unsubOrders = onSnapshot(qOrders, (snapshot) => {
             let net = 0; 
             let activeTickets = 0;
@@ -343,9 +343,9 @@ const Dashboard = () => {
                             </button>
 
                             {/* 5. Portfolio */}
-                            <button onClick={() => navigate('/admin/manage-proof-of-work')} className="col-span-2 flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-pink-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-pink-500 hover:shadow-lg">
+                            {/* <button onClick={() => navigate('/admin/manage-proof-of-work')} className="col-span-2 flex flex-col items-center justify-center gap-1.5 p-2 bg-slate-800 rounded-xl hover:bg-pink-600 text-slate-300 hover:text-white transition-all duration-300 h-full border border-slate-700 hover:border-pink-500 hover:shadow-lg">
                                 <ImageIcon size={18}/> <span className="text-[10px] font-bold">Portfolio</span>
-                            </button>
+                            </button> */}
                             
                         </div>
                     </div>
@@ -430,7 +430,7 @@ const Dashboard = () => {
                             <button onClick={() => navigate('/admin/performance')} className="text-xs font-bold text-purple-700 bg-purple-50 px-4 py-2 rounded-xl hover:bg-purple-100 transition shadow-sm">View Report</button>
                         </div>
                         <div className="h-[250px] w-full min-h-[250px]">
-                            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                            <ResponsiveContainer width="100%" height={250} minWidth={0} minHeight={0}>
                                 <AreaChart data={chartData}>
                                     <defs><linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#7e22ce" stopOpacity={0.1}/><stop offset="95%" stopColor="#7e22ce" stopOpacity={0}/></linearGradient></defs>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
