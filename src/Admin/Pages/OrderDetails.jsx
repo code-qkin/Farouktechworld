@@ -556,7 +556,7 @@ const OrderDetails = () => {
     const handleStatusChange = async (e) => {
         const newStatus = e.target.value;
         if (newStatus === 'Void') {
-            if (role !== 'admin' && role !== 'ceo' && role !== 'secretary') return setToast({ message: "Unauthorized", type: "error" });
+            if (role !== 'admin' && role !== 'ceo') return setToast({ message: "Only Admin or CEO can void orders", type: "error" });
             setConfirmConfig({ isOpen: true, title: "Void Order?", message: "Cancels order & zeros balance.", confirmText: "Void", confirmColor: "bg-red-600", action: handleVoidOrder }); 
             return; 
         }
@@ -918,7 +918,9 @@ const OrderDetails = () => {
                             <div><h1 className="text-3xl font-mono font-black tracking-tight">{order.ticketId}</h1><p className="text-slate-400 text-sm mt-1 flex items-center gap-2"><Calendar size={14} /> {dateStr}</p></div>
                             <div className="bg-white/20 px-3 py-1 rounded-lg backdrop-blur-sm">
                                 <select value={order.status} onChange={handleStatusChange} disabled={isUpdating || (order.status === 'Void' && role !== 'admin' && role !== 'ceo')} className="bg-transparent text-white font-bold outline-none cursor-pointer disabled:opacity-80">
-                                    {['Pending', 'In Progress', 'Ready for Pickup', 'Completed', 'Collected', 'Void'].map(s => <option key={s} className="text-black">{s}</option>)}
+                                    {['Pending', 'In Progress', 'Ready for Pickup', 'Completed', 'Collected', 'Void'].map(s => 
+                                        <option key={s} value={s} className="text-black" disabled={s === 'Void' && role !== 'admin' && role !== 'ceo'}>{s}</option>
+                                    )}
                                 </select>
                             </div>
                         </div>
