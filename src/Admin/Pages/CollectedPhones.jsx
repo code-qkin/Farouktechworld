@@ -76,7 +76,17 @@ const CollectedPhonesPage = () => {
             if (!order.items) return;
             order.items.forEach((item, itemIdx) => {
                 if (item.type === 'repair' && item.collected) {
-                    const collectedDate = item.collectedAt ? new Date(item.collectedAt) : (order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt));
+                    let fallbackDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+                    
+                    // Smart Fallback: If collectedAt is missing (old orders), the best guess is the date of the LAST payment, as customers usually pay when they collect.
+                    if (!item.collectedAt && order.paymentHistory && order.paymentHistory.length > 0) {
+                        const lastPayment = order.paymentHistory[order.paymentHistory.length - 1];
+                        if (lastPayment.date) {
+                            fallbackDate = new Date(lastPayment.date);
+                        }
+                    }
+
+                    const collectedDate = item.collectedAt ? new Date(item.collectedAt) : fallbackDate;
                     
                     // Filter by collectedDate
                     if (startDate && collectedDate < startDate) return;
