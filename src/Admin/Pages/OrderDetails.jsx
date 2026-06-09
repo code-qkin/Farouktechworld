@@ -182,7 +182,13 @@ const OrderDetails = () => {
                     receivedBy: user?.name || "Admin"
                 };
 
+                const newItems = JSON.parse(JSON.stringify(data.items));
+                if (newBal <= 0) {
+                    newItems.forEach(i => i.isPaid = true);
+                }
+
                 t.update(ref, {
+                    items: newItems,
                     amountPaid: newPaid, balance: newBal,
                     paymentStatus: newBal <= 0 ? 'Paid' : 'Part Payment', paid: newBal <= 0,
                     paymentHistory: arrayUnion(paymentRecord)
@@ -376,7 +382,12 @@ const OrderDetails = () => {
                 if (finalPaid > newTotalCost) { newRefunded += (finalPaid - newTotalCost); finalPaid = newTotalCost; }
                 const newBalance = newTotalCost - finalPaid;
                 
-                t.update(ref, { discount: val, totalCost: newTotalCost, amountPaid: finalPaid, refundedAmount: newRefunded, balance: newBalance, paymentStatus: finalPaid >= newTotalCost ? 'Paid' : (finalPaid > 0 ? 'Part Payment' : 'Unpaid'), paid: finalPaid >= newTotalCost });
+                const newItems = JSON.parse(JSON.stringify(data.items));
+                if (newBalance <= 0) {
+                    newItems.forEach(i => i.isPaid = true);
+                }
+
+                t.update(ref, { items: newItems, discount: val, totalCost: newTotalCost, amountPaid: finalPaid, refundedAmount: newRefunded, balance: newBalance, paymentStatus: finalPaid >= newTotalCost ? 'Paid' : (finalPaid > 0 ? 'Part Payment' : 'Unpaid'), paid: finalPaid >= newTotalCost });
 
                 // Update Customer Stats
                 if (data.customer?.id) {
@@ -389,6 +400,41 @@ const OrderDetails = () => {
             setToast({ message: "Discount Applied", type: "success" });
             setShowDiscountModal(false);
         } catch (e) { setToast({ message: "Failed", type: "error" }); } finally { setIsUpdating(false); }
+    };
+
+    const handleToggleItemPaid = async (index) => {
+        setIsUpdating(true);
+        try {
+            await runTransaction(db, async (t) => {
+                const ref = doc(db, "Orders", order.id);
+                const data = (await t.get(ref)).data();
+                if (data.status === 'Void') throw "Order Voided";
+
+                const newItems = JSON.parse(JSON.stringify(data.items));
+                const item = newItems[index];
+                
+                if (item.isPaid) {
+                    item.isPaid = false;
+                } else {
+                    const totalPaidAmount = data.amountPaid || 0;
+                    const allocatedAmount = newItems.reduce((sum, i) => sum + (i.isPaid ? (i.total || i.cost || 0) : 0), 0);
+                    const unallocated = totalPaidAmount - allocatedAmount;
+                    const itemCost = item.total ?? item.cost ?? 0;
+                    
+                    if (unallocated >= itemCost) {
+                        item.isPaid = true;
+                    } else {
+                        throw `Not enough unallocated funds (₦${unallocated.toLocaleString()}) to mark this ₦${itemCost.toLocaleString()} item as Paid.`;
+                    }
+                }
+                
+                t.update(ref, { items: newItems });
+            });
+            setToast({ message: "Payment Status Updated", type: "success" });
+        } catch (e) {
+            setToast({ message: typeof e === 'string' ? e : "Update Failed", type: "error" });
+        }
+        setIsUpdating(false);
     };
 
     const handleVoidProductTrigger = (i) => {
@@ -961,6 +1007,19 @@ const OrderDetails = () => {
                                                                     {item.deviceColor}
                                                                 </span>
                                                             )}
+
+                                                            {/* 🔥 INDIVIDUAL PAID STATUS */}
+                                                            <button 
+                                                                onClick={() => handleToggleItemPaid(i)} 
+                                                                disabled={isUpdating || order.status === 'Void'}
+                                                                className={`text-[10px] px-2 py-0.5 rounded border font-bold flex items-center gap-1 transition ${
+                                                                    item.isPaid 
+                                                                        ? 'bg-green-100 text-green-700 border-green-200' 
+                                                                        : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                                                                }`}
+                                                            >
+                                                                <DollarSign size={10} /> {item.isPaid ? 'Paid' : 'Unpaid'}
+                                                            </button>
 
                                                             {item.returned && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded border border-red-200">Returned</span>}
                                                             {item.collected && (

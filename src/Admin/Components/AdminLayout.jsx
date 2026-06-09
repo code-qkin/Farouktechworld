@@ -51,6 +51,7 @@ const AdminLayout = () => {
         { path: '/admin/customers', icon: Users, label: 'Customers', roles: ['admin', 'manager', 'secretary', 'ceo'] },
         { path: '/admin/performance', icon: TrendingUp, label: 'Performance', roles: ['admin', 'manager', 'ceo'] },
         { path: '/admin/job-history', icon: Briefcase, label: 'Job History', roles: ['admin', 'manager', 'ceo', 'worker'] },
+        { path: '/admin/collected-phones', icon: Smartphone, label: 'Collected Phones', roles: ['admin', 'manager', 'ceo'] },
         { path: '/admin/payroll', icon: Banknote, label: 'Payroll', roles: ['admin', 'manager', 'ceo'] },
         { path: '/admin/pricing', icon: DollarSign, label: 'Pricing', roles: ['admin', 'manager', 'ceo', 'content_creator'] },
         { path: '/admin/manage-proof-of-work', icon: ImageIcon, label: 'Portfolio', roles: ['admin', 'manager', 'ceo', 'content_creator'] },

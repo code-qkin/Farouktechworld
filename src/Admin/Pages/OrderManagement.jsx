@@ -508,6 +508,10 @@ const OrdersManagement = () => {
 
                     const oldPaid = oldOrderData.amountPaid || 0;
                     const balance = totalCost - oldPaid;
+                    
+                    // Auto-mark items paid if balance is 0
+                    if (balance <= 0) finalItems.forEach(i => i.isPaid = true);
+
                     t.update(doc(db, "Orders", editOrderId), { 
                         ...orderData, 
                         items: finalItems,
@@ -530,6 +534,10 @@ const OrdersManagement = () => {
                 } else {
                     const ticketId = generateTicketId();
                     const newRef = doc(collection(db, "Orders"));
+                    
+                    // Auto-mark items paid if cost is 0
+                    if (totalCost <= 0) orderData.items.forEach(i => i.isPaid = true);
+
                     t.set(newRef, { 
                         ticketId, ...orderData, amountPaid: 0, balance: totalCost, 
                         paymentStatus: 'Unpaid', status: cart.some(i=>i.type==='repair') ? 'Pending' : 'Completed', 

@@ -20,6 +20,7 @@ import OrderDetails from './Admin/Pages/OrderDetails';
 import Settings from './Admin/Components/Settings';
 import PerformancePage from './Admin/Pages/PerformancePage';
 import JobHistory from './Admin/Pages/JobHistory';
+import CollectedPhones from './Admin/Pages/CollectedPhones';
 import PayrollPage from './Admin/Pages/PayrollPage';
 import SignUp from './Admin/Components/SignUp';
 import SystemReset from './Admin/Components/SystemReset';
@@ -68,6 +69,7 @@ const router = createBrowserRouter(
             <Route path="orders/:orderId" element={<OrderDetails />} />
             <Route path="performance" element={<PerformancePage />} />
             <Route path="job-history" element={<JobHistory />} />
+            <Route path="collected-phones" element={<CollectedPhones />} />
             <Route path="payroll" element={<PayrollPage />} />
             <Route path="pricing" element={<ServicePrices />} />
             <Route path="manage-proof-of-work" element={<ManageProofOfWork />} />
