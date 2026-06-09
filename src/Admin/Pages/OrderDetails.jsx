@@ -1012,14 +1012,14 @@ const OrderDetails = () => {
                                                             {/* 🔥 INDIVIDUAL PAID STATUS */}
                                                             <button 
                                                                 onClick={() => handleToggleItemPaid(i)} 
-                                                                disabled={isUpdating || order.status === 'Void'}
+                                                                disabled={isUpdating || order.status === 'Void' || order.balance <= 0}
                                                                 className={`text-[10px] px-2 py-0.5 rounded border font-bold flex items-center gap-1 transition ${
-                                                                    item.isPaid 
+                                                                    (item.isPaid || order.balance <= 0) 
                                                                         ? 'bg-green-100 text-green-700 border-green-200' 
                                                                         : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
                                                                 }`}
                                                             >
-                                                                <DollarSign size={10} /> {item.isPaid ? 'Paid' : 'Unpaid'}
+                                                                <DollarSign size={10} /> {(item.isPaid || order.balance <= 0) ? 'Paid' : 'Unpaid'}
                                                             </button>
 
                                                             {item.returned && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded border border-red-200">Returned</span>}

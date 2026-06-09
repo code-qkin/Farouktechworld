@@ -56,7 +56,7 @@ const CollectedPhonesPage = () => {
                         customer: order.customer?.name || 'Unknown',
                         device: item.deviceModel || item.name,
                         cost: item.total ?? item.cost ?? 0,
-                        isPaid: item.isPaid || false,
+                        isPaid: item.isPaid || order.balance <= 0 || order.paymentStatus === 'Paid',
                         orderId: order.id
                     });
                 }
