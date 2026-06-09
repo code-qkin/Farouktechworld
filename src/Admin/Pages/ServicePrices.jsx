@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-    Search, Save, DollarSign, Filter, ChevronDown, 
+    Search, Save, Filter, ChevronDown, 
     ArrowLeft, Smartphone, Loader2, ChevronLeft, ChevronRight, 
     Plus, X, Wrench, Layers, Trash2, Tablet, Watch
 } from 'lucide-react';
@@ -377,7 +377,7 @@ const ServicePrices = () => {
                                                                 </button>
                                                             ) : (
                                                                 <button onClick={() => startEdit(item)} className="text-slate-400 hover:text-blue-600 p-2 hover:bg-blue-50 rounded-lg transition">
-                                                                    <DollarSign size={16}/>
+                                                                    <NairaSign size={16}/>
                                                                 </button>
                                                             )}
                                                             <button onClick={() => handleDelete(item)} className="text-slate-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition">

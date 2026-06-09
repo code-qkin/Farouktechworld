@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Package, Smartphone, Activity, Search, DollarSign, Image as ImageIcon
+    Package, Smartphone, Activity, Search, Image as ImageIcon
 } from 'lucide-react';
 import { useAuth } from '../../AdminContext';
 import { db } from '../../../firebaseConfig';
@@ -97,7 +97,7 @@ const ContentCreatorDashboard = () => {
                     <MetricCard 
                         title="Services" 
                         value={stats.servicesCount} 
-                        icon={DollarSign} 
+                        icon={NairaSign} 
                         color="green" 
                         subtext="Repair Price List" 
                         onClick={() => navigate('/admin/pricing')} 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Calendar, Search, Smartphone, DollarSign, Activity, RefreshCw } from 'lucide-react';
+import { Calendar, Search, Smartphone, Activity, RefreshCw, Eye, EyeOff } from 'lucide-react';
+import NairaSign from '../Components/NairaSign';
 import { collection, query, orderBy, getDocs, where } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useNavigate } from 'react-router-dom';
@@ -11,6 +12,7 @@ const CollectedPhonesPage = () => {
     const [timeFilter, setTimeFilter] = useState(() => sessionStorage.getItem('cp_timeFilter') || 'day');
     const [customStart, setCustomStart] = useState(() => sessionStorage.getItem('cp_customStart') || '');
     const [customEnd, setCustomEnd] = useState(() => sessionStorage.getItem('cp_customEnd') || '');
+    const [hideStats, setHideStats] = useState(() => sessionStorage.getItem('cp_hideStats') === 'true');
     const navigate = useNavigate();
 
     // Persist State
@@ -19,7 +21,8 @@ const CollectedPhonesPage = () => {
         sessionStorage.setItem('cp_timeFilter', timeFilter);
         sessionStorage.setItem('cp_customStart', customStart);
         sessionStorage.setItem('cp_customEnd', customEnd);
-    }, [searchTerm, timeFilter, customStart, customEnd]);
+        sessionStorage.setItem('cp_hideStats', hideStats);
+    }, [searchTerm, timeFilter, customStart, customEnd, hideStats]);
 
     // Persist Scroll
     useEffect(() => {
@@ -155,18 +158,23 @@ const CollectedPhonesPage = () => {
             </div>
 
             {/* Stats Cards */}
+            <div className="flex justify-end mb-2">
+                <button onClick={() => setHideStats(!hideStats)} className="text-gray-500 hover:text-gray-800 flex items-center gap-2 text-sm font-bold bg-white px-3 py-1.5 rounded-lg border shadow-sm">
+                    {hideStats ? <><Eye size={16}/> Show Amounts</> : <><EyeOff size={16}/> Hide Amounts</>}
+                </button>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                 <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
                     <p className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-2"><Activity size={16}/> Total Value</p>
-                    <h3 className="text-3xl font-black text-gray-900">{formatCurrency(stats.totalValue)}</h3>
+                    <h3 className="text-3xl font-black text-gray-900">{hideStats ? '****' : formatCurrency(stats.totalValue)}</h3>
                 </div>
                 <div className="bg-green-50 p-5 rounded-2xl border border-green-200 shadow-sm">
-                    <p className="text-sm font-bold text-green-700 uppercase tracking-wider mb-1 flex items-center gap-2"><DollarSign size={16}/> Total Paid</p>
-                    <h3 className="text-3xl font-black text-green-800">{formatCurrency(stats.totalPaid)}</h3>
+                    <p className="text-sm font-bold text-green-700 uppercase tracking-wider mb-1 flex items-center gap-2"><NairaSign size={16}/> Total Paid</p>
+                    <h3 className="text-3xl font-black text-green-800">{hideStats ? '****' : formatCurrency(stats.totalPaid)}</h3>
                 </div>
                 <div className="bg-red-50 p-5 rounded-2xl border border-red-200 shadow-sm">
-                    <p className="text-sm font-bold text-red-700 uppercase tracking-wider mb-1 flex items-center gap-2"><DollarSign size={16}/> Total Unpaid</p>
-                    <h3 className="text-3xl font-black text-red-800">{formatCurrency(stats.totalUnpaid)}</h3>
+                    <p className="text-sm font-bold text-red-700 uppercase tracking-wider mb-1 flex items-center gap-2"><NairaSign size={16}/> Total Unpaid</p>
+                    <h3 className="text-3xl font-black text-red-800">{hideStats ? '****' : formatCurrency(stats.totalUnpaid)}</h3>
                 </div>
             </div>
 
@@ -237,11 +245,11 @@ const CollectedPhonesPage = () => {
                                         <td className="p-4 text-center">
                                             {phone.isPaid ? (
                                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
-                                                    <DollarSign size={12}/> Paid
+                                                    <NairaSign size={12}/> Paid
                                                 </span>
                                             ) : (
                                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">
-                                                    <DollarSign size={12}/> Not Paid
+                                                    <NairaSign size={12}/> Not Paid
                                                 </span>
                                             )}
                                         </td>

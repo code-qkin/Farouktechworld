@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
     User, Phone, Mail, FileText, History, 
-    ArrowLeft, DollarSign, Calendar, Clock, 
+    ArrowLeft, Calendar, Clock, 
     CheckCircle, AlertCircle, Package, Wrench, ExternalLink,
     TrendingUp, ShoppingBag, Edit2, MessageSquare, ArrowRight
 } from 'lucide-react';
@@ -212,7 +212,7 @@ const CustomerProfile = () => {
                     {stats.unpaidOrders.length > 0 && (
                         <div className="animate-in slide-in-from-top-4">
                             <h2 className="text-sm font-black text-red-600 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                <DollarSign size={18}/> Unpaid Invoices ({stats.unpaidOrders.length})
+                                <NairaSign size={18}/> Unpaid Invoices ({stats.unpaidOrders.length})
                             </h2>
                             <div className="grid gap-4">
                                 {stats.unpaidOrders.map(order => (
@@ -279,7 +279,7 @@ const CustomerProfile = () => {
                                                 </p>
                                                 <div className="flex items-center gap-3 mt-2 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                                                     <span className="flex items-center gap-1"><Calendar size={12}/> {new Date(order.createdAt?.seconds * 1000).toLocaleDateString()}</span>
-                                                    <span className="flex items-center gap-1"><DollarSign size={12}/> {formatCurrency(order.totalCost)}</span>
+                                                    <span className="flex items-center gap-1"><NairaSign size={12}/> {formatCurrency(order.totalCost)}</span>
                                                 </div>
                                             </div>
                                         </div>

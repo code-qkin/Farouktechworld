@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { 
     LayoutDashboard, ClipboardList, Package, Users, Settings, 
     LogOut, Menu, X, Smartphone, TrendingUp, Briefcase, 
-    Banknote, DollarSign, Image as ImageIcon, Activity, Search, ClipboardCheck, FileText
+    Banknote, Image as ImageIcon, Activity, Search, ClipboardCheck, FileText
 } from 'lucide-react';
 import { useAuth } from '../AdminContext';
 import { signOut } from 'firebase/auth';
@@ -53,7 +53,7 @@ const AdminLayout = () => {
         { path: '/admin/job-history', icon: Briefcase, label: 'Job History', roles: ['admin', 'manager', 'ceo', 'worker'] },
         { path: '/admin/collected-phones', icon: Smartphone, label: 'Collected Phones', roles: ['admin', 'manager', 'ceo'] },
         { path: '/admin/payroll', icon: Banknote, label: 'Payroll', roles: ['admin', 'manager', 'ceo'] },
-        { path: '/admin/pricing', icon: DollarSign, label: 'Pricing', roles: ['admin', 'manager', 'ceo', 'content_creator'] },
+        { path: '/admin/pricing', icon: NairaSign, label: 'Pricing', roles: ['admin', 'manager', 'ceo', 'content_creator'] },
         { path: '/admin/manage-proof-of-work', icon: ImageIcon, label: 'Portfolio', roles: ['admin', 'manager', 'ceo', 'content_creator'] },
         { path: '/admin/debt-analysis', icon: Activity, label: 'Debt Analysis', roles: ['admin', 'ceo'] },
         { path: '/admin/payments', icon: FileText, label: 'Payment Register', roles: ['admin', 'ceo'] },

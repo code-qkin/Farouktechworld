@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, Filter, Search, DollarSign, AlertCircle, CheckCircle, ArrowLeftCircle } from 'lucide-react';
+import { Calendar, Filter, Search, AlertCircle, CheckCircle, ArrowLeftCircle } from 'lucide-react';
+import NairaSign from '../Components/NairaSign';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 

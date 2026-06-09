@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Users, Trash2, CheckCircle, Lock, Unlock, 
-    ArrowLeft, DollarSign, Save, X, Wrench, Shield, Edit2,
+    ArrowLeft, Save, X, Wrench, Shield, Edit2,
     UserPlus, Crown, Briefcase, Mail, Key
 } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';

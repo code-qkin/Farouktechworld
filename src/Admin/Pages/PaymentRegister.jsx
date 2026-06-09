@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Calendar, Search, Filter, Download, ArrowLeft, 
-    CreditCard, Banknote, DollarSign, User, FileText,
+    CreditCard, Banknote, User, FileText,
     ArrowUpRight, CheckCircle, Clock, Eye, EyeOff
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';

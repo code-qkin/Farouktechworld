@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-    DollarSign, Calendar, Users, Download, ArrowLeft, Layers, 
+    Calendar, Users, Download, ArrowLeft, Layers, 
     ChevronDown, ChevronUp, CheckCircle, XCircle, AlertCircle, 
     Clock, Eye, Printer, Plus, Trash2, X 
 } from 'lucide-react';
@@ -565,7 +565,7 @@ const PayrollPage = () => {
 
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
                 <div>
-                    <h1 className="text-3xl font-extrabold text-purple-900 flex items-center gap-2"><DollarSign className="text-green-600"/> Payroll Center</h1>
+                    <h1 className="text-3xl font-extrabold text-purple-900 flex items-center gap-2"><NairaSign className="text-green-600"/> Payroll Center</h1>
                     <p className="text-gray-500 text-sm mt-1">Professional staff payout management.</p>
                 </div>
                 <div className="flex gap-2">

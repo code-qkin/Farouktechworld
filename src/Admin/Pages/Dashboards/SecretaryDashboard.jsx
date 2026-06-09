@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-    ClipboardList, ShoppingBag, Search, DollarSign, Clock, 
+    ClipboardList, ShoppingBag, Search, Clock, 
     CheckCircle, LogOut, Bell, User, Phone, Calendar, 
     ArrowRight, TrendingUp, Layers, Eye, EyeOff
 } from 'lucide-react';
@@ -193,7 +193,7 @@ const SecretaryDashboard = ({ user }) => {
             <StatCard 
                 title="Cash Collected (Today)" 
                 value={formatCurrency(dashboardData.cashToday)} 
-                icon={DollarSign} 
+                icon={NairaSign} 
                 color="green" 
                 subtext="Daily Revenue" 
                 hideable={true} 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-    ArrowLeft, Printer, DollarSign, CheckCircle, Wrench, Ban, PlusCircle,
+    ArrowLeft, Printer, CheckCircle, Wrench, Ban, PlusCircle,
     X, RotateCcw, RefreshCw, Lock, Smartphone, Edit2, Trash2, AlertTriangle, Package,
     Loader2, Calendar, User, Mail, Send, Eye, ArrowRight
 } from 'lucide-react';
@@ -1023,7 +1023,7 @@ const OrderDetails = () => {
                                                                         : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
                                                                 }`}
                                                             >
-                                                                <DollarSign size={10} /> {(item.isPaid || order.balance <= 0) ? 'Paid' : 'Unpaid'}
+                                                                <NairaSign size={10} /> {(item.isPaid || order.balance <= 0) ? 'Paid' : 'Unpaid'}
                                                             </button>
 
                                                             {item.returned && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded border border-red-200">Returned</span>}
@@ -1138,7 +1138,7 @@ const OrderDetails = () => {
                     </div>
 
                     <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 shadow-sm h-fit">
-                        <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2"><DollarSign size={18} /> Payment Summary</h3>
+                        <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2"><NairaSign size={18} /> Payment Summary</h3>
 
                         {/* Financial Breakdown */}
                         <div className="space-y-3 text-sm mb-6">

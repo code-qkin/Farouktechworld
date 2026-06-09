@@ -4,7 +4,7 @@ import {
     ShoppingBag, Download, ArrowLeft, ShoppingCart, 
     Filter, ChevronDown, CheckCircle, AlertCircle, Wrench, ArrowRight,
     ChevronLeft, ChevronRight, Plus, Minus, AlertTriangle, Send,
-    Loader2, Calendar, DollarSign, Activity, Clock, Layers, Palette
+    Loader2, Calendar, Activity, Clock, Layers, Palette
 } from 'lucide-react';
 import { useAuth } from '../AdminContext.jsx'; 
 import { db } from '../../firebaseConfig.js';
