@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import NairaSign from '../../Components/NairaSign';
 import {
     Package, Smartphone, Activity, Search, Image as ImageIcon
 } from 'lucide-react';

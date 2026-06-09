@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import NairaSign from './NairaSign';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { 
     LayoutDashboard, ClipboardList, Package, Users, Settings, 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import NairaSign from '../../Components/NairaSign';
 import { 
     ClipboardList, ShoppingBag, Search, Clock, 
     CheckCircle, LogOut, Bell, User, Phone, Calendar, 

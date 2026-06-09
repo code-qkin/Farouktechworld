@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import NairaSign from '../Components/NairaSign';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
     User, Phone, Mail, FileText, History, 
