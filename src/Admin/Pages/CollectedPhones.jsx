@@ -7,52 +7,85 @@ import { useNavigate } from 'react-router-dom';
 const CollectedPhonesPage = () => {
     const [rawOrders, setRawOrders] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [timeFilter, setTimeFilter] = useState('month');
-    const [customStart, setCustomStart] = useState('');
-    const [customEnd, setCustomEnd] = useState('');
+    const [searchTerm, setSearchTerm] = useState(() => sessionStorage.getItem('cp_searchTerm') || '');
+    const [timeFilter, setTimeFilter] = useState(() => sessionStorage.getItem('cp_timeFilter') || 'day');
+    const [customStart, setCustomStart] = useState(() => sessionStorage.getItem('cp_customStart') || '');
+    const [customEnd, setCustomEnd] = useState(() => sessionStorage.getItem('cp_customEnd') || '');
     const navigate = useNavigate();
+
+    // Persist State
+    useEffect(() => {
+        sessionStorage.setItem('cp_searchTerm', searchTerm);
+        sessionStorage.setItem('cp_timeFilter', timeFilter);
+        sessionStorage.setItem('cp_customStart', customStart);
+        sessionStorage.setItem('cp_customEnd', customEnd);
+    }, [searchTerm, timeFilter, customStart, customEnd]);
+
+    // Persist Scroll
+    useEffect(() => {
+        const handleScroll = () => {
+            sessionStorage.setItem('cp_scroll', window.scrollY.toString());
+        };
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
-        let startDate = new Date();
-        startDate.setHours(0, 0, 0, 0);
-        let endDate = null;
-
-        if (timeFilter === 'week') startDate.setDate(startDate.getDate() - startDate.getDay());
-        else if (timeFilter === 'month') startDate.setDate(1);
-        else if (timeFilter === 'all') startDate = null;
-        else if (timeFilter === 'custom') {
-            if (customStart) { startDate = new Date(customStart); startDate.setHours(0,0,0,0); }
-            if (customEnd) { endDate = new Date(customEnd); endDate.setHours(23,59,59,999); }
-        }
-
         try {
-            let qOrders = query(collection(db, "Orders"));
-            if (startDate) qOrders = query(qOrders, where("createdAt", ">=", startDate));
-            if (endDate) qOrders = query(qOrders, where("createdAt", "<=", endDate));
-            qOrders = query(qOrders, orderBy("createdAt", "desc"));
-
+            const qOrders = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
             const ordersSnap = await getDocs(qOrders);
             setRawOrders(ordersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         } catch (error) {
             console.error("Failed to fetch collected phones:", error);
         }
         setLoading(false);
-    }, [timeFilter, customStart, customEnd]);
+    }, []);
 
-    useEffect(() => { fetchData(); }, [fetchData]);
+    useEffect(() => { 
+        fetchData(); 
+    }, [fetchData]);
+
+    useEffect(() => {
+        const savedScroll = sessionStorage.getItem('cp_scroll');
+        if (savedScroll && !loading && rawOrders.length > 0) {
+            window.scrollTo(0, parseInt(savedScroll, 10));
+        }
+    }, [loading, rawOrders.length]);
 
     const collectedPhones = useMemo(() => {
+        let startDate = new Date();
+        startDate.setHours(0, 0, 0, 0);
+        let endDate = null;
+
+        if (timeFilter === 'day') {
+            // Keep startDate as today at midnight
+        } else if (timeFilter === 'week') {
+            startDate.setDate(startDate.getDate() - startDate.getDay());
+        } else if (timeFilter === 'month') {
+            startDate.setDate(1);
+        } else if (timeFilter === 'all') {
+            startDate = null;
+        } else if (timeFilter === 'custom') {
+            if (customStart) { startDate = new Date(customStart); startDate.setHours(0,0,0,0); }
+            if (customEnd) { endDate = new Date(customEnd); endDate.setHours(23,59,59,999); }
+        }
+
         let phones = [];
         rawOrders.forEach(order => {
             if (!order.items) return;
             order.items.forEach((item, itemIdx) => {
                 if (item.type === 'repair' && item.collected) {
+                    const collectedDate = item.collectedAt ? new Date(item.collectedAt) : (order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt));
+                    
+                    // Filter by collectedDate
+                    if (startDate && collectedDate < startDate) return;
+                    if (endDate && collectedDate > endDate) return;
+
                     phones.push({
                         id: `${order.ticketId}-${itemIdx}`,
                         ticketId: order.ticketId,
-                        date: order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt),
+                        date: collectedDate,
                         customer: order.customer?.name || 'Unknown',
                         device: item.deviceModel || item.name,
                         cost: item.total ?? item.cost ?? 0,
@@ -62,8 +95,11 @@ const CollectedPhonesPage = () => {
                 }
             });
         });
+
+        // Sort phones by collectedDate descending
+        phones.sort((a, b) => b.date - a.date);
         return phones;
-    }, [rawOrders]);
+    }, [rawOrders, timeFilter, customStart, customEnd]);
 
     const filteredPhones = useMemo(() => {
         if (!searchTerm) return collectedPhones;

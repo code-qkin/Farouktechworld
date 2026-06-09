@@ -330,7 +330,11 @@ const OrderDetails = () => {
                 setIsUpdating(true);
                 try {
                     const newItems = [...order.items];
-                    newItems[index] = { ...newItems[index], collected: newStatus };
+                    newItems[index] = { 
+                        ...newItems[index], 
+                        collected: newStatus,
+                        collectedAt: newStatus ? new Date().toISOString() : null 
+                    };
                     const allCollected = newItems.every(i => i.collected || i.type === 'part_usage');
                     const updates = { items: newItems };
                     if (allCollected && order.status !== 'Collected' && order.status !== 'Completed' && order.status !== 'Void') {
