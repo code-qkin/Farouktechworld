@@ -1076,7 +1076,7 @@ const OrderDetails = () => {
                                                                 </div>
                                                                 <div className="flex items-center gap-2">
                                                                     {svc.status !== 'Void' && !isLocked && <button onClick={() => handleVoidService(i, sIdx)} disabled={isUpdating} className="text-gray-400 hover:text-red-500"><Ban size={14} /></button>}
-                                                                    <select className="bg-white border text-xs p-1.5 rounded font-bold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50" value={svc.worker || "Unassigned"} onChange={(e) => handleServiceAssign(i, sIdx, e.target.value)} disabled={isLocked || svc.status === 'Void'}>
+                                                                    <select className="bg-white border text-xs p-1.5 rounded font-bold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50" value={svc.worker || "Unassigned"} onChange={(e) => handleServiceAssign(i, sIdx, e.target.value)} disabled={isLocked || svc.status === 'Void' || item.collected}>
                                                                         <option value="Unassigned">Unassigned</option>
                                                                         {workers.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
                                                                     </select>
@@ -1102,7 +1102,7 @@ const OrderDetails = () => {
                                 {partsUsed.map((part, idx) => (
                                     <div key={idx} className="px-6 py-3 flex justify-between items-center hover:bg-gray-50">
                                         <div><span className="text-sm font-bold text-slate-700">{part.name.replace('Used: ', '')}</span><div className="text-xs text-slate-400">By {part.worker || 'Unknown'} • {part.usedAt ? new Date(part.usedAt).toLocaleString() : ''}</div></div>
-                                        <button onClick={() => handleRemovePart(part)} className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-full transition disabled:opacity-30" title="Remove Part" disabled={isUpdating || isLocked}><Trash2 size={16} /></button>
+                                        <button onClick={() => handleRemovePart(part)} className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-full transition disabled:opacity-30 disabled:hover:bg-transparent" title="Remove Part" disabled={isUpdating || isLocked || (role !== 'admin' && role !== 'ceo') || order?.items?.some(i => i.collected)}><Trash2 size={16} /></button>
                                     </div>
                                 ))}
                             </div>
