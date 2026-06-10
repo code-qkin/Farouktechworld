@@ -109,6 +109,8 @@ const CollectedPhonesPage = () => {
                         date: collectedDate,
                         customer: order.customer?.name || 'Unknown',
                         device: item.deviceModel || item.name,
+                        originalCost: originalCost,
+                        discount: discountPerDevice,
                         cost: finalCost,
                         isPaid: item.isPaid || order.balance <= 0 || order.paymentStatus === 'Paid',
                         orderId: order.id
@@ -133,17 +135,20 @@ const CollectedPhonesPage = () => {
     }, [collectedPhones, searchTerm]);
 
     const stats = useMemo(() => {
-        let totalValue = 0;
+        let totalOriginalValue = 0;
+        let totalDiscount = 0;
         let totalPaid = 0;
         let totalUnpaid = 0;
 
         filteredPhones.forEach(p => {
-            totalValue += p.cost;
+            totalOriginalValue += p.originalCost || 0;
+            totalDiscount += p.discount || 0;
+            
             if (p.isPaid) totalPaid += p.cost;
             else totalUnpaid += p.cost;
         });
 
-        return { totalValue, totalPaid, totalUnpaid };
+        return { totalOriginalValue, totalDiscount, totalPaid, totalUnpaid };
     }, [filteredPhones]);
 
     const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
@@ -171,18 +176,22 @@ const CollectedPhonesPage = () => {
                     {hideStats ? <><Eye size={16}/> Show Amounts</> : <><EyeOff size={16}/> Hide Amounts</>}
                 </button>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
-                    <p className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-2"><Activity size={16}/> Total Value</p>
-                    <h3 className="text-3xl font-black text-gray-900">{hideStats ? '****' : formatCurrency(stats.totalValue)}</h3>
+                    <p className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-2"><Activity size={16}/> Gross Value</p>
+                    <h3 className="text-2xl font-black text-gray-900">{hideStats ? '****' : formatCurrency(stats.totalOriginalValue)}</h3>
+                </div>
+                <div className="bg-purple-50 p-5 rounded-2xl border border-purple-200 shadow-sm">
+                    <p className="text-sm font-bold text-purple-700 uppercase tracking-wider mb-1 flex items-center gap-2"><NairaSign size={16}/> Total Discount</p>
+                    <h3 className="text-2xl font-black text-purple-800">{hideStats ? '****' : formatCurrency(stats.totalDiscount)}</h3>
                 </div>
                 <div className="bg-green-50 p-5 rounded-2xl border border-green-200 shadow-sm">
-                    <p className="text-sm font-bold text-green-700 uppercase tracking-wider mb-1 flex items-center gap-2"><NairaSign size={16}/> Total Paid</p>
-                    <h3 className="text-3xl font-black text-green-800">{hideStats ? '****' : formatCurrency(stats.totalPaid)}</h3>
+                    <p className="text-sm font-bold text-green-700 uppercase tracking-wider mb-1 flex items-center gap-2"><NairaSign size={16}/> Net Paid</p>
+                    <h3 className="text-2xl font-black text-green-800">{hideStats ? '****' : formatCurrency(stats.totalPaid)}</h3>
                 </div>
                 <div className="bg-red-50 p-5 rounded-2xl border border-red-200 shadow-sm">
-                    <p className="text-sm font-bold text-red-700 uppercase tracking-wider mb-1 flex items-center gap-2"><NairaSign size={16}/> Total Unpaid</p>
-                    <h3 className="text-3xl font-black text-red-800">{hideStats ? '****' : formatCurrency(stats.totalUnpaid)}</h3>
+                    <p className="text-sm font-bold text-red-700 uppercase tracking-wider mb-1 flex items-center gap-2"><NairaSign size={16}/> Net Unpaid</p>
+                    <h3 className="text-2xl font-black text-red-800">{hideStats ? '****' : formatCurrency(stats.totalUnpaid)}</h3>
                 </div>
             </div>
 
@@ -247,8 +256,9 @@ const CollectedPhonesPage = () => {
                                             <div className="font-bold text-gray-800">{phone.customer}</div>
                                             <div className="text-gray-500 text-xs mt-0.5">{phone.device}</div>
                                         </td>
-                                        <td className="p-4 text-right font-mono font-bold text-gray-700">
-                                            {formatCurrency(phone.cost)}
+                                        <td className="p-4 text-right">
+                                            <div className="font-mono font-bold text-gray-700">{formatCurrency(phone.cost)}</div>
+                                            {phone.discount > 0 && <div className="text-[10px] text-purple-600 font-bold mt-0.5">-{formatCurrency(phone.discount)}</div>}
                                         </td>
                                         <td className="p-4 text-center">
                                             {phone.isPaid ? (
