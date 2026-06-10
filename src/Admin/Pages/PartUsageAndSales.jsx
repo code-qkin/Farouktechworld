@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../../firebaseConfig.js'; 
-import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 
 const formatCurrency = (amount) => `₦${(Number(amount) || 0).toLocaleString()}`;
