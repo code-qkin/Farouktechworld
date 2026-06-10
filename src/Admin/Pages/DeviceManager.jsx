@@ -207,7 +207,7 @@ const DeviceManager = () => {
             </div>
 
             {/* STAT CARDS */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex flex-col justify-between transition hover:shadow-md">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Smartphone size={20}/></div>
@@ -228,13 +228,6 @@ const DeviceManager = () => {
                         <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Ready / Uncollected</span>
                     </div>
                     <span className="text-3xl font-black text-slate-900">{stats.ready}</span>
-                </div>
-                <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex flex-col justify-between transition hover:shadow-md">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-yellow-50 text-yellow-600 rounded-lg"><Lock size={20}/></div>
-                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Missing Passcode</span>
-                    </div>
-                    <span className="text-3xl font-black text-slate-900">{stats.missingPasscode}</span>
                 </div>
             </div>
 
