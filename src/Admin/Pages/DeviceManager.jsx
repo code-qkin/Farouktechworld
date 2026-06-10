@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Smartphone, Search, Hash, Lock, AlertTriangle, 
     ArrowRight, Copy, Check, Filter, X, Save, Loader2, Calendar,
-    ChevronLeft, ChevronRight, ArrowLeft
+    ChevronLeft, ChevronRight, ArrowLeft, Wrench, Clock
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, runTransaction } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
@@ -75,7 +75,28 @@ const DeviceManager = () => {
         return allDevices;
     }, [orders]);
 
-    // 3. FILTERING
+    // 3. STATS CALCULATION
+    const stats = useMemo(() => {
+        let inShop = 0;
+        let ready = 0;
+        let missingPasscode = 0;
+
+        devices.forEach(d => {
+            const isActive = d.orderStatus !== 'Collected' && d.orderStatus !== 'Completed' && d.orderStatus !== 'Void';
+            if (isActive) inShop++;
+            if (d.orderStatus === 'Completed' || d.orderStatus === 'Ready for Pickup') ready++;
+            if (isActive && (!d.passcode || d.passcode.trim() === '')) missingPasscode++;
+        });
+
+        return {
+            total: devices.length,
+            inShop,
+            ready,
+            missingPasscode
+        };
+    }, [devices]);
+
+    // 4. FILTERING
     const filteredDevices = useMemo(() => {
         return devices.filter(device => {
             // Search Filter
@@ -182,6 +203,38 @@ const DeviceManager = () => {
                 <div className="flex bg-white p-1 rounded-xl border border-gray-200 shadow-sm">
                     <button onClick={() => setStatusFilter('Active')} className={`px-4 py-2 rounded-lg text-xs font-bold transition ${statusFilter === 'Active' ? 'bg-purple-100 text-purple-700' : 'text-slate-500 hover:bg-gray-50'}`}>In Shop</button>
                     <button onClick={() => setStatusFilter('All')} className={`px-4 py-2 rounded-lg text-xs font-bold transition ${statusFilter === 'All' ? 'bg-purple-100 text-purple-700' : 'text-slate-500 hover:bg-gray-50'}`}>All History</button>
+                </div>
+            </div>
+
+            {/* STAT CARDS */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex flex-col justify-between transition hover:shadow-md">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Smartphone size={20}/></div>
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">All History</span>
+                    </div>
+                    <span className="text-3xl font-black text-slate-900">{stats.total}</span>
+                </div>
+                <div className="bg-white p-5 rounded-2xl border border-purple-200 shadow-sm flex flex-col justify-between transition hover:shadow-md ring-1 ring-purple-50">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-purple-100 text-purple-700 rounded-lg"><Wrench size={20}/></div>
+                        <span className="text-xs font-bold text-purple-700 uppercase tracking-wider">In Shop</span>
+                    </div>
+                    <span className="text-3xl font-black text-purple-900">{stats.inShop}</span>
+                </div>
+                <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex flex-col justify-between transition hover:shadow-md">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-green-50 text-green-600 rounded-lg"><Check size={20}/></div>
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Ready / Uncollected</span>
+                    </div>
+                    <span className="text-3xl font-black text-slate-900">{stats.ready}</span>
+                </div>
+                <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex flex-col justify-between transition hover:shadow-md">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-yellow-50 text-yellow-600 rounded-lg"><Lock size={20}/></div>
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Missing Passcode</span>
+                    </div>
+                    <span className="text-3xl font-black text-slate-900">{stats.missingPasscode}</span>
                 </div>
             </div>
 
