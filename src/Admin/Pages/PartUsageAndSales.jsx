@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     History, Search, Download, Filter, Loader2, ArrowLeft,
-    Wrench, ShoppingCart, Calendar, Smartphone
+    Wrench, ShoppingCart, Calendar, Smartphone, User, ChevronLeft, ChevronRight, Tag, Package
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../../firebaseConfig.js'; 
@@ -23,6 +23,15 @@ const PartUsageAndSales = () => {
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
     const [filterTime, setFilterTime] = useState('All');
+    
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 20;
+
+    // Reset pagination when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, filterTime, activeTab]);
 
     useEffect(() => {
         let unsubscribeOrders;
@@ -136,6 +145,10 @@ const PartUsageAndSales = () => {
     };
 
     const displayData = activeTab === 'part_usage' ? filterData(partUsages) : filterData(directSales);
+    
+    // Pagination Math
+    const totalPages = Math.ceil(displayData.length / ITEMS_PER_PAGE);
+    const currentData = displayData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
     const handleExport = () => {
         const exportData = displayData.map(item => ({
@@ -258,43 +271,85 @@ const PartUsageAndSales = () => {
                                         </td>
                                     </tr>
                                 )}
-                                {!loading && displayData.map(item => (
-                                    <tr key={item.id} className="hover:bg-slate-50 transition cursor-pointer" onClick={() => navigate(`/admin/orders/${item.ticketId}`)}>
+                                {!loading && currentData.map(item => (
+                                    <tr key={item.id} className="hover:bg-purple-50/50 transition cursor-pointer group" onClick={() => navigate(`/admin/orders/${item.ticketId}`)}>
                                         <td className="px-6 py-4">
-                                            <div className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded w-fit mb-1">
-                                                {item.ticketId}
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="font-mono text-xs font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded border border-purple-200 group-hover:border-purple-300 transition">
+                                                    {item.ticketId}
+                                                </span>
                                             </div>
-                                            <div className="text-[10px] font-bold text-slate-400">
-                                                {item.date && item.date instanceof Date && !isNaN(item.date) ? item.date.toLocaleString() : 'Unknown Date'}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <p className="font-black text-slate-800">{item.itemName}</p>
-                                            <div className="flex items-center gap-2 mt-1">
-                                                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded uppercase tracking-wider">{item.category}</span>
-                                                <span className="text-[10px] font-medium text-slate-500">{item.deviceInfo}</span>
+                                            <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                                                <Calendar size={10}/> {item.date && item.date instanceof Date && !isNaN(item.date) ? item.date.toLocaleString() : 'Unknown Date'}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <p className="font-bold text-slate-700">{activeTab === 'part_usage' ? item.technician : item.seller}</p>
+                                            <div className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                                                <Package size={14} className="text-slate-400"/>
+                                                {item.itemName}
+                                            </div>
+                                            <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
+                                                <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 text-[10px]">
+                                                    <Tag size={10}/> {item.category}
+                                                </span>
+                                                <span className="text-[10px] text-slate-400">({item.deviceInfo})</span>
+                                            </div>
                                         </td>
-                                        <td className="px-6 py-4 font-bold text-slate-700">
-                                            {item.customerName}
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                                                <User size={14} className="text-blue-500"/>
+                                                {activeTab === 'part_usage' ? item.technician : item.seller}
+                                            </div>
                                         </td>
-                                        <td className="px-6 py-4 text-center font-black text-slate-900">
-                                            {item.qty}
+                                        <td className="px-6 py-4">
+                                            <span className="font-bold text-slate-800 text-sm">{item.customerName}</span>
                                         </td>
-                                        <td className="px-6 py-4 text-right font-medium text-slate-500">
+                                        <td className="px-6 py-4 text-center">
+                                            <span className="inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 bg-slate-100 text-slate-700 font-bold text-xs rounded-lg border border-slate-200">
+                                                x{item.qty}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right font-mono text-sm text-slate-500">
                                             {formatCurrency(item.price)}
                                         </td>
-                                        <td className="px-6 py-4 text-right font-black text-purple-700">
-                                            {formatCurrency(item.total)}
+                                        <td className="px-6 py-4 text-right">
+                                            <span className="font-mono font-black text-sm text-slate-900 bg-green-50 text-green-700 px-2.5 py-1 rounded-lg border border-green-100">
+                                                {formatCurrency(item.total)}
+                                            </span>
                                         </td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
+
+                    {/* Pagination Controls */}
+                    {totalPages > 1 && (
+                        <div className="p-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-gray-50/50">
+                            <span className="text-xs font-bold text-slate-500">
+                                Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, displayData.length)} of {displayData.length} records
+                            </span>
+                            <div className="flex items-center gap-1 p-1 bg-slate-200/50 rounded-xl border border-slate-200">
+                                <button 
+                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                    disabled={currentPage === 1}
+                                    className="p-1.5 rounded-lg text-slate-600 hover:bg-white hover:shadow-sm disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:shadow-none transition flex items-center gap-1 text-xs font-bold pr-3"
+                                >
+                                    <ChevronLeft size={16}/> Prev
+                                </button>
+                                <span className="px-4 py-1.5 text-xs font-black text-slate-800 bg-white rounded-lg shadow-sm border border-slate-100">
+                                    {currentPage} / {totalPages}
+                                </span>
+                                <button 
+                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={currentPage === totalPages}
+                                    className="p-1.5 rounded-lg text-slate-600 hover:bg-white hover:shadow-sm disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:shadow-none transition flex items-center gap-1 text-xs font-bold pl-3"
+                                >
+                                    Next <ChevronRight size={16}/>
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </main>
         </div>
