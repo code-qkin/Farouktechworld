@@ -77,30 +77,20 @@ const CollectedPhonesPage = () => {
         let phones = [];
         rawOrders.forEach(order => {
             if (!order.items) return;
-            
-            // Calculate how many repair items there are to distribute the discount evenly
-            const repairItemsCount = order.items.filter(i => i.type === 'repair').length || 1;
-            const discountPerDevice = (Number(order.discount) || 0) / repairItemsCount;
 
             order.items.forEach((item, itemIdx) => {
                 if (item.type === 'repair' && item.collected) {
                     let fallbackDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
                     
-                    // Smart Fallback: If collectedAt is missing (old orders), the best guess is the date of the LAST payment, as customers usually pay when they collect.
                     if (!item.collectedAt && order.paymentHistory && order.paymentHistory.length > 0) {
                         const lastPayment = order.paymentHistory[order.paymentHistory.length - 1];
-                        if (lastPayment.date) {
-                            fallbackDate = new Date(lastPayment.date);
-                        }
+                        if (lastPayment.date) fallbackDate = new Date(lastPayment.date);
                     }
 
                     const collectedDate = item.collectedAt ? new Date(item.collectedAt) : fallbackDate;
                     
-                    // Filter by collectedDate
                     if (startDate && collectedDate < startDate) return;
                     if (endDate && collectedDate > endDate) return;
-
-                    const originalCost = item.total ?? item.cost ?? 0;
 
                     phones.push({
                         id: `${order.ticketId}-${itemIdx}`,
@@ -108,9 +98,7 @@ const CollectedPhonesPage = () => {
                         date: collectedDate,
                         customer: order.customer?.name || 'Unknown',
                         device: item.deviceModel || item.name,
-                        originalCost: originalCost,
-                        discount: discountPerDevice,
-                        cost: originalCost, // User wants the full amount in the table
+                        cost: item.total ?? item.cost ?? 0,
                         isPaid: item.isPaid || order.balance <= 0 || order.paymentStatus === 'Paid',
                         orderId: order.id
                     });
@@ -134,24 +122,28 @@ const CollectedPhonesPage = () => {
     }, [collectedPhones, searchTerm]);
 
     const stats = useMemo(() => {
-        let totalOriginalValue = 0;
+        let grossPaid = 0;
+        let grossUnpaid = 0;
         let totalDiscount = 0;
-        let totalPaid = 0;
-        let totalUnpaid = 0;
+        const processedOrders = new Set();
 
         filteredPhones.forEach(p => {
-            totalOriginalValue += p.originalCost || 0;
-            totalDiscount += p.discount || 0;
-            
-            if (p.isPaid) {
-                totalPaid += (p.originalCost - p.discount);
-            } else {
-                totalUnpaid += (p.originalCost - p.discount);
+            if (p.isPaid) grossPaid += p.cost;
+            else grossUnpaid += p.cost;
+
+            if (!processedOrders.has(p.orderId)) {
+                processedOrders.add(p.orderId);
+                const order = rawOrders.find(o => o.id === p.orderId);
+                if (order && order.discount) {
+                    totalDiscount += Number(order.discount);
+                }
             }
         });
 
-        return { totalOriginalValue, totalDiscount, totalPaid, totalUnpaid };
-    }, [filteredPhones]);
+        const netPaid = Math.max(0, grossPaid - totalDiscount);
+
+        return { grossPaid, grossUnpaid, totalDiscount, netPaid };
+    }, [filteredPhones, rawOrders]);
 
     const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
 
@@ -180,8 +172,8 @@ const CollectedPhonesPage = () => {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
-                    <p className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-2"><Activity size={16}/> Gross Value</p>
-                    <h3 className="text-2xl font-black text-gray-900">{hideStats ? '****' : formatCurrency(stats.totalOriginalValue)}</h3>
+                    <p className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-2"><Activity size={16}/> Gross Paid</p>
+                    <h3 className="text-2xl font-black text-gray-900">{hideStats ? '****' : formatCurrency(stats.grossPaid)}</h3>
                 </div>
                 <div className="bg-purple-50 p-5 rounded-2xl border border-purple-200 shadow-sm">
                     <p className="text-sm font-bold text-purple-700 uppercase tracking-wider mb-1 flex items-center gap-2"><NairaSign size={16}/> Total Discount</p>
@@ -189,11 +181,11 @@ const CollectedPhonesPage = () => {
                 </div>
                 <div className="bg-green-50 p-5 rounded-2xl border border-green-200 shadow-sm">
                     <p className="text-sm font-bold text-green-700 uppercase tracking-wider mb-1 flex items-center gap-2"><NairaSign size={16}/> Net Paid</p>
-                    <h3 className="text-2xl font-black text-green-800">{hideStats ? '****' : formatCurrency(stats.totalPaid)}</h3>
+                    <h3 className="text-2xl font-black text-green-800">{hideStats ? '****' : formatCurrency(stats.netPaid)}</h3>
                 </div>
                 <div className="bg-red-50 p-5 rounded-2xl border border-red-200 shadow-sm">
-                    <p className="text-sm font-bold text-red-700 uppercase tracking-wider mb-1 flex items-center gap-2"><NairaSign size={16}/> Net Unpaid</p>
-                    <h3 className="text-2xl font-black text-red-800">{hideStats ? '****' : formatCurrency(stats.totalUnpaid)}</h3>
+                    <p className="text-sm font-bold text-red-700 uppercase tracking-wider mb-1 flex items-center gap-2"><NairaSign size={16}/> Unpaid</p>
+                    <h3 className="text-2xl font-black text-red-800">{hideStats ? '****' : formatCurrency(stats.grossUnpaid)}</h3>
                 </div>
             </div>
 
