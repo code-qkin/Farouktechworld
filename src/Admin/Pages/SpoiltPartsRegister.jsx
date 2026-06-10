@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { collection, query, orderBy, onSnapshot, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, deleteDoc, runTransaction, increment } from 'firebase/firestore';
 import { db } from '../../firebaseConfig.js';
-import { AlertTriangle, Calendar, Search, ArrowLeft, Download, AlertOctagon, Loader2 } from 'lucide-react';
+import { AlertTriangle, Calendar, Search, ArrowLeft, Download, AlertOctagon, Loader2, Undo2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
+import { Toast, ConfirmModal } from '../Components/Feedback';
 
 const formatCurrency = (amount) => `₦${Number(amount || 0).toLocaleString()}`;
 
@@ -14,6 +15,8 @@ const SpoiltPartsRegister = () => {
     
     const [searchTerm, setSearchTerm] = useState('');
     const [dateFilter, setDateFilter] = useState('All Time');
+    const [toast, setToast] = useState({ message: '', type: '' });
+    const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
     useEffect(() => {
         const q = query(collection(db, "Incidents"), orderBy("timestamp", "desc"));
@@ -81,10 +84,40 @@ const SpoiltPartsRegister = () => {
         XLSX.writeFile(wb, "FTW_Spoilt_Parts_Register.xlsx");
     };
 
-    // Handled in table
+    const handleUndoIncident = (inc) => {
+        setConfirmConfig({
+            isOpen: true,
+            title: "Undo Spoilt Part Log?",
+            message: `Are you sure you want to remove this spoilt part record and restore +1 stock for "${inc.partName}"?`,
+            confirmText: "Undo & Restore Stock",
+            confirmColor: "bg-red-600",
+            action: async () => {
+                try {
+                    await runTransaction(db, async (t) => {
+                        const incidentRef = doc(db, "Incidents", inc.id);
+                        if (inc.partId) {
+                            const partRef = doc(db, "Inventory", inc.partId);
+                            const partDoc = await t.get(partRef);
+                            if (partDoc.exists()) {
+                                t.update(partRef, { stock: increment(1) });
+                            }
+                        }
+                        t.delete(incidentRef);
+                    });
+                    setToast({ message: "Incident undone and stock restored", type: "success" });
+                } catch (error) {
+                    console.error("Undo error:", error);
+                    setToast({ message: "Failed to undo incident", type: "error" });
+                }
+                setConfirmConfig({ ...confirmConfig, isOpen: false });
+            }
+        });
+    };
 
     return (
         <div className="min-h-screen bg-gray-50 p-4 sm:p-8 font-sans">
+            {toast.message && <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: '' })} />}
+            <ConfirmModal config={confirmConfig} onCancel={() => setConfirmConfig({...confirmConfig, isOpen: false})} />
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                 <div className="flex items-center gap-3">
                     <button onClick={() => navigate('/admin/dashboard')} className="bg-white p-2 rounded-xl shadow-sm border hover:bg-gray-50 text-slate-600">
@@ -145,6 +178,7 @@ const SpoiltPartsRegister = () => {
                                 <th className="px-6 py-4">Ticket</th>
                                 <th className="px-6 py-4">Part & Reason</th>
                                 <th className="px-6 py-4 text-right">Cost (Loss)</th>
+                                <th className="px-6 py-4 text-center">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -187,6 +221,15 @@ const SpoiltPartsRegister = () => {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right">
                                             <span className="font-black text-red-600">{formatCurrency(inc.partCost)}</span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                                            <button 
+                                                onClick={() => handleUndoIncident(inc)}
+                                                className="p-2 bg-gray-100 text-gray-500 rounded-lg hover:bg-red-50 hover:text-red-600 transition tooltip-trigger"
+                                                title="Undo and restore stock"
+                                            >
+                                                <Undo2 size={16} />
+                                            </button>
                                         </td>
                                     </tr>
                                 ))
