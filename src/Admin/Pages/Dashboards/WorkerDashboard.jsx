@@ -92,11 +92,11 @@ const WorkerDashboard = ({ user: propUser }) => {
   );
 
   const isMyJob = (workerName) => {
-    if (!workerName) return false;
-    const assigned = String(workerName).trim().toLowerCase();
-    const myName = String(user?.name || '').trim().toLowerCase();
-    const myEmail = String(user?.email || '').trim().toLowerCase();
-    return assigned === myName || assigned === myEmail;
+      if (!workerName) return false;
+      const me = (user.name || '').trim().toLowerCase();
+      const meEmail = (user.email || '').trim().toLowerCase();
+      const w = workerName.trim().toLowerCase();
+      return w === me || w === meEmail;
   };
 
   const requestNotificationPermission = () => {
@@ -119,7 +119,7 @@ const WorkerDashboard = ({ user: propUser }) => {
         setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     , (error) => console.error("Inventory listener error:", error));
 
-    const unsubOrders = onSnapshot(query(collection(db, "Orders"), orderBy("createdAt", "desc"), limit(1500)), snap => {
+    const unsubOrders = onSnapshot(query(collection(db, "Orders"), orderBy("createdAt", "desc")), snap => {
         const allJobs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setOrders(allJobs);
         setLoading(false);
@@ -328,7 +328,7 @@ const WorkerDashboard = ({ user: propUser }) => {
       setIsSubmitting(true);
       try {
           const myIdentity = user.name && user.name.trim() !== "" ? user.name : user.email;
-          await addDoc(collection(db, "Approvals"), {
+          await addDoc(collection(db, "ApprovalRequests"), {
               type: "No Part Needed",
               ticketId: selectedTask.ticketId,
               orderId: selectedTask.id,
