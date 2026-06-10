@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Search, CheckCircle, ArrowRight, ArrowLeft } from 'lucide-react';
+import { AlertTriangle, Search, CheckCircle, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useNavigate } from 'react-router-dom';
@@ -45,7 +45,12 @@ const IssueReports = () => {
                 <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2"><AlertTriangle className="text-red-600"/> Issue Reports</h1>
             </div>
 
-            {loading ? <div className="text-center text-gray-500 py-20">Loading issues...</div> : 
+            {loading ? (
+                <div className="flex justify-center items-center gap-2 py-20 text-purple-600">
+                    <Loader2 size={24} className="animate-spin"/> 
+                    <span className="font-bold">Loading issues...</span>
+                </div>
+            ) : 
              issues.length === 0 ? (
                 <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
                     <CheckCircle className="mx-auto h-12 w-12 text-green-300 mb-3"/>

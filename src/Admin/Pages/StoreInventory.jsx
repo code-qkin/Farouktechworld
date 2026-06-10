@@ -191,44 +191,31 @@ const StoreInventory = () => {
 
     // Data State
     const [products, setProducts] = useState([]); 
-    const [salesHistory, setSalesHistory] = useState([]); 
+
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
     
     // 🔥 INITIALIZE STATE FROM SESSION STORAGE
-    const [activeTab, setActiveTab] = useState(() => getSavedState('activeTab', 'products'));
     const [searchTerm, setSearchTerm] = useState(() => getSavedState('searchTerm', ''));
     const [filterCategory, setFilterCategory] = useState(() => getSavedState('filterCategory', 'All'));
     const [filterStock, setFilterStock] = useState(() => getSavedState('filterStock', 'All'));
     const [filterDeviceType, setFilterDeviceType] = useState(() => getSavedState('filterDeviceType', 'All'));
     
-    // History Filters
-    const [historySearch, setHistorySearch] = useState(() => getSavedState('historySearch', ''));
-    const [historyTypeFilter, setHistoryTypeFilter] = useState(() => getSavedState('historyTypeFilter', 'All'));
-    const [historyTimeFilter, setHistoryTimeFilter] = useState(() => getSavedState('historyTimeFilter', 'all'));
-    const [historyCategoryFilter, setHistoryCategoryFilter] = useState(() => getSavedState('historyCategoryFilter', 'All'));
-    const [historyCustomStart, setHistoryCustomStart] = useState(() => getSavedState('historyCustomStart', ''));
-    const [historyCustomEnd, setHistoryCustomEnd] = useState(() => getSavedState('historyCustomEnd', ''));
-
     // Pagination
     const [currentPage, setCurrentPage] = useState(() => getSavedState('currentPage', 1));
-    const [historyPage, setHistoryPage] = useState(() => getSavedState('historyPage', 1));
 
     const itemsPerPage = 50;
-    const historyPerPage = 20;
 
     // 🔥 SAVE STATE ON CHANGE
     useEffect(() => {
         const stateToSave = {
-            activeTab, searchTerm, filterCategory, filterStock, filterDeviceType,
-            historySearch, historyTypeFilter, historyTimeFilter, historyCategoryFilter, historyCustomStart, historyCustomEnd,
-            currentPage, historyPage
+            searchTerm, filterCategory, filterStock, filterDeviceType,
+            currentPage
         };
-        sessionStorage.setItem('store_inv_state', JSON.stringify(stateToSave));
+        sessionStorage.setItem('storeInventoryState', JSON.stringify(stateToSave));
     }, [
-        activeTab, searchTerm, filterCategory, filterStock, filterDeviceType,
-        historySearch, historyTypeFilter, historyTimeFilter, historyCategoryFilter, historyCustomStart, historyCustomEnd,
-        currentPage, historyPage
+        searchTerm, filterCategory, filterStock, filterDeviceType,
+        currentPage
     ]);
 
     // Bulk Selection State
@@ -274,32 +261,6 @@ const StoreInventory = () => {
         return () => unsubscribe();
     }, []);
 
-    // 2. HISTORY
-    useEffect(() => {
-        if (activeTab === 'history') {
-            const q = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
-            const unsub = onSnapshot(q, (snapshot) => {
-                const sales = [];
-                snapshot.docs.forEach(doc => {
-                    const data = doc.data();
-                    const historyItems = data.items?.filter(i => i.type === 'product' || i.type === 'part_usage') || [];
-                    if (historyItems.length > 0) {
-                        sales.push({
-                            id: doc.id,
-                            ticketId: data.ticketId,
-                            customer: data.orderType === 'repair' ? (data.items.find(i=>i.type==='part_usage')?.worker || 'Technician') : (data.customer?.name || 'Walk-in'),
-                            type: data.orderType === 'repair' ? 'Internal Use' : 'Store Sale',
-                            date: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
-                            items: historyItems,
-                            total: historyItems.reduce((acc, curr) => acc + (Number(curr.total) || 0), 0)
-                        });
-                    }
-                });
-                setSalesHistory(sales);
-            });
-            return () => unsub();
-        }
-    }, [activeTab]);
 
     // 3. FILTERING PRODUCTS
     const filteredProducts = useMemo(() => {
@@ -319,61 +280,7 @@ const StoreInventory = () => {
         });
     }, [products, searchTerm, filterCategory, filterStock, filterDeviceType]);
 
-    // 🔥 SMART HISTORY FILTERING (Search + Type + Category + Time)
-    const filteredHistory = useMemo(() => {
-        let data = salesHistory;
-        const now = new Date();
-        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const endOfDay = new Date(startOfDay); endOfDay.setDate(startOfDay.getDate() + 1);
-        
-        const startOfWeek = new Date(now);
-        startOfWeek.setDate(now.getDate() - now.getDay()); 
-        startOfWeek.setHours(0,0,0,0);
-
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-        // 1. Search Filter (Customer, Ticket, or Item Name)
-        if (historySearch) {
-            const term = normalizeStr(historySearch);
-            data = data.filter(s => 
-                normalizeStr(s.customer).includes(term) || 
-                normalizeStr(s.ticketId).includes(term) ||
-                s.items.some(i => normalizeStr(i.name).includes(term))
-            );
-        }
-
-        // 2. Type Filter
-        if (historyTypeFilter !== 'All') {
-            data = data.filter(s => s.type === historyTypeFilter);
-        }
-
-        // 3. Category Filter
-        if (historyCategoryFilter !== 'All') {
-            data = data.filter(s => s.items.some(i => {
-                const product = products.find(p => p.id === i.productId || p.id === i.partId || p.name === i.name);
-                return product && product.category === historyCategoryFilter;
-            }));
-        }
-
-        // 4. Time Filter
-        if (historyTimeFilter === 'today') {
-            data = data.filter(s => s.date >= startOfDay && s.date < endOfDay);
-        } else if (historyTimeFilter === 'week') {
-            data = data.filter(s => s.date >= startOfWeek);
-        } else if (historyTimeFilter === 'month') {
-            data = data.filter(s => s.date >= startOfMonth);
-        } else if (historyTimeFilter === 'custom') {
-            const start = historyCustomStart ? new Date(historyCustomStart) : new Date('1970-01-01');
-            const end = historyCustomEnd ? new Date(historyCustomEnd) : new Date();
-            end.setHours(23, 59, 59, 999);
-            data = data.filter(s => s.date >= start && s.date <= end);
-        }
-
-        return data;
-    }, [salesHistory, historySearch, historyTypeFilter, historyCategoryFilter, historyTimeFilter, historyCustomStart, historyCustomEnd, products]);
-
     useEffect(() => { setCurrentPage(1); }, [searchTerm, filterCategory, filterStock, filterDeviceType]);
-    useEffect(() => { setHistoryPage(1); }, [historySearch, historyTypeFilter, historyTimeFilter, historyCustomStart, historyCustomEnd]);
 
     // 4. METRICS
     const dynamicCategories = useMemo(() => [...new Set(products.map(p => p.category).filter(Boolean))].sort(), [products]);
@@ -391,10 +298,6 @@ const StoreInventory = () => {
     // 5. PAGINATION
     const currentProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
     const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
-    
-    // History Pagination
-    const currentHistory = filteredHistory.slice((historyPage - 1) * historyPerPage, historyPage * historyPerPage);
-    const totalHistoryPages = Math.ceil(filteredHistory.length / historyPerPage);
 
     // Helpers for Bulk Models
     const activeModelsInRange = useMemo(() => {
@@ -615,43 +518,35 @@ const StoreInventory = () => {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                 <div className="flex items-center gap-3">
                     <button onClick={() => navigate('/admin/dashboard')} className="bg-white p-2 rounded-xl shadow-sm border hover:bg-gray-50 text-slate-600"><ArrowLeft size={20}/></button>
-                    <div><h1 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">Store Inventory</h1><p className="text-xs sm:text-sm text-slate-500">Manage products & view usage</p></div>
+                    <div><h1 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">Store Inventory</h1><p className="text-xs sm:text-sm text-slate-500">Manage products</p></div>
                 </div>
                 <div className="flex flex-wrap gap-3 w-full md:w-auto"><button onClick={handleExport} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white border px-4 py-2 rounded-xl font-bold hover:bg-gray-50 text-sm shadow-sm"><Download size={16} /> Export</button></div>
             </div>
 
             {/* METRICS */}
-            {activeTab === 'products' && (
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-                    {/* 🔥 HIDE VALUE CARD FOR MANAGERS */}
-                    {canSeePrice && (
-                        <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24">
-                            <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-bold text-gray-400 uppercase">Value (Current View)</span>
-                                <button onClick={() => setShowValue(!showValue)} className="text-gray-400 hover:text-purple-600 transition">
-                                    {showValue ? <Eye size={14}/> : <EyeOff size={14}/>}
-                                </button>
-                            </div>
-                            <span className="text-lg sm:text-xl font-black text-slate-900">
-                                {showValue ? formatCurrency(stats.totalValue) : '****'}
-                            </span>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+                {/* 🔥 HIDE VALUE CARD FOR MANAGERS */}
+                {canSeePrice && (
+                    <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24">
+                        <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase">Value (Current View)</span>
+                            <button onClick={() => setShowValue(!showValue)} className="text-gray-400 hover:text-purple-600 transition">
+                                {showValue ? <Eye size={14}/> : <EyeOff size={14}/>}
+                            </button>
                         </div>
-                    )}
+                        <span className="text-lg sm:text-xl font-black text-slate-900">
+                            {showValue ? formatCurrency(stats.totalValue) : '****'}
+                        </span>
+                    </div>
+                )}
 
-                    <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24"><span className="text-[10px] font-bold text-gray-400 uppercase">Visible Stock</span><span className="text-lg sm:text-xl font-black text-slate-900">{stats.totalItems} Items</span></div>
-                    <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24"><span className="text-[10px] font-bold text-gray-400 uppercase">Low</span><span className="text-lg sm:text-xl font-black text-orange-600">{stats.lowStock} Items</span></div>
-                    <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24"><span className="text-[10px] font-bold text-gray-400 uppercase">Out</span><span className="text-lg sm:text-xl font-black text-red-600">{stats.outOfStock} Items</span></div>
-                </div>
-            )}
-
-            {/* TABS */}
-            <div className="flex gap-2 mb-6 border-b border-gray-200 overflow-x-auto no-scrollbar">
-                <button onClick={() => {setActiveTab('products'); setIsCreating(false)}} className={`whitespace-nowrap px-6 py-3 text-sm font-bold border-b-2 transition ${activeTab === 'products' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Products</button>
-                <button onClick={() => {setActiveTab('history'); setIsCreating(false)}} className={`whitespace-nowrap px-6 py-3 text-sm font-bold border-b-2 transition ${activeTab === 'history' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Sales History</button>
+                <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24"><span className="text-[10px] font-bold text-gray-400 uppercase">Visible Stock</span><span className="text-lg sm:text-xl font-black text-slate-900">{stats.totalItems} Items</span></div>
+                <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24"><span className="text-[10px] font-bold text-gray-400 uppercase">Low</span><span className="text-lg sm:text-xl font-black text-orange-600">{stats.lowStock} Items</span></div>
+                <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col justify-between h-24"><span className="text-[10px] font-bold text-gray-400 uppercase">Out</span><span className="text-lg sm:text-xl font-black text-red-600">{stats.outOfStock} Items</span></div>
             </div>
 
-            {/* PRODUCTS TAB */}
-            {activeTab === 'products' && !isCreating && (
+            {/* PRODUCTS */}
+            {!isCreating && (
                 <div className="space-y-6 animate-in fade-in">
                     <div className="bg-white p-3 rounded-xl shadow-sm border flex flex-col md:flex-row gap-3">
                         <div className="relative flex-1"><Search className="absolute left-3 top-3 text-gray-400" size={18}/><input className="w-full pl-10 pr-4 py-2.5 bg-gray-50 rounded-lg outline-none text-sm font-medium focus:ring-2 focus:ring-purple-500" placeholder="Search loaded items..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div>
@@ -775,190 +670,8 @@ const StoreInventory = () => {
                 </div>
             )}
 
-            {/* --- TAB: HISTORY --- */}
-            {activeTab === 'history' && (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in">
-                    
-                    {/* 🔥 HISTORY HEADER + FILTERS */}
-                    <div className="p-4 border-b border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
-                        <div className="flex items-center gap-2">
-                            <History className="text-purple-600" size={20}/>
-                            <h3 className="font-bold text-slate-800 text-lg">Sales & Usage History</h3>
-                            <span className="text-xs font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded-full">{filteredHistory.length}</span>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-                            {/* 🔥 SEARCH BAR */}
-                            <div className="relative flex-1 md:flex-none">
-                                <Search className="absolute left-2.5 top-2.5 text-gray-400" size={14}/>
-                                <input 
-                                    className="w-full md:w-48 pl-8 pr-3 py-2 bg-gray-50 rounded-lg text-xs font-bold focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none transition" 
-                                    placeholder="Search customer, item..." 
-                                    value={historySearch} 
-                                    onChange={e => setHistorySearch(e.target.value)}
-                                />
-                            </div>
-
-                            {/* 🔥 TYPE FILTER */}
-                            <select 
-                                className="px-3 py-2 bg-gray-50 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer border border-transparent hover:bg-gray-100"
-                                value={historyTypeFilter}
-                                onChange={e => setHistoryTypeFilter(e.target.value)}
-                            >
-                                <option value="All">All Types</option>
-                                <option value="Store Sale">Store Sales</option>
-                                <option value="Internal Use">Internal Usage</option>
-                            </select>
-
-                            {/* 🔥 CATEGORY FILTER (NEW) */}
-                            <SearchableDropdown 
-                                options={dynamicCategories} 
-                                value={historyCategoryFilter} 
-                                onChange={setHistoryCategoryFilter} 
-                                placeholder="All Categories" 
-                            />
-
-                            <div className="bg-gray-100 p-1 rounded-lg flex gap-1">
-                                {['all', 'today', 'week', 'month', 'custom'].map(t => (
-                                    <button 
-                                        key={t}
-                                        onClick={() => setHistoryTimeFilter(t)}
-                                        className={`px-3 py-1.5 text-xs font-bold rounded-md capitalize transition ${historyTimeFilter === t ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                                    >
-                                        {t}
-                                    </button>
-                                ))}
-                            </div>
-                            
-                            {historyTimeFilter === 'custom' && (
-                                <div className="flex items-center gap-2 bg-gray-50 p-1 rounded-lg border border-gray-200 animate-in fade-in">
-                                    <input type="date" className="bg-transparent text-xs font-bold text-slate-600 outline-none" value={historyCustomStart} onChange={e => setHistoryCustomStart(e.target.value)} />
-                                    <span className="text-slate-400">-</span>
-                                    <input type="date" className="bg-transparent text-xs font-bold text-slate-600 outline-none" value={historyCustomEnd} onChange={e => setHistoryCustomEnd(e.target.value)} />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                    
-                    <div className="hidden md:block overflow-x-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-gray-50 border-b text-xs font-bold text-slate-500 uppercase">
-                                <tr>
-                                    <th className="px-6 py-4">Date</th>
-                                    <th className="px-6 py-4">Ticket</th>
-                                    <th className="px-6 py-4">Primary User</th>
-                                    <th className="px-6 py-4">Type</th>
-                                    <th className="px-6 py-4">Items Used ( & Who Used It)</th>
-                                    {/* 🔥 HIDE HISTORY VALUE */}
-                                    {canSeePrice && <th className="px-6 py-4 text-right">Value</th>}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {currentHistory.map(sale => {
-                                    // 🔥 FILTER ITEMS FOR DISPLAY
-                                    const visibleItems = sale.items.filter(item => {
-                                        const term = normalizeStr(historySearch);
-                                        const matchesSearch = !term || normalizeStr(item.name).includes(term) || normalizeStr(sale.ticketId).includes(term) || normalizeStr(sale.customer).includes(term);
-
-                                        const product = products.find(p => p.id === item.productId || p.id === item.partId || p.name === item.name);
-                                        const itemCategory = product ? product.category : 'Uncategorized';
-                                        const matchesCategory = historyCategoryFilter === 'All' || itemCategory === historyCategoryFilter;
-
-                                        return matchesSearch && matchesCategory;
-                                    });
-
-                                    if (visibleItems.length === 0) return null;
-
-                                    return (
-                                        <tr key={sale.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/admin/orders/${sale.ticketId}`)}>
-                                            <td className="px-6 py-4 text-gray-500">{sale.date.toLocaleDateString()}</td>
-                                            <td className="px-6 py-4 font-mono font-bold text-purple-700">{sale.ticketId}</td>
-                                            <td className="px-6 py-4 font-medium">{sale.customer}</td>
-                                            <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs font-bold ${sale.type === 'Internal Use' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>{sale.type}</span></td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex flex-col gap-1">
-                                                    {visibleItems.map((item, idx) => (
-                                                        <div key={idx} className="text-xs text-slate-600 flex items-center gap-1">
-                                                            {item.type === 'part_usage' ? <Wrench size={12} className="text-blue-500"/> : <Package size={12} className="text-green-500"/>}
-                                                            <span className="font-medium">{item.name.replace('Used: ', '')}</span> 
-                                                            <span className="font-bold text-slate-800">x{item.qty || 1}</span>
-                                                            
-                                                            {item.type === 'part_usage' && item.worker && (
-                                                                <span className="ml-1 text-[10px] text-gray-400 bg-gray-100 px-1.5 rounded border border-gray-200">
-                                                                    by {item.worker.split(' ')[0]}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </td>
-                                            {/* 🔥 HIDE HISTORY VALUE CELL */}
-                                            {canSeePrice && <td className="px-6 py-4 text-right font-bold text-slate-900">{formatCurrency(sale.total)}</td>}
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Mobile Cards (With Item Details) */}
-                    <div className="md:hidden divide-y divide-gray-100">
-                        {currentHistory.map(sale => {
-                             // 🔥 FILTER ITEMS FOR DISPLAY (MOBILE)
-                             const visibleItems = sale.items.filter(item => {
-                                const term = normalizeStr(historySearch);
-                                const matchesSearch = !term || normalizeStr(item.name).includes(term) || normalizeStr(sale.ticketId).includes(term) || normalizeStr(sale.customer).includes(term);
-
-                                const product = products.find(p => p.id === item.productId || p.id === item.partId || p.name === item.name);
-                                const itemCategory = product ? product.category : 'Uncategorized';
-                                const matchesCategory = historyCategoryFilter === 'All' || itemCategory === historyCategoryFilter;
-
-                                return matchesSearch && matchesCategory;
-                            });
-
-                            if (visibleItems.length === 0) return null;
-
-                            return (
-                                <div key={sale.id} className="p-4 flex flex-col gap-2 cursor-pointer active:bg-gray-50" onClick={() => navigate(`/admin/orders/${sale.ticketId}`)}>
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <span className="font-mono text-xs font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded">{sale.ticketId}</span>
-                                            <p className="text-sm font-bold text-slate-800 mt-1">{sale.customer}</p>
-                                        </div>
-                                        <div className="text-right">
-                                            {/* 🔥 HIDE MOBILE HISTORY VALUE */}
-                                            {canSeePrice && <p className="font-bold text-slate-900">{formatCurrency(sale.total)}</p>}
-                                            <span className="text-[10px] text-gray-400">{sale.date.toLocaleDateString()}</span>
-                                        </div>
-                                    </div>
-                                    <div className="mt-2 space-y-1">
-                                        {visibleItems.map((item, idx) => (
-                                            <div key={idx} className="text-xs text-slate-500 flex justify-between">
-                                                <span>{item.name} (x{item.qty||1})</span>
-                                                {item.worker && <span className="text-[9px] bg-slate-100 px-1 rounded">{item.worker.split(' ')[0]}</span>}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-
-                    {/* Pagination */}
-                    {salesHistory.length > 0 && (
-                        <div className="bg-gray-50 border-t px-6 py-4 flex items-center justify-between">
-                            <span className="text-xs font-bold text-gray-500">Page {historyPage} of {totalHistoryPages}</span>
-                            <div className="flex gap-2">
-                                <button onClick={() => setHistoryPage(p => Math.max(1, p - 1))} disabled={historyPage === 1} className="p-2 bg-white border rounded-lg disabled:opacity-50"><ChevronLeft size={16}/></button>
-                                <button onClick={() => setHistoryPage(p => Math.min(totalHistoryPages, p + 1))} disabled={historyPage === totalHistoryPages} className="p-2 bg-white border rounded-lg disabled:opacity-50"><ChevronRight size={16}/></button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-
             {/* --- ADD FORM (Responsive) --- */}
-            {isCreating && activeTab === 'products' && (
+            {isCreating && (
                 <div className="max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4 mt-6">
                     <div className="bg-white p-6 md:p-8 rounded-2xl shadow-xl border border-gray-200">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">

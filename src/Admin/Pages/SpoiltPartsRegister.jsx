@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { collection, query, orderBy, onSnapshot, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '../../firebaseConfig.js';
-import { AlertTriangle, Calendar, Search, ArrowLeft, Download, AlertOctagon } from 'lucide-react';
+import { AlertTriangle, Calendar, Search, ArrowLeft, Download, AlertOctagon, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 
@@ -81,7 +81,7 @@ const SpoiltPartsRegister = () => {
         XLSX.writeFile(wb, "FTW_Spoilt_Parts_Register.xlsx");
     };
 
-    if (loading) return <div className="p-10 text-center text-slate-500 font-bold">Loading Incidents...</div>;
+    // Handled in table
 
     return (
         <div className="min-h-screen bg-gray-50 p-4 sm:p-8 font-sans">
@@ -148,7 +148,16 @@ const SpoiltPartsRegister = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {filteredIncidents.length === 0 ? (
+                            {loading ? (
+                                <tr>
+                                    <td colSpan="5" className="p-12 text-center text-purple-600">
+                                        <div className="flex justify-center items-center gap-2">
+                                            <Loader2 size={24} className="animate-spin"/> 
+                                            <span className="font-bold">Loading records...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : filteredIncidents.length === 0 ? (
                                 <tr>
                                     <td colSpan="5" className="px-6 py-8 text-center text-gray-400 text-sm">No incidents recorded.</td>
                                 </tr>

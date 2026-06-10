@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Calendar, Search, User, Filter, Wrench, CheckCircle, XCircle, Clock, Activity, ArrowRightLeft, RefreshCw } from 'lucide-react';
+import { Calendar, Search, User, Filter, Wrench, CheckCircle, XCircle, Clock, Activity, ArrowRightLeft, RefreshCw, Loader2 } from 'lucide-react';
 import { collection, query, orderBy, getDocs, where } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useNavigate } from 'react-router-dom';
@@ -143,16 +143,16 @@ const JobHistoryPage = () => {
     // 4. Filter Logic
     const filteredTasks = flatTaskList.filter(task => {
         const matchesSearch = 
-            task.ticketId.toLowerCase().includes(searchTerm.toLowerCase()) || 
-            task.device.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            task.customer.toLowerCase().includes(searchTerm.toLowerCase());
+            (task.ticketId || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+            (task.device || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (task.customer || '').toLowerCase().includes(searchTerm.toLowerCase());
         const matchesWorker = filterWorker === 'All' || task.worker === filterWorker;
         const matchesStatus = filterStatus === 'All' || task.status === filterStatus;
         return matchesSearch && matchesWorker && matchesStatus;
     });
 
     const filteredLogs = combinedActivityLogs.filter(log => {
-        const matchesSearch = log.ticketId?.toLowerCase().includes(searchTerm.toLowerCase()) || log.details?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch = (log.ticketId || '').toLowerCase().includes(searchTerm.toLowerCase()) || (log.details || '').toLowerCase().includes(searchTerm.toLowerCase());
         const matchesUser = filterWorker === 'All' || log.user === filterWorker;
         return matchesSearch && matchesUser;
     });
@@ -160,6 +160,35 @@ const JobHistoryPage = () => {
     const uniqueWorkers = activeTab === 'technician' 
         ? [...new Set(flatTaskList.map(t => t.worker))].sort()
         : [...new Set(combinedActivityLogs.map(l => l.user))].sort();
+
+    // 5. Technician Stats (Leaderboard/Overview)
+    const technicianStats = useMemo(() => {
+        if (activeTab !== 'technician') return [];
+        const statsMap = {};
+        
+        filteredTasks.forEach(task => {
+            if (task.worker === 'Unassigned') return;
+            
+            if (!statsMap[task.worker]) {
+                statsMap[task.worker] = {
+                    name: task.worker,
+                    totalJobs: 0,
+                    completedJobs: 0,
+                    revenue: 0
+                };
+            }
+            
+            statsMap[task.worker].totalJobs += 1;
+            if (task.status === 'Completed') {
+                statsMap[task.worker].completedJobs += 1;
+            }
+            // Only add revenue if it's completed (or should we count pending too? Let's count all to match the table, or maybe completed)
+            // Actually, let's count all assigned revenue potential to match the filteredTasks list
+            statsMap[task.worker].revenue += Number(task.cost) || 0;
+        });
+
+        return Object.values(statsMap).sort((a, b) => b.completedJobs - a.completedJobs);
+    }, [filteredTasks, activeTab]);
 
     return (
         <div className="min-h-screen bg-gray-50 p-6 sm:p-10">
@@ -256,6 +285,37 @@ const JobHistoryPage = () => {
                 </div>
             </div>
 
+            {/* Technician Stat Cards Leaderboard */}
+            {activeTab === 'technician' && !loading && technicianStats.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    {technicianStats.map(stat => (
+                        <div 
+                            key={stat.name} 
+                            onClick={() => setFilterWorker(filterWorker === stat.name ? 'All' : stat.name)}
+                            className={`bg-white p-4 rounded-xl border transition cursor-pointer flex flex-col justify-between shadow-sm hover:shadow-md ${filterWorker === stat.name ? 'border-purple-500 ring-2 ring-purple-100' : 'border-gray-200'}`}
+                        >
+                            <div className="flex justify-between items-start mb-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+                                        {stat.name.charAt(0).toUpperCase()}
+                                    </div>
+                                    <h3 className="font-bold text-slate-800 line-clamp-1" title={stat.name}>{stat.name}</h3>
+                                </div>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${stat.completedJobs === stat.totalJobs ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                                    {stat.completedJobs}/{stat.totalJobs} Done
+                                </span>
+                            </div>
+                            <div className="flex items-end justify-between mt-1">
+                                <div>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Service Value</p>
+                                    <p className="text-lg font-black text-slate-900">₦{(stat.revenue).toLocaleString()}</p>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
             {/* Table */}
             <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
                 <div className="overflow-x-auto">
@@ -280,7 +340,16 @@ const JobHistoryPage = () => {
                             )}
                         </thead>
                         <tbody className="divide-y divide-gray-100 text-sm">
-                            {activeTab === 'technician' ? (
+                            {loading ? (
+                                <tr>
+                                    <td colSpan={activeTab === 'technician' ? 6 : 4} className="p-12 text-center text-purple-600">
+                                        <div className="flex justify-center items-center gap-2">
+                                            <Loader2 size={24} className="animate-spin"/> 
+                                            <span className="font-bold">Loading history...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : activeTab === 'technician' ? (
                                 filteredTasks.length > 0 ? filteredTasks.map((task) => (
                                     <tr key={task.id} className="hover:bg-purple-50 transition cursor-pointer" onClick={() => navigate(`/admin/orders/${task.ticketId}`)}>
                                         <td className="p-4 text-gray-500 whitespace-nowrap">

@@ -148,8 +148,8 @@ const SecretaryDashboard = ({ user }) => {
 
   // 3. Search Logic
   const filteredReadyList = dashboardData.readyForPickup.filter(o => 
-    o.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    o.ticketId.toLowerCase().includes(searchTerm.toLowerCase())
+    (o.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (o.ticketId || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (

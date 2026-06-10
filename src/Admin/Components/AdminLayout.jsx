@@ -4,7 +4,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { 
     LayoutDashboard, ClipboardList, Package, Users, Settings, 
     LogOut, Menu, X, Smartphone, TrendingUp, Briefcase, 
-    Banknote, Image as ImageIcon, Activity, Search, ClipboardCheck, FileText, AlertTriangle
+    Banknote, Image as ImageIcon, Activity, Search, ClipboardCheck, FileText, AlertTriangle, History
 } from 'lucide-react';
 import { useAuth } from '../AdminContext';
 import { signOut } from 'firebase/auth';
@@ -47,6 +47,7 @@ const AdminLayout = () => {
         { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'manager', 'secretary', 'ceo', 'worker', 'content_creator'] },
         { path: '/admin/orders', icon: ClipboardList, label: 'Orders (POS)', roles: ['admin', 'manager', 'secretary', 'ceo', 'worker'] },
         { path: '/admin/store', icon: Package, label: 'Inventory', roles: ['admin', 'manager', 'ceo', 'content_creator'] },
+        { path: '/admin/part-usage-sales', icon: History, label: 'Part Usage & Sales', roles: ['admin', 'manager', 'ceo'] },
         { path: '/admin/devices', icon: Smartphone, label: 'Devices', roles: ['admin', 'manager', 'secretary', 'ceo'] },
         { path: '/admin/users', icon: Users, label: 'Staff', roles: ['admin', 'manager', 'ceo'] },
         { path: '/admin/customers', icon: Users, label: 'Customers', roles: ['admin', 'manager', 'secretary', 'ceo'] },

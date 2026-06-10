@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Calendar, Search, Filter, Download, ArrowLeft, 
     CreditCard, Banknote, User, FileText,
-    ArrowUpRight, CheckCircle, Clock, Eye, EyeOff
+    ArrowUpRight, CheckCircle, Clock, Eye, EyeOff, Loader2
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
@@ -338,7 +338,16 @@ const PaymentRegister = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {filteredPayments.map((pay) => (
+                            {loading ? (
+                                <tr>
+                                    <td colSpan="8" className="p-12 text-center text-purple-600">
+                                        <div className="flex justify-center items-center gap-2">
+                                            <Loader2 size={24} className="animate-spin"/> 
+                                            <span className="font-bold">Loading payment register...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : filteredPayments.map((pay) => (
                                 <tr key={pay.id} className="hover:bg-purple-50/50 transition cursor-pointer" onClick={() => navigate(`/admin/orders/${pay.ticketId}`)}>
                                     <td className="px-6 py-4 text-gray-500">
                                         <div className="font-bold text-slate-700">{pay.date.toLocaleDateString()}</div>
@@ -372,7 +381,7 @@ const PaymentRegister = () => {
                                     <td className="px-6 py-4 text-right font-black text-slate-900">{formatCurrency(pay.amount)}</td>
                                 </tr>
                             ))}
-                            {filteredPayments.length === 0 && (
+                            {!loading && filteredPayments.length === 0 && (
                                 <tr>
                                     <td colSpan="7" className="p-10 text-center text-gray-400 italic">No payments found for this period.</td>
                                 </tr>

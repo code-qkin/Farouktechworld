@@ -9,7 +9,7 @@ import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import { 
     collection, query, orderBy, onSnapshot, updateDoc, doc, 
-    runTransaction, setDoc, arrayRemove, serverTimestamp, writeBatch, limit 
+    runTransaction, setDoc, arrayRemove, serverTimestamp, writeBatch, limit, increment 
 } from 'firebase/firestore';
 import { Toast, ConfirmModal } from '../../Components/Feedback.jsx'; 
 import { 
@@ -427,8 +427,8 @@ const WorkerDashboard = ({ user: propUser }) => {
 
   const displayOrders = orders.map(order => {
       const matchesSearch = 
-        order.ticketId.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        order.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase());
+        (order.ticketId || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+        (order.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
       if (!matchesSearch) return null;
       if (order.status === 'Void') return null;
       if ((activeTab === 'pool' || activeTab === 'my-jobs') && order.status === 'Collected') return null;
@@ -509,7 +509,12 @@ const WorkerDashboard = ({ user: propUser }) => {
           </div>
 
           {/* LIST */}
-          {loading ? <div className="text-center py-10 text-slate-400 text-sm">Loading...</div> : 
+          {loading ? (
+              <div className="flex justify-center items-center gap-2 py-12 text-purple-600">
+                  <Loader2 size={24} className="animate-spin"/> 
+                  <span className="font-bold">Loading tasks...</span>
+              </div>
+          ) : 
            displayOrders.length === 0 ? (
                <div className="bg-white rounded-2xl p-10 text-center border-2 border-dashed border-gray-200 mt-4">
                    <BoxSelect className="text-slate-300 w-12 h-12 mx-auto mb-3"/>

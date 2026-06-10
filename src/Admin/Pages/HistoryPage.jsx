@@ -21,7 +21,7 @@ const HistoryPage = () => {
 
     const filteredList = useMemo(() => {
         return orders.filter(o => {
-            const matchesSearch = o.ticketId.toLowerCase().includes(searchTerm.toLowerCase()) || o.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesSearch = (o.ticketId || '').toLowerCase().includes(searchTerm.toLowerCase()) || (o.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
             
             let matchesTab = false;
             if (activeTab === 'paid') matchesTab = o.paymentStatus === 'Paid' && o.status !== 'Void';

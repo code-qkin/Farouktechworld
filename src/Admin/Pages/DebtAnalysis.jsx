@@ -202,8 +202,8 @@ const DebtAnalysis = () => {
     const filteredList = useMemo(() => {
         return orders.filter(o => {
             const matchesSearch = 
-                o.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                o.ticketId?.toLowerCase().includes(searchTerm.toLowerCase());
+                (o.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                (o.ticketId || '').toLowerCase().includes(searchTerm.toLowerCase());
             
             const matchesRisk = filterRisk === 'All' || o.riskLevel === filterRisk;
             
@@ -283,9 +283,9 @@ const DebtAnalysis = () => {
             // Otherwise, extract EXACTLY what is visible in the filtered results
             // but grouped by their actual identities to avoid "adding stuffs"
             return targetList.filter(o => 
-                o.customer?.name?.toLowerCase().includes(term) || 
-                o.customer?.phone?.includes(term) ||
-                o.ticketId?.toLowerCase().includes(term)
+                (o.customer?.name || '').toLowerCase().includes(term) || 
+                (o.customer?.phone || '').includes(term) ||
+                (o.ticketId || '').toLowerCase().includes(term)
             );
         }
 

@@ -35,6 +35,7 @@ import ServicePrices from './Admin/Pages/ServicePrices';
 // import IssueReports from "./Admin/Pages/IssueReports";
 import ManageProofOfWork from "./Admin/Pages/ManageProofOfWork";
 import SpoiltPartsRegister from './Admin/Pages/SpoiltPartsRegister';
+import PartUsageAndSales from './Admin/Pages/PartUsageAndSales';
 import DeviceManager from "./Admin/Pages/DeviceManager";
 import DebtAnalysis from "./Admin/Pages/DebtAnalysis";
 import PaymentRegister from "./Admin/Pages/PaymentRegister";
@@ -74,6 +75,7 @@ const router = createBrowserRouter(
             <Route path="payroll" element={<PayrollPage />} />
             <Route path="pricing" element={<ServicePrices />} />
             {/* <Route path="manage-proof-of-work" element={<ManageProofOfWork />} /> */}
+            <Route path="part-usage-sales" element={<PartUsageAndSales />} />
             <Route path="spoilt-parts" element={<SpoiltPartsRegister />} />
             <Route path="devices" element={<DeviceManager />} />
             <Route path="debt-analysis" element={<DebtAnalysis />} />

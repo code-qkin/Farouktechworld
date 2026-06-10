@@ -737,7 +737,8 @@ const OrdersManagement = () => {
                                     <td className="px-6 py-4 text-right"><button className="text-xs font-bold text-purple-600 hover:bg-purple-50 px-3 py-1.5 rounded-lg transition">View</button></td>
                                 </tr>
                             ))}
-                            {currentOrders.length === 0 && <tr><td colSpan={isManager ? 6 : 7} className="p-12 text-center text-slate-400 font-medium">No orders found matching your filters.</td></tr>}
+                            {loading && <tr><td colSpan={isManager ? 6 : 7} className="p-12 text-center text-purple-600"><div className="flex justify-center items-center gap-2"><Loader2 size={24} className="animate-spin"/> <span className="font-bold">Loading orders...</span></div></td></tr>}
+                            {!loading && currentOrders.length === 0 && <tr><td colSpan={isManager ? 6 : 7} className="p-12 text-center text-slate-400 font-medium">No orders found matching your filters.</td></tr>}
                         </tbody>
                     </table>
                 </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Calendar, Search, Smartphone, Activity, RefreshCw, Eye, EyeOff } from 'lucide-react';
+import { Calendar, Search, Smartphone, Activity, RefreshCw, Eye, EyeOff, Loader2 } from 'lucide-react';
 import NairaSign from '../Components/NairaSign';
 import { collection, query, orderBy, getDocs, where } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
@@ -118,9 +118,9 @@ const CollectedPhonesPage = () => {
         if (!searchTerm) return collectedPhones;
         const term = searchTerm.toLowerCase();
         return collectedPhones.filter(p => 
-            p.ticketId.toLowerCase().includes(term) ||
-            p.customer.toLowerCase().includes(term) ||
-            p.device.toLowerCase().includes(term)
+            (p.ticketId || '').toLowerCase().includes(term) ||
+            (p.customer || '').toLowerCase().includes(term) ||
+            (p.device || '').toLowerCase().includes(term)
         );
     }, [collectedPhones, searchTerm]);
 
@@ -227,7 +227,7 @@ const CollectedPhonesPage = () => {
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {loading ? (
-                                <tr><td colSpan="4" className="p-8 text-center text-gray-400">Loading collected phones...</td></tr>
+                                <tr><td colSpan="4" className="p-8 text-center text-purple-600"><div className="flex justify-center items-center gap-2"><Loader2 size={24} className="animate-spin"/> <span className="font-bold">Loading collected phones...</span></div></td></tr>
                             ) : filteredPhones.length > 0 ? (
                                 filteredPhones.map((phone) => (
                                     <tr key={phone.id} className="hover:bg-purple-50 transition cursor-pointer" onClick={() => navigate(`/admin/orders/${phone.ticketId}`)}>

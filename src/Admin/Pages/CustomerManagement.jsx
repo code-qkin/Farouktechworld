@@ -115,9 +115,9 @@ const CustomerManagement = () => {
     const filteredCustomers = useMemo(() => {
         return customers.filter(c => {
             const matchesSearch = 
-                c.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                c.phone?.includes(searchTerm) || 
-                c.email?.toLowerCase().includes(searchTerm.toLowerCase());
+                (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                (c.phone || '').includes(searchTerm) || 
+                (c.email || '').toLowerCase().includes(searchTerm.toLowerCase());
             return matchesSearch;
         });
     }, [customers, searchTerm]);
