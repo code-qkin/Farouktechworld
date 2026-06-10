@@ -101,7 +101,6 @@ const CollectedPhonesPage = () => {
                     if (endDate && collectedDate > endDate) return;
 
                     const originalCost = item.total ?? item.cost ?? 0;
-                    const finalCost = Math.max(0, originalCost - discountPerDevice);
 
                     phones.push({
                         id: `${order.ticketId}-${itemIdx}`,
@@ -111,7 +110,7 @@ const CollectedPhonesPage = () => {
                         device: item.deviceModel || item.name,
                         originalCost: originalCost,
                         discount: discountPerDevice,
-                        cost: finalCost,
+                        cost: originalCost, // User wants the full amount in the table
                         isPaid: item.isPaid || order.balance <= 0 || order.paymentStatus === 'Paid',
                         orderId: order.id
                     });
@@ -144,8 +143,11 @@ const CollectedPhonesPage = () => {
             totalOriginalValue += p.originalCost || 0;
             totalDiscount += p.discount || 0;
             
-            if (p.isPaid) totalPaid += p.cost;
-            else totalUnpaid += p.cost;
+            if (p.isPaid) {
+                totalPaid += (p.originalCost - p.discount);
+            } else {
+                totalUnpaid += (p.originalCost - p.discount);
+            }
         });
 
         return { totalOriginalValue, totalDiscount, totalPaid, totalUnpaid };
@@ -258,7 +260,6 @@ const CollectedPhonesPage = () => {
                                         </td>
                                         <td className="p-4 text-right">
                                             <div className="font-mono font-bold text-gray-700">{formatCurrency(phone.cost)}</div>
-                                            {phone.discount > 0 && <div className="text-[10px] text-purple-600 font-bold mt-0.5">-{formatCurrency(phone.discount)}</div>}
                                         </td>
                                         <td className="p-4 text-center">
                                             {phone.isPaid ? (
