@@ -60,6 +60,7 @@ const AdminLayout = () => {
         { path: '/admin/spoilt-parts', icon: AlertTriangle, label: 'Spoilt Parts', roles: ['admin', 'ceo'] },
         { path: '/admin/debt-analysis', icon: Activity, label: 'Debt Analysis', roles: ['admin', 'ceo'] },
         { path: '/admin/payments', icon: FileText, label: 'Payment Register', roles: ['admin', 'ceo'] },
+        { path: '/admin/worker-stats', icon: TrendingUp, label: 'Worker Stats', roles: ['admin', 'ceo'] },
         { path: '/admin/approvals', icon: ClipboardCheck, label: 'Approvals', roles: ['admin', 'ceo'] },
     ];
 

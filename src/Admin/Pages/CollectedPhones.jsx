@@ -77,6 +77,11 @@ const CollectedPhonesPage = () => {
         let phones = [];
         rawOrders.forEach(order => {
             if (!order.items) return;
+            
+            // Calculate how many repair items there are to distribute the discount evenly
+            const repairItemsCount = order.items.filter(i => i.type === 'repair').length || 1;
+            const discountPerDevice = (Number(order.discount) || 0) / repairItemsCount;
+
             order.items.forEach((item, itemIdx) => {
                 if (item.type === 'repair' && item.collected) {
                     let fallbackDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
@@ -95,13 +100,16 @@ const CollectedPhonesPage = () => {
                     if (startDate && collectedDate < startDate) return;
                     if (endDate && collectedDate > endDate) return;
 
+                    const originalCost = item.total ?? item.cost ?? 0;
+                    const finalCost = Math.max(0, originalCost - discountPerDevice);
+
                     phones.push({
                         id: `${order.ticketId}-${itemIdx}`,
                         ticketId: order.ticketId,
                         date: collectedDate,
                         customer: order.customer?.name || 'Unknown',
                         device: item.deviceModel || item.name,
-                        cost: item.total ?? item.cost ?? 0,
+                        cost: finalCost,
                         isPaid: item.isPaid || order.balance <= 0 || order.paymentStatus === 'Paid',
                         orderId: order.id
                     });

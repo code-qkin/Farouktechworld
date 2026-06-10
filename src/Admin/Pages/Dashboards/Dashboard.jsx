@@ -259,6 +259,10 @@ const Dashboard = () => {
 
             <main className="p-6 max-w-[1600px] mx-auto space-y-8">
                 
+                <div className="flex items-center gap-3 bg-indigo-50 text-indigo-900 px-4 py-3 rounded-xl text-sm font-bold border border-indigo-100 shadow-sm">
+                    <Activity size={18} className="text-indigo-600"/> 
+                    Dashboard statistics are calculated from your most recent 500 orders to optimize speed and database costs.
+                </div>
                 {/* PENDING DELETION REQUESTS */}
                 {deletionRequests.length > 0 && (
                     <div className="bg-red-50 border border-red-200 rounded-2xl p-6 animate-in fade-in slide-in-from-top-4">

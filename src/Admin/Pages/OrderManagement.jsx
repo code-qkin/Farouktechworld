@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     ClipboardList, Search, PlusCircle, Trash2, User, Phone, X, 
     ShoppingBag, Download, ArrowLeft, ShoppingCart, 
-    Filter, ChevronDown, CheckCircle, AlertCircle, Wrench, ArrowRight,
+    Filter, ChevronDown, CheckCircle, AlertCircle, Wrench, ArrowRight, ArrowDown,
     ChevronLeft, ChevronRight, Plus, Minus, AlertTriangle, Send,
     Loader2, Calendar, Activity, Clock, Layers, Palette
 } from 'lucide-react';
@@ -113,6 +113,7 @@ const OrdersManagement = () => {
     const [activeTab, setActiveTab] = useState('repair'); 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [mobilePosTab, setMobilePosTab] = useState('input'); 
+    const [serverLimit, setServerLimit] = useState(100); // SERVER SIDE PAGINATION LIMIT 
 
     // POS Data
     const [customer, setCustomer] = useState({ name: '', phone: '', email: '' });
@@ -221,6 +222,9 @@ const OrdersManagement = () => {
         if (endDate) {
             q = query(q, where("createdAt", "<=", endDate));
         }
+
+        // Apply Server Limit to reduce read costs
+        q = query(q, limit(serverLimit));
         
         unsubOrders = onSnapshot(q, (snap) => {
             setOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -232,7 +236,7 @@ const OrdersManagement = () => {
         getDocs(collection(db, "Services")).then(snap => setDbServices(snap.docs.map(d => d.data()))).catch(e => console.error("Services fetch error:", e));
 
         return () => { unsubOrders(); unsubInv(); unsubCust(); };
-    }, [timeFilter, searchTerm, customStart, customEnd]);
+    }, [timeFilter, searchTerm, customStart, customEnd, serverLimit]);
 
     useEffect(() => {
         if (location.state?.orderToEdit) {
@@ -750,6 +754,18 @@ const OrdersManagement = () => {
                         <button onClick={() => setCurrentPage(p => Math.max(1, p-1))} disabled={currentPage===1} className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"><ChevronLeft size={16}/></button>
                         <span className="text-xs font-bold text-slate-500">Page {currentPage} of {totalPages}</span>
                         <button onClick={() => setCurrentPage(p => Math.min(totalPages, p+1))} disabled={currentPage===totalPages} className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"><ChevronRight size={16}/></button>
+                    </div>
+                )}
+                
+                {/* Server Load More */}
+                {orders.length >= serverLimit && (
+                    <div className="p-4 border-t border-gray-100 flex justify-center bg-white">
+                        <button 
+                            onClick={() => setServerLimit(prev => prev + 100)} 
+                            className="text-sm font-bold text-purple-600 bg-purple-50 px-4 py-2 rounded-xl border border-purple-100 hover:bg-purple-100 transition flex items-center gap-2"
+                        >
+                            <ArrowDown size={16} /> Load Older Orders from Server
+                        </button>
                     </div>
                 )}
             </div>

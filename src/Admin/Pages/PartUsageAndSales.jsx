@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     History, Search, Download, Filter, Loader2, ArrowLeft,
-    Wrench, ShoppingCart, Calendar, Smartphone, User, ChevronLeft, ChevronRight, Tag, Package
+    Wrench, ShoppingCart, Calendar, Smartphone, User, ChevronLeft, ChevronRight, Tag, Package, ArrowDown
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../../firebaseConfig.js'; 
@@ -19,6 +19,7 @@ const PartUsageAndSales = () => {
     // Data States
     const [partUsages, setPartUsages] = useState([]);
     const [directSales, setDirectSales] = useState([]);
+    const [serverLimit, setServerLimit] = useState(200); // Pagination limit
 
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
@@ -50,7 +51,7 @@ const PartUsageAndSales = () => {
             }
 
             // 2. Listen to Orders
-            const q = query(collection(db, "Orders"), orderBy("createdAt", "desc"), limit(1500));
+            const q = query(collection(db, "Orders"), orderBy("createdAt", "desc"), limit(serverLimit));
             unsubscribeOrders = onSnapshot(q, (snapshot) => {
             const usages = [];
             const sales = [];
@@ -108,7 +109,7 @@ const PartUsageAndSales = () => {
         return () => {
             if (unsubscribeOrders) unsubscribeOrders();
         };
-    }, []);
+    }, [serverLimit]);
 
     // Filter Logic
     const filterData = (dataArray) => {
@@ -348,6 +349,18 @@ const PartUsageAndSales = () => {
                                     Next <ChevronRight size={16}/>
                                 </button>
                             </div>
+                        </div>
+                    )}
+                    
+                    {/* Server Load More */}
+                    {(activeTab === 'part_usage' ? partUsages.length >= serverLimit : directSales.length >= serverLimit) && (
+                        <div className="p-4 border-t border-gray-100 flex justify-center bg-gray-50/50">
+                            <button 
+                                onClick={() => setServerLimit(prev => prev + 200)} 
+                                className="text-sm font-bold text-purple-600 bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition flex items-center gap-2"
+                            >
+                                <ArrowDown size={16} /> Load Older Records from Server
+                            </button>
                         </div>
                     )}
                 </div>
