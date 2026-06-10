@@ -25,8 +25,24 @@ const PartUsageAndSales = () => {
     const [filterTime, setFilterTime] = useState('All');
 
     useEffect(() => {
-        const q = query(collection(db, "Orders"), orderBy("createdAt", "desc"), limit(1500));
-        const unsub = onSnapshot(q, (snapshot) => {
+        let unsubscribeOrders;
+        
+        const fetchCategoriesAndListen = async () => {
+            // 1. Build Category Map for legacy items
+            const invMap = {};
+            try {
+                const invSnap = await getDocs(collection(db, "Inventory"));
+                invSnap.docs.forEach(d => {
+                    const data = d.data();
+                    if (data.name) invMap[data.name.toLowerCase()] = data.category || 'Uncategorized';
+                });
+            } catch (e) {
+                console.error("Failed to fetch inventory categories", e);
+            }
+
+            // 2. Listen to Orders
+            const q = query(collection(db, "Orders"), orderBy("createdAt", "desc"), limit(1500));
+            unsubscribeOrders = onSnapshot(q, (snapshot) => {
             const usages = [];
             const sales = [];
 
@@ -36,13 +52,19 @@ const PartUsageAndSales = () => {
                 
                 if (data.items && Array.isArray(data.items)) {
                     data.items.forEach(item => {
+                        let extractedName = item.name || 'Unknown Item';
+                        if (extractedName.startsWith('Used: ')) {
+                            extractedName = extractedName.replace('Used: ', '').split(' (')[0];
+                        }
+                        const mappedCategory = invMap[extractedName.toLowerCase()] || 'Uncategorized';
+
                         const baseData = {
                             id: `${doc.id}-${item.id || Math.random()}`,
                             orderId: doc.id,
                             ticketId: data.ticketId,
                             date: date,
                             itemName: item.name || 'Unknown Item',
-                            category: item.category || 'Uncategorized',
+                            category: item.category || mappedCategory,
                             qty: item.qty || 1,
                             price: item.price || 0,
                             total: item.total !== undefined ? item.total : ((item.qty || 1) * (item.price || 0)),
@@ -70,8 +92,13 @@ const PartUsageAndSales = () => {
             setDirectSales(sales);
             setLoading(false);
         });
+        };
+        
+        fetchCategoriesAndListen();
 
-        return () => unsub();
+        return () => {
+            if (unsubscribeOrders) unsubscribeOrders();
+        };
     }, []);
 
     // Filter Logic

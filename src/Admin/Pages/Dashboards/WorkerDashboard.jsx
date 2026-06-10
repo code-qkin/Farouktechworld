@@ -9,7 +9,7 @@ import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import { 
     collection, query, orderBy, onSnapshot, updateDoc, doc, 
-    runTransaction, setDoc, arrayRemove, serverTimestamp, writeBatch, limit, increment 
+    runTransaction, setDoc, arrayRemove, serverTimestamp, writeBatch, limit, increment, arrayUnion, addDoc
 } from 'firebase/firestore';
 import { Toast, ConfirmModal } from '../../Components/Feedback.jsx'; 
 import { 
@@ -119,7 +119,7 @@ const WorkerDashboard = ({ user: propUser }) => {
         setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     , (error) => console.error("Inventory listener error:", error));
 
-    const unsubOrders = onSnapshot(query(collection(db, "Orders"), orderBy("createdAt", "desc"), limit(300)), snap => {
+    const unsubOrders = onSnapshot(query(collection(db, "Orders"), orderBy("createdAt", "desc"), limit(1500)), snap => {
         const allJobs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setOrders(allJobs);
         setLoading(false);
@@ -176,9 +176,9 @@ const WorkerDashboard = ({ user: propUser }) => {
                       if (!isClosed && (!svc.worker || svc.worker === 'Unassigned')) poolCount++;
                       if (isMyJob(svc.worker) && svc.status === 'Completed') {
                           myCompleted++;
-                          const date = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
-                          const dayKey = date.toLocaleDateString('en-GB', { weekday: 'short' });
-                          if (new Date() - date < 7 * 24 * 60 * 60 * 1000) chartDataMap[dayKey] = (chartDataMap[dayKey] || 0) + 1;
+                          const dateObj = svc.completedAt ? new Date(svc.completedAt) : (order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt));
+                          const dayKey = dateObj.toLocaleDateString('en-GB', { weekday: 'short' });
+                          if (new Date() - dateObj < 7 * 24 * 60 * 60 * 1000) chartDataMap[dayKey] = (chartDataMap[dayKey] || 0) + 1;
                       }
                   });
               }
@@ -225,6 +225,7 @@ const WorkerDashboard = ({ user: propUser }) => {
               try {
                   const newItems = JSON.parse(JSON.stringify(order.items));
                   newItems[itemIndex].services[serviceIndex].status = 'Completed';
+                  newItems[itemIndex].services[serviceIndex].completedAt = new Date().toISOString();
                   const allRepairsDone = newItems.every(item => {
                       if (item.type !== 'repair' || !item.services) return true;
                       return item.services.every(s => s.status === 'Completed' || s.status === 'Void');
@@ -276,6 +277,7 @@ const WorkerDashboard = ({ user: propUser }) => {
                 worker: myIdentity, 
                 cost: 0, 
                 partId: part.id, 
+                category: part.category || 'Uncategorized',
                 usedAt: new Date().toISOString(),
                 targetItemIndex: selectedDeviceIndex 
             };

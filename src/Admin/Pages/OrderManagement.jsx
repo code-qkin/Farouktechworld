@@ -388,6 +388,7 @@ const OrdersManagement = () => {
                     productId: p.id, 
                     name: p.name, 
                     price: p.price, 
+                    category: p.category || 'Uncategorized',
                     qty: 1, 
                     total: p.price 
                 }];
