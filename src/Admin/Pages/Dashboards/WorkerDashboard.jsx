@@ -329,14 +329,15 @@ const WorkerDashboard = ({ user: propUser }) => {
       try {
           const myIdentity = user.name && user.name.trim() !== "" ? user.name : user.email;
           await addDoc(collection(db, "ApprovalRequests"), {
-              type: "No Part Needed",
+              type: "no_part_needed",
               ticketId: selectedTask.ticketId,
               orderId: selectedTask.id,
               deviceName: selectedDeviceName,
-              worker: myIdentity,
+              requestedBy: myIdentity,
+              role: user.role || "worker",
               reason: noPartReason.trim(),
-              status: "Pending",
-              timestamp: new Date()
+              status: "pending",
+              requestedAt: serverTimestamp()
           });
           setToast({ message: "Approval request sent to Admin.", type: "success" });
           setShowNoPartModal(false);
