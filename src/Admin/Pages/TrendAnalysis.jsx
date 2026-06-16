@@ -80,7 +80,7 @@ const TrendAnalysis = () => {
                         item.services.forEach(svc => {
                             // Only count if it's not Void
                             if (svc.status !== 'Void') {
-                                const svcName = svc.name || 'Unknown Service';
+                                const svcName = svc.service || 'Unknown Service';
                                 serviceCounts[svcName] = (serviceCounts[svcName] || 0) + 1;
                             }
                         });
@@ -105,10 +105,11 @@ const TrendAnalysis = () => {
 
         // Classify Fast vs Slow
         const fastP = partsArr.filter(p => p.count > 0).slice(0, 10);
-        const slowP = [...partsArr].reverse().slice(0, 10);
+        // Take the bottom 10, then sort them highest to lowest
+        const slowP = [...partsArr].reverse().slice(0, 10).sort((a, b) => b.count - a.count);
 
         const fastS = servicesArr.filter(s => s.count > 0).slice(0, 10);
-        const slowS = [...servicesArr].reverse().slice(0, 10);
+        const slowS = [...servicesArr].reverse().slice(0, 10).sort((a, b) => b.count - a.count);
 
         return { fastParts: fastP, slowParts: slowP, fastServices: fastS, slowServices: slowS };
     }, [filteredOrders, inventory]);
@@ -168,7 +169,7 @@ const TrendAnalysis = () => {
                                             <td className="p-4 font-bold text-gray-700">{item.name}</td>
                                             <td className="p-4 text-right">
                                                 <span className="bg-green-100 text-green-800 font-bold px-3 py-1 rounded-full text-xs">
-                                                    {item.count} used
+                                                    {item.count} sales
                                                 </span>
                                             </td>
                                         </tr>
@@ -228,7 +229,7 @@ const TrendAnalysis = () => {
                                             <td className="p-4 font-bold text-gray-700">{item.name}</td>
                                             <td className="p-4 text-right">
                                                 <span className={`font-bold px-3 py-1 rounded-full text-xs ${item.count === 0 ? 'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800'}`}>
-                                                    {item.count} used
+                                                    {item.count} sales
                                                 </span>
                                             </td>
                                         </tr>
