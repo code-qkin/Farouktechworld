@@ -333,6 +333,7 @@ const WorkerDashboard = ({ user: propUser }) => {
               ticketId: selectedTask.ticketId,
               orderId: selectedTask.id,
               deviceName: selectedDeviceName,
+              targetItemIndex: selectedDeviceIndex,
               requestedBy: myIdentity,
               role: user.role || "worker",
               reason: noPartReason.trim(),

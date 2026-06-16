@@ -63,6 +63,7 @@ const PendingApprovals = () => {
                     worker: request.requestedBy,
                     cost: 0,
                     partId: 'no-part-log',
+                    targetItemIndex: request.targetItemIndex,
                     usedAt: new Date().toISOString()
                 };
                 await updateDoc(doc(db, 'Orders', request.orderId), {

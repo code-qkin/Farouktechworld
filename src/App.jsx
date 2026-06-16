@@ -41,6 +41,7 @@ import DebtAnalysis from "./Admin/Pages/DebtAnalysis";
 import PaymentRegister from "./Admin/Pages/PaymentRegister";
 import WorkerStat from "./Admin/Pages/WorkerStat";
 import PendingApprovals from "./Admin/Pages/PendingApprovals";
+import TrendAnalysis from "./Admin/Pages/TrendAnalysis";
 
 import AdminLayout from './Admin/Components/AdminLayout';
 
@@ -82,6 +83,7 @@ const router = createBrowserRouter(
             <Route path="payments" element={<PaymentRegister />} />
             <Route path="worker-stats" element={<WorkerStat />} />
             <Route path="approvals" element={<PendingApprovals />} />
+            <Route path="trends" element={<TrendAnalysis />} />
           </Route>
         </Route>
       </Route>

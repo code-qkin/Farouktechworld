@@ -62,6 +62,7 @@ const AdminLayout = () => {
         { path: '/admin/payments', icon: FileText, label: 'Payment Register', roles: ['admin', 'ceo'] },
         { path: '/admin/worker-stats', icon: TrendingUp, label: 'Worker Stats', roles: ['admin', 'ceo'] },
         { path: '/admin/approvals', icon: ClipboardCheck, label: 'Approvals', roles: ['admin', 'ceo'] },
+        { path: '/admin/trends', icon: Activity, label: 'Trend Analysis', roles: ['admin', 'manager', 'ceo'] },
     ];
 
     const visibleMenu = menuItems.filter(item => item.roles.includes(viewRole || role));
