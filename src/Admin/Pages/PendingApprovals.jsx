@@ -59,11 +59,11 @@ const PendingApprovals = () => {
             } else if (request.type === 'no_part_needed') {
                 const usageEntry = {
                     type: 'part_usage',
-                    name: `Log: No Part Needed (${request.deviceName})`,
-                    worker: request.requestedBy,
+                    name: `Log: No Part Needed (${request.deviceName || 'Unknown'})`,
+                    worker: request.requestedBy || 'Unknown',
                     cost: 0,
                     partId: 'no-part-log',
-                    targetItemIndex: request.targetItemIndex,
+                    targetItemIndex: request.targetItemIndex ?? 0,
                     usedAt: new Date().toISOString()
                 };
                 await updateDoc(doc(db, 'Orders', request.orderId), {
