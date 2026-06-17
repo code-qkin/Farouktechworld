@@ -3,8 +3,7 @@ import {
     Users, AlertCircle, Wrench, ClipboardList 
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { db } from '../../../firebaseConfig'; 
+import { useData } from '../../DataContext';
 
 const StatCard = ({ title, value, icon: Icon, color, onClick }) => (
     <div 
@@ -25,22 +24,18 @@ const ManagerDashboard = ({ user }) => {
     const navigate = useNavigate();
     const [orders, setOrders] = useState([]);
     const [inventory, setInventory] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const { orders: allJobs, inventory: inv, loading: globalLoading } = useData();
 
     useEffect(() => {
-        // 1. Fetch Orders for Status Tracking
-        const qOrders = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
-        const unsubOrders = onSnapshot(qOrders, (snap) => {
-            setOrders(snap.docs.map(d => ({ ...d.data(), id: d.id })));
-        });
-
-        // 2. Fetch Inventory for Stock Tracking
-        const qInv = query(collection(db, "Inventory"));
-        const unsubInv = onSnapshot(qInv, (snap) => {
-            setInventory(snap.docs.map(d => d.data()));
-        });
-
-        return () => { unsubOrders(); unsubInv(); };
-    }, []);
+        if (allJobs) {
+            setOrders(allJobs);
+        }
+        if (inv) {
+            setInventory(inv);
+            setLoading(false);
+        }
+    }, [allJobs, inv]);
 
     const stats = useMemo(() => {
         let activeJobs = 0;

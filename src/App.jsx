@@ -8,6 +8,7 @@ import {
 
 // Core Components
 import { AuthProvider } from './Admin/AdminContext';
+import { DataProvider } from './Admin/DataContext';
 import AdminAuthGuard from './Admin/Components/AdminGuard';
 import LoginPage from './Admin/Pages/LoginPage';
 import Dashboard from './Admin/Pages/Dashboards/DashboardHandler';
@@ -60,8 +61,9 @@ const router = createBrowserRouter(
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<SignUp />} />
         <Route element={<AdminAuthGuard />}>
-          <Route path="system-reset" element={<SystemReset />} />
-          <Route element={<AdminLayout />}>
+          <Route element={<DataProvider />}>
+            <Route path="system-reset" element={<SystemReset />} />
+            <Route element={<AdminLayout />}>
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="orders" element={<OrdersManagement />} />
@@ -84,6 +86,7 @@ const router = createBrowserRouter(
             <Route path="worker-stats" element={<WorkerStat />} />
             <Route path="approvals" element={<PendingApprovals />} />
             <Route path="trends" element={<TrendAnalysis />} />
+          </Route>
           </Route>
         </Route>
       </Route>

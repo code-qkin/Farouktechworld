@@ -10,8 +10,9 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AdminContext.jsx';
 import { db } from '../../firebaseConfig.js'; 
 import { 
-    collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, increment, serverTimestamp, writeBatch 
+    collection, addDoc, deleteDoc, updateDoc, doc, query, orderBy, increment, serverTimestamp, writeBatch 
 } from 'firebase/firestore';
+import { useData } from '../DataContext.jsx';
 import { Toast, ConfirmModal } from '../Components/Feedback.jsx';
 import * as XLSX from 'xlsx';
 
@@ -251,15 +252,15 @@ const StoreInventory = () => {
     const [toast, setToast] = useState({ message: '', type: '' });
     const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', action: null });
 
+    const { inventory: globalInventory, loading: globalLoading } = useData();
+
     // 1. DATA
     useEffect(() => {
-        const q = query(collection(db, "Inventory"), orderBy("category"));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        if (globalInventory) {
+            setProducts(globalInventory);
             setLoading(false);
-        });
-        return () => unsubscribe();
-    }, []);
+        }
+    }, [globalInventory]);
 
 
     // 3. FILTERING PRODUCTS

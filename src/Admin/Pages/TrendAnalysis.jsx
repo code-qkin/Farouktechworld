@@ -4,55 +4,27 @@ import {
     Wrench, Package, ArrowLeft, Loader2, AlertCircle, RefreshCw
 } from 'lucide-react';
 import { db } from '../../firebaseConfig';
-import { collection, query, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
+import { useData } from '../DataContext';
 
 const TrendAnalysis = () => {
     const navigate = useNavigate();
-    const [loading, setLoading] = useState(true);
-    const [orders, setOrders] = useState([]);
-    const [inventory, setInventory] = useState([]);
+    const { orders, inventory, loading: globalLoading, fetchAllOrders } = useData();
     const [timeframe, setTimeframe] = useState('30'); // '7', '30', '90', 'all'
 
+    // Re-fetch all orders if timeframe is set to 'all'
     useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-            try {
-                // Fetch inventory to know what exists
-                const invSnap = await getDocs(collection(db, "Inventory"));
-                const invItems = invSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-                setInventory(invItems);
-
-                // Fetch orders for usage history
-                const q = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
-                const unsub = onSnapshot(q, (snapshot) => {
-                    const fetchedOrders = snapshot.docs.map(doc => {
-                        const data = doc.data();
-                        return {
-                            id: doc.id,
-                            ...data,
-                            date: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt)
-                        };
-                    });
-                    setOrders(fetchedOrders);
-                    setLoading(false);
-                });
-                return () => unsub();
-            } catch (error) {
-                console.error("Error fetching data:", error);
-                setLoading(false);
-            }
-        };
-
-        fetchData();
-    }, []);
+        if (timeframe === 'all') {
+            fetchAllOrders();
+        }
+    }, [timeframe]);
 
     // Filter orders by timeframe
     const filteredOrders = useMemo(() => {
         if (timeframe === 'all') return orders;
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - parseInt(timeframe));
-        return orders.filter(o => o.date >= cutoff);
+        return orders.filter(o => o.createdAt && (o.createdAt.toDate ? o.createdAt.toDate() : new Date(o.createdAt)) >= cutoff);
     }, [orders, timeframe]);
 
     // Analyze Data
@@ -114,7 +86,7 @@ const TrendAnalysis = () => {
         return { fastParts: fastP, slowParts: slowP, fastServices: fastS, slowServices: slowS };
     }, [filteredOrders, inventory]);
 
-    if (loading) {
+    if (globalLoading) {
         return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin text-purple-600" size={40} /></div>;
     }
 

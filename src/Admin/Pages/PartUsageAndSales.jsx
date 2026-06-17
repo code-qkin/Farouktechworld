@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-    History, Search, Download, Filter, Loader2, ArrowLeft,
-    Wrench, ShoppingCart, Calendar, Smartphone, User, ChevronLeft, ChevronRight, Tag, Package, ArrowDown
+    History, Search, Download, Loader2, ArrowLeft,
+    Wrench, ShoppingCart, Calendar, User, ChevronLeft, ChevronRight, Tag, Package, ArrowDown
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { db } from '../../firebaseConfig.js'; 
-import { collection, onSnapshot, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { useData } from '../DataContext';
 import * as XLSX from 'xlsx';
 
 const formatCurrency = (amount) => `₦${(Number(amount) || 0).toLocaleString()}`;
@@ -34,30 +33,25 @@ const PartUsageAndSales = () => {
         setCurrentPage(1);
     }, [searchTerm, filterTime, activeTab]);
 
+    const { orders: globalOrders, inventory, fetchAllOrders, loading: globalLoading } = useData();
+
     useEffect(() => {
-        let unsubscribeOrders;
-        
-        const fetchCategoriesAndListen = async () => {
-            // 1. Build Category Map for legacy items
+        const fetchCategoriesAndProcess = async () => {
+            // 1. Build Category Map from global inventory
             const invMap = {};
-            try {
-                const invSnap = await getDocs(collection(db, "Inventory"));
-                invSnap.docs.forEach(d => {
-                    const data = d.data();
+            if (inventory) {
+                inventory.forEach(data => {
                     if (data.name) invMap[data.name.toLowerCase()] = data.category || 'Uncategorized';
                 });
-            } catch (e) {
-                console.error("Failed to fetch inventory categories", e);
             }
 
-            // 2. Listen to Orders
-            const q = query(collection(db, "Orders"), orderBy("createdAt", "desc"), limit(serverLimit));
-            unsubscribeOrders = onSnapshot(q, (snapshot) => {
+            // 2. Process globalOrders
+            if (!globalOrders) return;
+
             const usages = [];
             const sales = [];
 
-            snapshot.docs.forEach(doc => {
-                const data = doc.data();
+            globalOrders.forEach(data => {
                 const date = data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt)) : new Date();
                 
                 if (data.items && Array.isArray(data.items)) {
@@ -69,8 +63,8 @@ const PartUsageAndSales = () => {
                         const mappedCategory = invMap[extractedName.toLowerCase()] || 'Uncategorized';
 
                         const baseData = {
-                            id: `${doc.id}-${item.id || Math.random()}`,
-                            orderId: doc.id,
+                            id: `${data.id}-${item.id || Math.random()}`,
+                            orderId: data.id,
                             ticketId: data.ticketId,
                             date: date,
                             itemName: item.name || 'Unknown Item',
@@ -101,15 +95,10 @@ const PartUsageAndSales = () => {
             setPartUsages(usages);
             setDirectSales(sales);
             setLoading(false);
-        });
         };
-        
-        fetchCategoriesAndListen();
 
-        return () => {
-            if (unsubscribeOrders) unsubscribeOrders();
-        };
-    }, [serverLimit]);
+        fetchCategoriesAndProcess();
+    }, [globalOrders, inventory, serverLimit]);
 
     // Filter Logic
     const filterData = (dataArray) => {
@@ -237,6 +226,9 @@ const PartUsageAndSales = () => {
                                     <option value="This Month">This Month</option>
                                 </select>
                             </div>
+                            <button onClick={fetchAllOrders} className="flex items-center gap-2 bg-white px-3 py-2 border border-gray-200 rounded-lg text-sm font-bold text-slate-700 hover:bg-gray-50">
+                                Fetch All History
+                            </button>
                         </div>
                     </div>
 
@@ -255,7 +247,7 @@ const PartUsageAndSales = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                                {loading && (
+                                {globalLoading && (
                                     <tr>
                                         <td colSpan="7" className="p-12 text-center text-purple-600">
                                             <div className="flex justify-center items-center gap-2">
@@ -265,14 +257,14 @@ const PartUsageAndSales = () => {
                                         </td>
                                     </tr>
                                 )}
-                                {!loading && displayData.length === 0 && (
+                                {!globalLoading && displayData.length === 0 && (
                                     <tr>
                                         <td colSpan="7" className="p-12 text-center text-slate-400 font-medium">
                                             No records found matching your filters.
                                         </td>
                                     </tr>
                                 )}
-                                {!loading && currentData.map(item => (
+                                {!globalLoading && currentData.map(item => (
                                     <tr key={item.id} className="hover:bg-purple-50/50 transition cursor-pointer group" onClick={() => navigate(`/admin/orders/${item.ticketId}`)}>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-2 mb-1">

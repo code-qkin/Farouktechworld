@@ -8,13 +8,14 @@ import { db, auth } from '../../../firebaseConfig.js';
 import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import { 
-    collection, query, orderBy, onSnapshot, updateDoc, doc, 
+    collection, updateDoc, doc, 
     runTransaction, setDoc, arrayRemove, serverTimestamp, writeBatch, limit, increment, arrayUnion, addDoc
 } from 'firebase/firestore';
 import { Toast, ConfirmModal } from '../../Components/Feedback.jsx'; 
 import { 
     BarChart, Bar, ResponsiveContainer 
 } from 'recharts';
+import { useData } from '../../DataContext';
 
 // --- UTILS ---
 const getTimeAgo = (timestamp) => {
@@ -53,8 +54,7 @@ const WorkerDashboard = ({ user: propUser }) => {
   
   // Data State
   const [orders, setOrders] = useState([]);
-  const [inventory, setInventory] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { orders: allJobs, inventory, loading: globalLoading } = useData();
 
   // UI State
   const [activeTab, setActiveTab] = useState('my-jobs'); 
@@ -115,44 +115,33 @@ const WorkerDashboard = ({ user: propUser }) => {
   };
 
   useEffect(() => {
-    const unsubInv = onSnapshot(collection(db, "Inventory"), snap => 
-        setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    , (error) => console.error("Inventory listener error:", error));
+    if (!allJobs) return;
+    setOrders(allJobs);
 
-    const unsubOrders = onSnapshot(query(collection(db, "Orders"), orderBy("createdAt", "desc")), snap => {
-        const allJobs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setOrders(allJobs);
-        setLoading(false);
+    if (user) {
+        const myCurrentJobIds = new Set();
+        allJobs.forEach(order => {
+            if (order.status === 'Void') return;
+            const hasMyActiveJob = order.items?.some(item => 
+                item.type === 'repair' && 
+                item.services?.some(svc => isMyJob(svc.worker) && svc.status !== 'Completed' && svc.status !== 'Void')
+            );
+            if (hasMyActiveJob) myCurrentJobIds.add(order.id);
+        });
 
-        if (user) {
-            const myCurrentJobIds = new Set();
-            allJobs.forEach(order => {
-                if (order.status === 'Void') return;
-                const hasMyActiveJob = order.items?.some(item => 
-                    item.type === 'repair' && 
-                    item.services?.some(svc => isMyJob(svc.worker) && svc.status !== 'Completed' && svc.status !== 'Void')
-                );
-                if (hasMyActiveJob) myCurrentJobIds.add(order.id);
-            });
-
-            if (!isFirstRun.current) {
-                const newJobs = [...myCurrentJobIds].filter(x => !lastAssignedJobIds.current.has(x));
-                if (newJobs.length > 0) {
-                    setToast({ message: `🚀 You have ${newJobs.length} new task(s).`, type: 'info' });
-                    if ('Notification' in window && Notification.permission === 'granted') {
-                         try { new Notification("New Job Assigned 🛠️", { body: "Check your workbench.", icon: '/vite.svg' }); } catch (e) {}
-                    }
+        if (!isFirstRun.current) {
+            const newJobs = [...myCurrentJobIds].filter(x => !lastAssignedJobIds.current.has(x));
+            if (newJobs.length > 0) {
+                setToast({ message: `🚀 You have ${newJobs.length} new task(s).`, type: 'info' });
+                if ('Notification' in window && Notification.permission === 'granted') {
+                     try { new Notification("New Job Assigned 🛠️", { body: "Check your workbench.", icon: '/vite.svg' }); } catch (e) {}
                 }
             }
-            lastAssignedJobIds.current = myCurrentJobIds;
-            isFirstRun.current = false;
         }
-    }, (error) => {
-        console.error("Orders listener error:", error);
-    });
-
-    return () => { unsubInv(); unsubOrders(); };
-  }, [user]);
+        lastAssignedJobIds.current = myCurrentJobIds;
+        isFirstRun.current = false;
+    }
+  }, [allJobs, user]);
 
   const handleLogout = async () => { await signOut(auth); navigate('/admin/login'); };
 
@@ -513,7 +502,7 @@ const WorkerDashboard = ({ user: propUser }) => {
           </div>
 
           {/* LIST */}
-          {loading ? (
+          {globalLoading ? (
               <div className="flex justify-center items-center gap-2 py-12 text-purple-600">
                   <Loader2 size={24} className="animate-spin"/> 
                   <span className="font-bold">Loading tasks...</span>

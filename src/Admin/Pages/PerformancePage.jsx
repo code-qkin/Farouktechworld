@@ -5,6 +5,7 @@ import {
     ChevronDown, FileText, Activity, Plus, Trash2, Eye, EyeOff
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc } from 'firebase/firestore';
+import { useData } from '../DataContext';
 import { db } from '../../firebaseConfig';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -90,6 +91,7 @@ const PerformanceReports = () => {
     const navigate = useNavigate();
 
     // Data State
+    const { orders: globalOrders, fetchAllOrders, loading: globalLoading } = useData();
     const [orders, setOrders] = useState([]);
     const [expenses, setExpenses] = useState([]);
 
@@ -105,16 +107,11 @@ const PerformanceReports = () => {
 
     // 1. FETCH DATA
     useEffect(() => {
-        const qOrders = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
+        if (globalOrders) {
+            setOrders(globalOrders.map(d => ({ ...d, id: d.id, date: d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt) })));
+        }
+
         const qExpenses = query(collection(db, "Expenses"), orderBy("date", "desc"));
-
-        const unsubOrders = onSnapshot(qOrders,
-            (snap) => {
-                setOrders(snap.docs.map(d => ({ ...d.data(), id: d.id, date: d.data().createdAt?.toDate() || new Date() })));
-            },
-            (error) => console.error("Orders access denied:", error)
-        );
-
         const unsubExpenses = onSnapshot(qExpenses,
             (snap) => {
                 setExpenses(snap.docs.map(d => ({ ...d.data(), id: d.id, date: d.data().date?.toDate() || new Date() })));
@@ -127,8 +124,8 @@ const PerformanceReports = () => {
             }
         );
 
-        return () => { unsubOrders(); unsubExpenses(); };
-    }, []);
+        return () => { unsubExpenses(); };
+    }, [globalOrders]);
 
     // 2. FILTER LOGIC
     const getFilterDate = () => {
@@ -223,7 +220,7 @@ const PerformanceReports = () => {
         XLSX.writeFile(wb, `Financial_Report_${filterRange}.xlsx`);
     };
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-purple-700"></div></div>;
+    if (globalLoading || loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-purple-700"></div></div>;
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-20">
@@ -242,7 +239,10 @@ const PerformanceReports = () => {
                 </div>
                 
                 {/* Scrollable Filters on Mobile */}
-                <div className="w-full md:w-auto overflow-x-auto no-scrollbar">
+                <div className="w-full md:w-auto overflow-x-auto no-scrollbar flex items-center gap-2">
+                    <button onClick={fetchAllOrders} className="bg-white border border-gray-200 text-gray-700 px-3 py-2 rounded-lg text-xs font-bold hover:bg-gray-50 flex items-center gap-2 min-w-max">
+                        <Download size={14} /> Fetch All History
+                    </button>
                     <div className="flex bg-slate-100 p-1 rounded-xl min-w-max">
                         {['today', '7_days', 'this_month', 'all'].map(tab => (
                             <button key={tab} onClick={() => setFilterRange(tab)} className={`px-4 py-2 rounded-lg text-xs font-bold capitalize whitespace-nowrap transition-all ${filterRange === tab ? 'bg-white shadow text-purple-700' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>{tab.replace('_', ' ')}</button>
@@ -261,6 +261,13 @@ const PerformanceReports = () => {
                         subtext="Total Income"
                         icon={Wallet}
                         color="green"
+                        hideable={true}
+                    />
+                    <StatCard
+                        title="Net Profit"
+                        value={formatCurrency(stats.netProfit)}
+                        icon={Activity}
+                        color={stats.netProfit >= 0 ? "purple" : "orange"}
                         hideable={true}
                     />
                     <StatCard

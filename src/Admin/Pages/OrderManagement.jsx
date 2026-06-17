@@ -17,6 +17,7 @@ import {
 import * as XLSX from 'xlsx';
 import { Toast, ConfirmModal } from '../Components/Feedback.jsx';
 import POSModal from '../Components/POSModal.jsx';
+import { useData } from '../DataContext.jsx';
 
 const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
 
@@ -83,12 +84,10 @@ const OrdersManagement = () => {
     const navigate = useNavigate();
     const location = useLocation();
 
-    // Data State
+    // Global Data
+    const { orders: globalOrders, inventory, customers: savedCustomers, fetchAllOrders, loading: globalLoading } = useData();
     const [orders, setOrders] = useState([]);
-    const [inventory, setInventory] = useState([]); 
     const [dbServices, setDbServices] = useState([]); 
-    const [savedCustomers, setSavedCustomers] = useState([]); 
-    const [loading, setLoading] = useState(true);
     
     // 🔥 INITIALIZE STATE FROM SESSION STORAGE
     const [searchTerm, setSearchTerm] = useState(() => getSavedState('searchTerm', ''));
@@ -113,7 +112,6 @@ const OrdersManagement = () => {
     const [activeTab, setActiveTab] = useState('repair'); 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [mobilePosTab, setMobilePosTab] = useState('input'); 
-    const [serverLimit, setServerLimit] = useState(100); // SERVER SIDE PAGINATION LIMIT 
 
     // POS Data
     const [customer, setCustomer] = useState({ name: '', phone: '', email: '' });
@@ -193,50 +191,58 @@ const OrdersManagement = () => {
     }, [inventory]);
 
     useEffect(() => {
-        setLoading(true);
-        let unsubOrders = () => {}; 
+        if (!globalOrders) return;
+        let filtered = [...globalOrders];
+        
+        // 1. Filter by Date
+        if (timeFilter !== 'all') {
+            const now = new Date();
+            let startDate = null;
+            let endDate = null;
 
-        let startDate = new Date();
-        startDate.setHours(0, 0, 0, 0);
-        let endDate = null;
-
-        if (timeFilter === 'week') startDate.setDate(startDate.getDate() - startDate.getDay());
-        else if (timeFilter === 'month') startDate.setDate(1);
-        else if (timeFilter === 'all') startDate = null;
-        else if (timeFilter === 'custom') {
-            if (customStart) {
+            if (timeFilter === 'today') {
+                startDate = new Date(now.setHours(0,0,0,0));
+                endDate = new Date(now.setHours(23,59,59,999));
+            } else if (timeFilter === '7days') {
+                startDate = new Date();
+                startDate.setDate(now.getDate() - 7);
+            } else if (timeFilter === '30days') {
+                startDate = new Date();
+                startDate.setDate(now.getDate() - 30);
+            } else if (timeFilter === 'custom' && customStart) {
                 startDate = new Date(customStart);
                 startDate.setHours(0,0,0,0);
+                if (customEnd) {
+                    endDate = new Date(customEnd);
+                    endDate.setHours(23,59,59,999);
+                }
             }
-            if (customEnd) {
-                endDate = new Date(customEnd);
-                endDate.setHours(23,59,59,999);
-            }
+
+            filtered = filtered.filter(o => {
+                const oDate = o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt);
+                if (startDate && oDate < startDate) return false;
+                if (endDate && oDate > endDate) return false;
+                return true;
+            });
         }
 
-        let q = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
-        
-        if (startDate) {
-            q = query(q, where("createdAt", ">=", startDate));
-        }
-        if (endDate) {
-            q = query(q, where("createdAt", "<=", endDate));
+        // 2. Filter by Search
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            filtered = filtered.filter(o => 
+                o.ticketId?.toLowerCase().includes(term) ||
+                o.customer?.name?.toLowerCase().includes(term) ||
+                o.customer?.phone?.toLowerCase().includes(term) ||
+                o.items?.some(i => i.name?.toLowerCase().includes(term) || i.deviceModel?.toLowerCase().includes(term))
+            );
         }
 
-        // Apply Server Limit to reduce read costs
-        q = query(q, limit(serverLimit));
-        
-        unsubOrders = onSnapshot(q, (snap) => {
-            setOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            setLoading(false);
-        }, (error) => console.error("Orders listener error:", error));
-        
-        const unsubInv = onSnapshot(query(collection(db, "Inventory"), orderBy("name")), snap => setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() }))), (error) => console.error("Inventory listener error:", error));
-        const unsubCust = onSnapshot(query(collection(db, "Customers"), orderBy("name")), snap => setSavedCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() }))), (error) => console.error("Customers listener error:", error));
+        setOrders(filtered);
+    }, [globalOrders, timeFilter, customStart, customEnd, searchTerm]);
+
+    useEffect(() => {
         getDocs(collection(db, "Services")).then(snap => setDbServices(snap.docs.map(d => d.data()))).catch(e => console.error("Services fetch error:", e));
-
-        return () => { unsubOrders(); unsubInv(); unsubCust(); };
-    }, [timeFilter, searchTerm, customStart, customEnd, serverLimit]);
+    }, []);
 
     useEffect(() => {
         if (location.state?.orderToEdit) {
@@ -260,8 +266,6 @@ const OrdersManagement = () => {
 
     const filteredOrders = useMemo(() => {
         return orders.filter(o => {
-            const term = searchTerm.toLowerCase();
-            const matchSearch = (o.ticketId || '').toLowerCase().includes(term) || (o.customer?.name || '').toLowerCase().includes(term);
             const matchStatus = filterStatus === 'All' || o.status === filterStatus;
             
             let matchType = true;
@@ -272,9 +276,9 @@ const OrdersManagement = () => {
             const currentPayment = o.paymentStatus || (o.paid ? 'Paid' : 'Unpaid');
             const matchPayment = filterPayment === 'All' || currentPayment === filterPayment;
 
-            return matchSearch && matchStatus && matchType && matchPayment;
+            return matchStatus && matchType && matchPayment;
         });
-    }, [orders, searchTerm, filterStatus, filterType, filterPayment]);
+    }, [orders, filterStatus, filterType, filterPayment]);
 
     const filteredInventory = useMemo(() => {
         return inventory.filter(i => {
@@ -681,6 +685,10 @@ const OrdersManagement = () => {
                     </div>
                     <div className="flex gap-2 overflow-x-auto pb-1 lg:pb-0 no-scrollbar items-center">
                         
+                        <button onClick={fetchAllOrders} className="bg-white border border-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-2">
+                            <Download size={16} /> Fetch All History
+                        </button>
+
                         {/* SMART CALENDAR FILTER */}
                         <div className="flex items-center gap-2 bg-white border border-gray-200 px-3 py-1 rounded-xl">
                             <select className="bg-transparent font-bold text-sm text-slate-600 outline-none cursor-pointer py-1.5" value={timeFilter} onChange={e => setTimeFilter(e.target.value)}>
@@ -742,8 +750,8 @@ const OrdersManagement = () => {
                                     <td className="px-6 py-4 text-right"><button className="text-xs font-bold text-purple-600 hover:bg-purple-50 px-3 py-1.5 rounded-lg transition">View</button></td>
                                 </tr>
                             ))}
-                            {loading && <tr><td colSpan={isManager ? 6 : 7} className="p-12 text-center text-purple-600"><div className="flex justify-center items-center gap-2"><Loader2 size={24} className="animate-spin"/> <span className="font-bold">Loading orders...</span></div></td></tr>}
-                            {!loading && currentOrders.length === 0 && <tr><td colSpan={isManager ? 6 : 7} className="p-12 text-center text-slate-400 font-medium">No orders found matching your filters.</td></tr>}
+                            {globalLoading && <tr><td colSpan={isManager ? 6 : 7} className="p-12 text-center text-purple-600"><div className="flex justify-center items-center gap-2"><Loader2 size={24} className="animate-spin"/> <span className="font-bold">Loading orders...</span></div></td></tr>}
+                            {!globalLoading && currentOrders.length === 0 && <tr><td colSpan={isManager ? 6 : 7} className="p-12 text-center text-slate-400 font-medium">No orders found matching your filters.</td></tr>}
                         </tbody>
                     </table>
                 </div>

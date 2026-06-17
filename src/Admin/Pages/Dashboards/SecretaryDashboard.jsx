@@ -6,8 +6,8 @@ import {
     ArrowRight, TrendingUp, Layers, Eye, EyeOff
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { db, auth } from '../../../firebaseConfig'; 
+import { useData } from '../../DataContext';
+import { auth } from '../../../firebaseConfig'; 
 import { signOut } from 'firebase/auth'; 
 import { 
     BarChart, Bar, XAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell 
@@ -71,6 +71,7 @@ const StatCard = ({ title, value, icon: Icon, color, subtext, hideable }) => {
 const SecretaryDashboard = ({ user }) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const { orders: rawOrders, inventory, loading: globalLoading } = useData();
   
   // Data
   const [orders, setOrders] = useState([]);
@@ -78,14 +79,15 @@ const SecretaryDashboard = ({ user }) => {
 
   // 1. Live Data Fetch
   useEffect(() => {
-    const q = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setOrders(fetched);
-      setLoading(false);
-    }, (err) => console.error("Secretary orders listener error:", err));
-    return () => unsubscribe();
-  }, []);
+    if (!rawOrders) return;
+    const o = rawOrders.map(d => ({
+        id: d.id,
+        ...d,
+        createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt)
+    }));
+    setOrders(o);
+    setLoading(false);
+  }, [rawOrders]);
 
   const handleLogout = async () => { await signOut(auth); navigate('/admin/login'); };
 

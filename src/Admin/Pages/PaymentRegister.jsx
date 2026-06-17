@@ -7,6 +7,7 @@ import {
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useNavigate } from 'react-router-dom';
+import { useData } from '../DataContext';
 import * as XLSX from 'xlsx';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(amount);
@@ -65,8 +66,8 @@ const getSavedState = (key, fallback) => {
 
 const PaymentRegister = () => {
     const navigate = useNavigate();
+    const { orders: globalOrders, loading: globalLoading, fetchAllOrders } = useData();
     const [orders, setOrders] = useState([]);
-    const [loading, setLoading] = useState(true);
     
     // 🔥 PERSISTENT STATE
     const [searchTerm, setSearchTerm] = useState(() => getSavedState('searchTerm', ''));
@@ -84,14 +85,10 @@ const PaymentRegister = () => {
 
     // 1. FETCH ORDERS
     useEffect(() => {
-        const q = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
-        const unsub = onSnapshot(q, (snap) => {
-            const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            setOrders(list);
-            setLoading(false);
-        });
-        return () => unsub();
-    }, []);
+        if (globalOrders) {
+            setOrders(globalOrders);
+        }
+    }, [globalOrders]);
 
     // 2. FLATTEN PAYMENTS (Strict Filter: Paid & Part Payment Only)
     const allPayments = useMemo(() => {
@@ -217,9 +214,12 @@ const PaymentRegister = () => {
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={handleExport} className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-md hover:bg-green-700 flex items-center gap-2">
-                        <Download size={16}/> Export Excel
-                    </button>
+                        <button onClick={fetchAllOrders} className="bg-white border border-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-2">
+                            <Download size={16} /> Fetch All History
+                        </button>
+                        <button onClick={handleExport} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition flex items-center gap-2">
+                            <Download size={16}/> Export Report
+                        </button>
                 </div>
             </div>
 
@@ -338,7 +338,7 @@ const PaymentRegister = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {loading ? (
+                            {globalLoading ? (
                                 <tr>
                                     <td colSpan="8" className="p-12 text-center text-purple-600">
                                         <div className="flex justify-center items-center gap-2">
@@ -381,7 +381,7 @@ const PaymentRegister = () => {
                                     <td className="px-6 py-4 text-right font-black text-slate-900">{formatCurrency(pay.amount)}</td>
                                 </tr>
                             ))}
-                            {!loading && filteredPayments.length === 0 && (
+                            {!globalLoading && filteredPayments.length === 0 && (
                                 <tr>
                                     <td colSpan="7" className="p-10 text-center text-gray-400 italic">No payments found for this period.</td>
                                 </tr>

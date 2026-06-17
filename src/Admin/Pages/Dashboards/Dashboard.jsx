@@ -3,14 +3,14 @@ import {
     Banknote, Users, Wrench, LogOut, Package, TrendingUp, AlertTriangle,
     ShoppingCart, Activity, Wallet, Smartphone, Settings,
     XCircle, AlertCircle, CheckCircle, ShieldAlert,
-    TrendingDown, Image as ImageIcon, Trash2, X, Eye, EyeOff
+    TrendingDown, Trash2, X, Eye, EyeOff
 } from 'lucide-react';
 import { useAuth } from '../../AdminContext';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../../../firebaseConfig';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, orderBy, onSnapshot, doc, deleteDoc, limit } from 'firebase/firestore';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { collection, query, orderBy, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { useData } from '../../DataContext';
 import { Toast } from '../../Components/Feedback';
 
 const formatCurrency = (amount) => {
@@ -84,25 +84,25 @@ const MetricCard = ({ title, value, icon: Icon, color, subtext, onClick, isAlert
 };
 
 const Dashboard = () => {
-    const { role, user } = useAuth();
+    const { role } = useAuth();
     const navigate = useNavigate();
+    const { orders, inventory, loading: globalLoading } = useData();
 
-    // Stats State
-    const [stats, setStats] = useState({ netRevenue: 0, activeOrders: 0, activeDevices: 0, inventoryCount: 0 });
+    const [stats, setStats] = useState({ netRevenue: 0, activeRepairs: 0, devicesInShop: 0, totalInventoryValue: 0 });
     const [recentOrders, setRecentOrders] = useState([]);
-    const [inventoryData, setInventoryData] = useState({ critical: [], low: [], highValue: [], all: [] });
     const [alertTab, setAlertTab] = useState('critical');
-    const [intelligence, setIntelligence] = useState({ topRepairs: [], lowRepairs: [], topProducts: [], lowProducts: [] });
+    const [inventoryData, setInventoryData] = useState({ critical: [], low: [], highValue: [], all: [] });
+    const [topProducts, setTopProducts] = useState([]);
+    const [topServices, setTopServices] = useState([]);
+    const [lowStockCount, setLowStockCount] = useState(0);
+    const [outOfStockCount, setOutOfStockCount] = useState(0);
     const [chartData, setChartData] = useState([]);
-    const [loading, setLoading] = useState(true);
     
-    // Deletion Requests State
     const [deletionRequests, setDeletionRequests] = useState([]);
     const [toast, setToast] = useState({ message: '', type: '' });
 
     const welcomeName = role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Admin';
 
-    // 1. FETCH DELETION REQUESTS (Admin Only)
     useEffect(() => {
         if (role === 'admin') {
             const q = query(collection(db, "DeletionRequests"), orderBy("requestedAt", "desc"));
@@ -113,93 +113,109 @@ const Dashboard = () => {
         }
     }, [role]);
 
-    // 2. FETCH DASHBOARD DATA
     useEffect(() => {
-        const qOrders = query(collection(db, "Orders"), orderBy("createdAt", "desc"), limit(500));
-        const unsubOrders = onSnapshot(qOrders, (snapshot) => {
-            let net = 0; 
-            let activeTickets = 0;
-            let devicesInShop = 0; 
-            
-            const recent = [];
-            const salesMap = {};
-            const repairCounts = {};
-            const productCounts = {};
+        if (!orders) return;
 
-            snapshot.docs.forEach((doc) => {
-                const data = doc.data();
-                
-                // Financials
-                const paid = Number(data.amountPaid || 0);
-                net += paid;
+        let net = 0; 
+        let activeTickets = 0;
+        let devicesInShop = 0; 
+        
+        const recent = [];
+        const salesMap = {};
+        const repairCounts = {};
+        const productCounts = {};
 
-                // Active Tickets Count
-                if (['In Progress', 'Pending', 'Ready for Pickup'].includes(data.status)) {
-                    activeTickets++;
-                }
+        orders.forEach((data) => {
+            const paid = Number(data.amountPaid || 0);
+            net += paid;
 
-                // Active Devices Count (Detailed)
-                if (data.status !== 'Collected' && data.status !== 'Void') {
-                    const repairItems = data.items?.filter(i => i.type === 'repair' && !i.collected) || [];
-                    devicesInShop += repairItems.length;
-                }
+            if (['In Progress', 'Pending', 'Ready for Pickup'].includes(data.status)) {
+                activeTickets++;
+            }
 
-                // Recent Activity Feed
-                if (recent.length < 5) {
-                    recent.push({
-                        id: doc.id,
-                        ticketId: data.ticketId, // Ensure ticketId is used for link
-                        device: data.items?.[0]?.deviceModel || data.items?.[0]?.name || 'Unknown Device', 
-                        status: data.status, 
-                        customer: data.customer?.name || 'Guest', 
-                        cost: data.totalCost
-                    });
-                }
+            if (data.status !== 'Collected' && data.status !== 'Void') {
+                const repairItems = data.items?.filter(i => i.type === 'repair' && !i.collected) || [];
+                devicesInShop += repairItems.length;
+            }
 
-                // Chart Data
-                if (data.createdAt && paid > 0) {
-                    const date = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
-                    const key = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-                    salesMap[key] = (salesMap[key] || 0) + paid;
-                }
+            if (recent.length < 5) {
+                recent.push({
+                    id: data.id,
+                    ticketId: data.ticketId,
+                    device: data.items?.[0]?.deviceModel || data.items?.[0]?.name || 'Unknown Device', 
+                    status: data.status, 
+                    customer: data.customer?.name || 'Guest', 
+                    cost: data.totalCost
+                });
+            }
 
-                // Intelligence Data
-                if (data.items) {
-                    data.items.forEach(item => {
-                        if (item.type === 'repair' && item.services) {
-                            item.services.forEach(s => { const key = s.service; repairCounts[key] = (repairCounts[key] || 0) + 1; });
-                        }
-                        if (item.type === 'product' && item.name) {
-                            productCounts[item.name] = (productCounts[item.name] || 0) + (item.qty || 1);
-                        }
-                    });
-                }
-            });
+            if (data.createdAt && paid > 0) {
+                const date = data.createdAt.toDate ? data.createdAt.toDate().toLocaleDateString() : new Date(data.createdAt).toLocaleDateString();
+                salesMap[date] = (salesMap[date] || 0) + paid;
+            }
 
-            const sortedRepairs = Object.entries(repairCounts).sort((a,b) => b[1] - a[1]).slice(0,5);
-            const lowRepairs = Object.entries(repairCounts).sort((a,b) => a[1] - b[1]).slice(0,5);
-            const sortedProducts = Object.entries(productCounts).sort((a,b) => b[1] - a[1]).slice(0,5);
-
-            setIntelligence(prev => ({ ...prev, topRepairs: sortedRepairs, lowRepairs, topProducts: sortedProducts }));
-            const sortedChart = Object.keys(salesMap).map(key => ({ name: key, sales: salesMap[key] })).slice(-7);
-            
-            setStats(prev => ({ ...prev, netRevenue: net, activeOrders: activeTickets, activeDevices: devicesInShop }));
-            setRecentOrders(recent);
-            setChartData(sortedChart.length > 0 ? sortedChart : [{ name: 'Today', sales: 0 }]);
-            setLoading(false);
+            if (data.items) {
+                data.items.forEach(item => {
+                    if (item.type === 'repair' && item.services) {
+                        item.services.forEach(s => { const key = s.service; repairCounts[key] = (repairCounts[key] || 0) + 1; });
+                    }
+                    if (item.type === 'product' && item.name) {
+                        productCounts[item.name] = (productCounts[item.name] || 0) + (item.qty || 1);
+                    }
+                });
+            }
         });
 
-        const unsubInventory = onSnapshot(collection(db, "Inventory"), (snap) => {
-            const items = snap.docs.map(d => ({id:d.id, ...d.data()}));
-            const critical = items.filter(i => i.stock === 0);
-            const low = items.filter(i => i.stock > 0 && i.stock <= 5);
-            const highValue = items.filter(i => i.stock <= 3 && i.price > 50000).sort((a,b) => b.price - a.price);
-            setInventoryData({ critical, low, highValue, all: items });
-            setStats(prev => ({ ...prev, inventoryCount: items.length }));
-        });
+        setStats(prev => ({ ...prev, netRevenue: net, activeRepairs: activeTickets, devicesInShop }));
+        setRecentOrders(recent);
+        setChartData(Object.keys(salesMap).sort().slice(-7).map(date => ({ date, sales: salesMap[date] })));
 
-        return () => { unsubOrders(); unsubInventory(); };
-    }, []);
+        const topP = Object.keys(productCounts).map(name => ({ name, count: productCounts[name] })).sort((a,b) => b.count - a.count).slice(0,5);
+        const topS = Object.keys(repairCounts).map(name => ({ name, count: repairCounts[name] })).sort((a,b) => b.count - a.count).slice(0,5);
+        
+        setTopProducts(topP);
+        setTopServices(topS);
+
+    }, [orders]);
+
+    useEffect(() => {
+        if (!inventory) return;
+        
+        let totalVal = 0;
+        let lowCnt = 0;
+        let oosCnt = 0;
+
+        const critical = [];
+        const low = [];
+        const highValue = [];
+
+        inventory.forEach((data) => {
+            const price = Number(data.costPrice || data.price || 0);
+            const qty = Number(data.quantity || 0);
+            totalVal += (price * qty);
+
+            if (qty === 0) {
+                oosCnt++;
+                critical.push(data);
+            }
+            else if (qty < (data.lowStockThreshold || 5)) {
+                lowCnt++;
+                low.push(data);
+            }
+            
+            if (qty <= 3 && price > 50000) {
+                highValue.push(data);
+            }
+        });
+        
+        highValue.sort((a,b) => (b.costPrice || b.price) - (a.costPrice || a.price));
+
+        setInventoryData({ critical, low, highValue, all: inventory });
+        setStats(prev => ({ ...prev, totalInventoryValue: totalVal, inventoryCount: inventory.length }));
+        setLowStockCount(lowCnt);
+        setOutOfStockCount(oosCnt);
+
+    }, [inventory]);
 
     const handleLogout = async () => { await signOut(auth); navigate('/admin/login'); };
 
@@ -222,7 +238,7 @@ const Dashboard = () => {
         }
     };
 
-    if (loading) return (
+    if (globalLoading) return (
         <div className="min-h-screen bg-[#fafafa] p-6 max-w-[1600px] mx-auto space-y-8 animate-pulse">
             <div className="h-16 bg-slate-200 rounded-xl w-full mb-8"></div>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">

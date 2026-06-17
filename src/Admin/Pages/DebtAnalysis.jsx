@@ -5,9 +5,10 @@ import {
     Eye, EyeOff, ChevronLeft, ChevronRight, RotateCcw, Wallet,
     FileText, Printer, X
 } from 'lucide-react';
-import { collection, query, orderBy, onSnapshot, updateDoc, doc, serverTimestamp, runTransaction } from 'firebase/firestore';
+import { collection, updateDoc, doc, serverTimestamp, runTransaction } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useNavigate } from 'react-router-dom';
+import { useData } from '../DataContext';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
     PieChart, Pie, Legend
@@ -75,8 +76,9 @@ const getSavedState = (key, fallback) => {
 const DebtAnalysis = () => {
     const navigate = useNavigate();
     const [orders, setOrders] = useState([]);
-    const [allOrders, setAllOrders] = useState([]); // Store all for full extraction
-    const [loading, setLoading] = useState(true);
+    const { orders: globalOrders, loading: globalLoading } = useData();
+    const [allOrders, setAllOrders] = useState([]);
+    const [debts, setDebts] = useState([]);
     const [selectedIds, setSelectedIds] = useState([]); // Multi-select state
     
     // 🔥 PERSISTENT STATE
@@ -117,27 +119,23 @@ const DebtAnalysis = () => {
 
     // 1. FETCH DATA
     useEffect(() => {
-        const q = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
-        const unsub = onSnapshot(q, (snap) => {
-            const data = snap.docs.map(d => ({ 
-                ...d.data(), 
-                id: d.id, 
-                date: d.data().createdAt?.toDate() || new Date() 
-            }));
-            
-            setAllOrders(data); // Store all orders for full extraction
+        if (!globalOrders) return;
+        const data = globalOrders.map(d => ({ 
+            ...d, 
+            id: d.id, 
+            date: d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt) 
+        }));
+        
+        setAllOrders(data); // Store all orders for full extraction
 
-            // 🔥 Filter: Unpaid, Part Payment, OR Negative Balance (Overpaid)
-            const debtData = data.filter(o => 
-                o.status !== 'Void' && 
-                (o.balance > 0 || o.balance < 0)
-            );
-            
-            setOrders(debtData);
-            setLoading(false);
-        });
-        return () => unsub();
-    }, []);
+        // 🔥 Filter: Unpaid, Part Payment, OR Negative Balance (Overpaid)
+        const debtData = data.filter(o => 
+            o.status !== 'Void' && 
+            (o.balance > 0 || o.balance < 0)
+        );
+        
+        setDebts(debtData);
+    }, [globalOrders]);
 
     // 2. ANALYTICS ENGINE
     const analysis = useMemo(() => {
@@ -155,7 +153,7 @@ const DebtAnalysis = () => {
             '30+ Days': 0
         };
 
-        orders.forEach(order => {
+        debts.forEach(order => {
             const balance = Number(order.balance) || 0;
             const daysOld = getTimeDifference(order.date);
             
@@ -195,12 +193,12 @@ const DebtAnalysis = () => {
             { name: 'Overpaid', value: overpaidCount, color: '#10b981' }
         ];
 
-        return { totalDebt, totalOverpaid, highRiskTotal, chartData, pieData, debtorsCount: orders.length };
-    }, [orders]);
+        return { totalDebt, totalOverpaid, highRiskTotal, chartData, pieData, debtorsCount: debts.length };
+    }, [debts]);
 
     // 3. FILTER LIST
     const filteredList = useMemo(() => {
-        return orders.filter(o => {
+        return debts.filter(o => {
             const matchesSearch = 
                 (o.customer?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
                 (o.ticketId || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -209,10 +207,9 @@ const DebtAnalysis = () => {
             
             return matchesSearch && matchesRisk;
         });
-    }, [orders, searchTerm, filterRisk]);
+    }, [debts, searchTerm, filterRisk]);
 
     // 4. PAGINATION LOGIC
-    // Removed automatic reset to allow persistence
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
     const currentItems = filteredList.slice(indexOfFirstItem, indexOfLastItem);
@@ -597,7 +594,7 @@ const DebtAnalysis = () => {
         });
     };
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-purple-700"></div></div>;
+    if (globalLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-red-500"></div></div>;
 
     return (
         <div className="min-h-screen bg-slate-50 p-6 lg:p-10 font-sans text-slate-800 pb-20">

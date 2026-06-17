@@ -7,6 +7,7 @@ import {
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, runTransaction } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../AdminContext';
+import { useData } from '../DataContext';
 import { useNavigate } from 'react-router-dom';
 import { Toast } from '../Components/Feedback';
 
@@ -15,8 +16,8 @@ const DeviceManager = () => {
     const navigate = useNavigate();
 
     // Data State
+    const { orders: globalOrders, loading: globalLoading } = useData();
     const [orders, setOrders] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('Active'); // 'Active', 'All'
 
@@ -35,18 +36,14 @@ const DeviceManager = () => {
 
     // 1. FETCH ORDERS
     useEffect(() => {
-        const q = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedOrders = snapshot.docs.map(doc => ({
+        if (globalOrders) {
+            setOrders(globalOrders.map(doc => ({
                 id: doc.id,
-                ...doc.data(),
-                createdAt: doc.data().createdAt?.toDate() || new Date()
-            }));
-            setOrders(fetchedOrders);
-            setLoading(false);
-        });
-        return () => unsubscribe();
-    }, []);
+                ...doc,
+                createdAt: doc.createdAt?.toDate ? doc.createdAt.toDate() : new Date(doc.createdAt)
+            })));
+        }
+    }, [globalOrders]);
 
     // 2. FLATTEN DEVICES (Extract 'repair' items from orders)
     const devices = useMemo(() => {
@@ -178,7 +175,7 @@ const DeviceManager = () => {
 
     // --- RENDER ---
 
-    if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-purple-600"/></div>;
+    if (globalLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-purple-600"/></div>;
 
     return (
         <div className="min-h-screen bg-gray-50 p-6 lg:p-10 font-sans text-slate-800">

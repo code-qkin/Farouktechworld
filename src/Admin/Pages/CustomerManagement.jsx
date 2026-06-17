@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../AdminContext';
+import { useData } from '../DataContext';
 import { Toast, ConfirmModal } from '../Components/Feedback';
 import { RefreshCw } from 'lucide-react';
 
@@ -20,9 +21,9 @@ const CustomerManagement = () => {
     const { role, user: currentUser } = useAuth();
     const navigate = useNavigate();
 
+    const { customers: globalCustomers, loading: globalLoading } = useData();
     const [customers, setCustomers] = useState([]);
     const [requests, setRequests] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
 
     // Modals
@@ -45,10 +46,9 @@ const CustomerManagement = () => {
     const canManage = isAdmin || role === 'manager' || isSecretary;
 
     useEffect(() => {
-        const unsubCustomers = onSnapshot(query(collection(db, "Customers"), orderBy("name")), (snap) => {
-            setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-            setLoading(false);
-        }, (err) => console.error("Customers listener error:", err));
+        if (globalCustomers) {
+            setCustomers(globalCustomers);
+        }
 
         let unsubRequests = () => {};
         if (isAdmin) {
@@ -57,8 +57,8 @@ const CustomerManagement = () => {
             }, (err) => console.error("Requests listener error:", err));
         }
 
-        return () => { unsubCustomers(); unsubRequests(); };
-    }, [isAdmin]);
+        return () => { unsubRequests(); };
+    }, [globalCustomers, isAdmin]);
 
     const recalculateAllStats = async () => {
         if (!isAdmin) return;
@@ -266,7 +266,7 @@ const CustomerManagement = () => {
         });
     };
 
-    if (loading) return <div className="h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-purple-700"></div></div>;
+    if (globalLoading) return <div className="p-8 text-center text-purple-600"><div className="animate-spin h-8 w-8 mx-auto border-4 border-current border-t-transparent rounded-full" /></div>;
 
     return (
         <div className="p-6 lg:p-10 bg-slate-50 min-h-screen">

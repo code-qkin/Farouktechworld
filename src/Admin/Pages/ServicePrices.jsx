@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AdminContext';
+import { useData } from '../DataContext';
 import { Toast, ConfirmModal } from '../Components/Feedback';
 
 const formatCurrency = (amount) => `₦${Number(amount).toLocaleString()}`;
@@ -57,8 +58,8 @@ const ServicePrices = () => {
     const navigate = useNavigate();
     
     // --- Data State ---
+    const { services: globalServices, loading: globalLoading } = useData();
     const [services, setServices] = useState([]);
-    const [loading, setLoading] = useState(true);
     
     // --- Filter State ---
     const [searchTerm, setSearchTerm] = useState('');
@@ -106,14 +107,10 @@ const ServicePrices = () => {
 
     // 1. Fetch Data
     useEffect(() => {
-        const q = query(collection(db, "Services"), orderBy("model"));
-        const unsub = onSnapshot(q, (snap) => {
-            const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            setServices(list);
-            setLoading(false);
-        });
-        return () => unsub();
-    }, []);
+        if (globalServices) {
+            setServices(globalServices);
+        }
+    }, [globalServices]);
 
     // 2. Filters & Search
     const uniqueServiceNames = useMemo(() => ['All', ...new Set(services.map(s => s.service))].sort(), [services]);
@@ -327,7 +324,7 @@ const ServicePrices = () => {
 
             {/* Data Grid */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
-                {loading ? (
+                {globalLoading ? (
                     <div className="p-10 text-center text-slate-400">Loading database...</div>
                 ) : (
                     <>
