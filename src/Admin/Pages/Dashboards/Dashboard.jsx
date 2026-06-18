@@ -92,8 +92,7 @@ const Dashboard = () => {
     const [recentOrders, setRecentOrders] = useState([]);
     const [alertTab, setAlertTab] = useState('critical');
     const [inventoryData, setInventoryData] = useState({ critical: [], low: [], highValue: [], all: [] });
-    const [topProducts, setTopProducts] = useState([]);
-    const [topServices, setTopServices] = useState([]);
+    const [intelligence, setIntelligence] = useState({ topRepairs: [], lowRepairs: [], topProducts: [], lowProducts: [] });
     const [lowStockCount, setLowStockCount] = useState(0);
     const [outOfStockCount, setOutOfStockCount] = useState(0);
     const [chartData, setChartData] = useState([]);
@@ -170,11 +169,11 @@ const Dashboard = () => {
         setRecentOrders(recent);
         setChartData(Object.keys(salesMap).sort().slice(-7).map(date => ({ date, sales: salesMap[date] })));
 
-        const topP = Object.keys(productCounts).map(name => ({ name, count: productCounts[name] })).sort((a,b) => b.count - a.count).slice(0,5);
-        const topS = Object.keys(repairCounts).map(name => ({ name, count: repairCounts[name] })).sort((a,b) => b.count - a.count).slice(0,5);
+        const sortedRepairs = Object.entries(repairCounts).sort((a,b) => b[1] - a[1]).slice(0,5);
+        const lowRepairs = Object.entries(repairCounts).sort((a,b) => a[1] - b[1]).slice(0,5);
+        const sortedProducts = Object.entries(productCounts).sort((a,b) => b[1] - a[1]).slice(0,5);
         
-        setTopProducts(topP);
-        setTopServices(topS);
+        setIntelligence(prev => ({ ...prev, topRepairs: sortedRepairs, lowRepairs, topProducts: sortedProducts }));
 
     }, [orders]);
 
@@ -211,6 +210,7 @@ const Dashboard = () => {
         highValue.sort((a,b) => (b.costPrice || b.price) - (a.costPrice || a.price));
 
         setInventoryData({ critical, low, highValue, all: inventory });
+        setIntelligence(prev => ({ ...prev, lowProducts: highValue.slice(0, 5) }));
         setStats(prev => ({ ...prev, totalInventoryValue: totalVal, inventoryCount: inventory.length }));
         setLowStockCount(lowCnt);
         setOutOfStockCount(oosCnt);
@@ -434,7 +434,9 @@ const Dashboard = () => {
                                 intelligence.lowProducts?.map((item, i) => (
                                     <li key={i} className="flex justify-between text-sm">
                                         <span className="text-slate-600 truncate max-w-[150px]">{item.name}</span>
-                                        <span className="font-bold text-red-600 bg-red-50 px-2 rounded">{item.stock}</span>
+                                        <span className="font-bold text-slate-900 bg-slate-50 px-2 rounded">
+                                            {item.stock} left
+                                        </span>
                                     </li>
                                 ))
                             }

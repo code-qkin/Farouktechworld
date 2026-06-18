@@ -765,17 +765,6 @@ const OrdersManagement = () => {
                     </div>
                 )}
                 
-                {/* Server Load More */}
-                {orders.length >= serverLimit && (
-                    <div className="p-4 border-t border-gray-100 flex justify-center bg-white">
-                        <button 
-                            onClick={() => setServerLimit(prev => prev + 100)} 
-                            className="text-sm font-bold text-purple-600 bg-purple-50 px-4 py-2 rounded-xl border border-purple-100 hover:bg-purple-100 transition flex items-center gap-2"
-                        >
-                            <ArrowDown size={16} /> Load Older Orders from Server
-                        </button>
-                    </div>
-                )}
             </div>
 
             {/* --- POS MODAL (EXTRACTED) --- */}
