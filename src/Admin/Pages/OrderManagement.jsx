@@ -200,15 +200,17 @@ const OrdersManagement = () => {
             let startDate = null;
             let endDate = null;
 
-            if (timeFilter === 'today') {
+            if (timeFilter === 'day') {
                 startDate = new Date(now.setHours(0,0,0,0));
                 endDate = new Date(now.setHours(23,59,59,999));
-            } else if (timeFilter === '7days') {
+            } else if (timeFilter === 'week') {
                 startDate = new Date();
-                startDate.setDate(now.getDate() - 7);
-            } else if (timeFilter === '30days') {
+                startDate.setDate(startDate.getDate() - startDate.getDay());
+                startDate.setHours(0,0,0,0);
+            } else if (timeFilter === 'month') {
                 startDate = new Date();
-                startDate.setDate(now.getDate() - 30);
+                startDate.setDate(1);
+                startDate.setHours(0,0,0,0);
             } else if (timeFilter === 'custom' && customStart) {
                 startDate = new Date(customStart);
                 startDate.setHours(0,0,0,0);
