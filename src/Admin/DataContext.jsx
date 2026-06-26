@@ -19,7 +19,7 @@ export const DataProvider = ({ children }) => {
     const [orderLimit, setOrderLimit] = useState(500);
 
     const fetchAllOrders = () => {
-        setOrderLimit(10000); // Effectively no limit for this use case
+        // No longer needed as we fetch all natively, keeping for backward compatibility
     };
 
     useEffect(() => {
@@ -27,8 +27,8 @@ export const DataProvider = ({ children }) => {
         let unsubOrders, unsubInventory, unsubCustomers, unsubServices, unsubUsers;
 
         try {
-            // Orders Listener (with limit)
-            const qOrders = query(collection(db, 'Orders'), orderBy('createdAt', 'desc'), limit(orderLimit));
+            // Orders Listener (No limit, optimized by Firestore local cache)
+            const qOrders = query(collection(db, 'Orders'), orderBy('createdAt', 'desc'));
             unsubOrders = onSnapshot(qOrders, (snap) => {
                 setOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             });

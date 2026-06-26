@@ -4,12 +4,13 @@ import NairaSign from '../Components/NairaSign';
 import { collection, query, orderBy, getDocs, where } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useNavigate } from 'react-router-dom';
+import { useData } from '../DataContext';
 
 const CollectedPhonesPage = () => {
+    const { orders: globalOrders, loading: globalLoading } = useData();
     const [rawOrders, setRawOrders] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState(() => sessionStorage.getItem('cp_searchTerm') || '');
-    const [timeFilter, setTimeFilter] = useState(() => sessionStorage.getItem('cp_timeFilter') || 'day');
+    const [timeFilter, setTimeFilter] = useState(() => sessionStorage.getItem('cp_timeFilter') || 'month');
     const [customStart, setCustomStart] = useState(() => sessionStorage.getItem('cp_customStart') || '');
     const [customEnd, setCustomEnd] = useState(() => sessionStorage.getItem('cp_customEnd') || '');
     const [hideStats, setHideStats] = useState(() => sessionStorage.getItem('cp_hideStats') === 'true');
@@ -33,28 +34,18 @@ const CollectedPhonesPage = () => {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
-    const fetchData = useCallback(async () => {
-        setLoading(true);
-        try {
-            const qOrders = query(collection(db, "Orders"), orderBy("createdAt", "desc"));
-            const ordersSnap = await getDocs(qOrders);
-            setRawOrders(ordersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        } catch (error) {
-            console.error("Failed to fetch collected phones:", error);
-        }
-        setLoading(false);
-    }, []);
-
     useEffect(() => { 
-        fetchData(); 
-    }, [fetchData]);
+        if (globalOrders) {
+            setRawOrders(globalOrders);
+        }
+    }, [globalOrders]);
 
     useEffect(() => {
         const savedScroll = sessionStorage.getItem('cp_scroll');
-        if (savedScroll && !loading && rawOrders.length > 0) {
+        if (savedScroll && !globalLoading && rawOrders.length > 0) {
             window.scrollTo(0, parseInt(savedScroll, 10));
         }
-    }, [loading, rawOrders.length]);
+    }, [globalLoading, rawOrders.length]);
 
     const collectedPhones = useMemo(() => {
         let startDate = new Date();
@@ -157,8 +148,8 @@ const CollectedPhonesPage = () => {
                     <p className="text-gray-500 text-sm mt-1">Track financial status of all collected repair jobs.</p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button onClick={fetchData} className="px-4 py-2 bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-sm font-bold hover:bg-purple-200 flex items-center gap-2 transition">
-                        <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> Refresh
+                    <button onClick={() => window.location.reload()} className="px-4 py-2 bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-sm font-bold hover:bg-purple-200 flex items-center gap-2 transition">
+                        <RefreshCw size={16} className={globalLoading ? "animate-spin" : ""} /> Refresh
                     </button>
                     <button onClick={() => navigate('/admin/dashboard')} className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-bold hover:bg-gray-50">Back to Dashboard</button>
                 </div>
@@ -237,7 +228,7 @@ const CollectedPhonesPage = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {loading ? (
+                            {globalLoading ? (
                                 <tr><td colSpan="4" className="p-8 text-center text-purple-600"><div className="flex justify-center items-center gap-2"><Loader2 size={24} className="animate-spin"/> <span className="font-bold">Loading collected phones...</span></div></td></tr>
                             ) : filteredPhones.length > 0 ? (
                                 filteredPhones.map((phone) => (
