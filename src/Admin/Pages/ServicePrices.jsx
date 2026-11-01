@@ -5,7 +5,7 @@ import {
     Search, Save, Filter, ChevronDown, ChevronRight,
     ArrowLeft, Smartphone, Loader2, ChevronLeft,
     Plus, X, Wrench, Layers, Trash2, Tablet, Watch, 
-    Pencil, AlertCircle, RefreshCw, Check, Sparkles
+    Pencil, AlertCircle, RefreshCw, Check, Sparkles, Lightbulb
 } from 'lucide-react';
 import { db } from '../../firebaseConfig';
 import { 
@@ -896,8 +896,9 @@ const ServicePrices = () => {
                                             ))}
                                         </datalist>
                                     </div>
-                                    <p className="text-[11px] text-slate-400 mt-1">
-                                        💡 Typing a new model will automatically register it to your device library for future use.
+                                    <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
+                                        <Lightbulb size={13} className="text-amber-500 shrink-0" />
+                                        <span>Typing a new model will automatically register it to your device library for future use.</span>
                                     </p>
                                 </div>
                             ) : (
