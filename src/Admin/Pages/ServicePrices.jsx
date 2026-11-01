@@ -5,7 +5,7 @@ import {
     Search, Save, Filter, ChevronDown, ChevronRight,
     ArrowLeft, Smartphone, Loader2, ChevronLeft,
     Plus, X, Wrench, Layers, Trash2, Tablet, Watch, 
-    Pencil, AlertCircle, RefreshCw, Check
+    Pencil, AlertCircle, RefreshCw, Check, Sparkles
 } from 'lucide-react';
 import { db } from '../../firebaseConfig';
 import { 
@@ -16,59 +16,20 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../AdminContext';
 import { useData } from '../DataContext';
 import { Toast, ConfirmModal } from '../Components/Feedback';
+import { 
+    getCachedDeviceModels, 
+    saveCachedDeviceModels,
+    fetchCloudDeviceModels, 
+    addCustomDeviceModel, 
+    syncFromPublicDeviceAPI,
+    DEFAULT_DEVICE_MODELS 
+} from '../Utils/DeviceCatalog';
 
 const formatCurrency = (amount) => `₦${Number(amount || 0).toLocaleString()}`;
 
-// --- MODEL DATABASE ---
-const MODEL_DB = {
-    iPhone: [
-        'iPhone 6', 'iPhone 6 Plus', 'iPhone 6s', 'iPhone 6s Plus', 
-        'iPhone 7', 'iPhone 7 Plus', 'iPhone 8', 'iPhone 8 Plus', 
-        'iPhone X', 'iPhone XR', 'iPhone XS', 'iPhone XS Max',
-        'iPhone 11', 'iPhone 11 Pro', 'iPhone 11 Pro Max',
-        'iPhone 12', 'iPhone 12 Mini', 'iPhone 12 Pro', 'iPhone 12 Pro Max',
-        'iPhone 13', 'iPhone 13 Mini', 'iPhone 13 Pro', 'iPhone 13 Pro Max',
-        'iPhone 14', 'iPhone 14 Plus', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
-        'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max',
-        'iPhone 16', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
-        'iPhone 17', 'iPhone 17 Plus', 'iPhone 17 Pro', 'iPhone 17 Pro Max'
-    ],
-    iPad: [
-        'iPad (9th Gen)', 'iPad (10th Gen)', 'iPad (11th Gen)',
-        'iPad mini 5', 'iPad mini 6', 'iPad mini 7',
-        'iPad Air 3', 'iPad Air 4', 'iPad Air 5', 'iPad Air 11" (M2)', 'iPad Air 13" (M2)',
-        'iPad Pro 11" (1st Gen)', 'iPad Pro 11" (2nd Gen)', 'iPad Pro 11" (3rd Gen)', 'iPad Pro 11" (4th Gen)', 'iPad Pro 11" (M4)',
-        'iPad Pro 12.9" (3rd Gen)', 'iPad Pro 12.9" (4th Gen)', 'iPad Pro 12.9" (5th Gen)', 'iPad Pro 12.9" (6th Gen)', 'iPad Pro 13" (M4)'
-    ],
-    Watch: [
-        'Series 1', 'Series 2', 'Series 3', 'Series 4', 'Series 5', 'Series 6', 'Series 7', 'Series 8', 'Series 9', 'Series 10', 'Series 11',
-        'SE (1st Gen)', 'SE (2nd Gen)', 'SE (3rd Gen)',
-        'Ultra', 'Ultra 2', 'Ultra 3'
-    ],
-    Samsung: [
-        'Samsung S20', 'Samsung S20+', 'Samsung S20 Ultra',
-        'Samsung S21', 'Samsung S21+', 'Samsung S21 Ultra',
-        'Samsung S22', 'Samsung S22+', 'Samsung S22 Ultra',
-        'Samsung S23', 'Samsung S23+', 'Samsung S23 Ultra',
-        'Samsung S24', 'Samsung S24+', 'Samsung S24 Ultra',
-        'Samsung Note 10', 'Samsung Note 10+', 'Samsung Note 20', 'Samsung Note 20 Ultra',
-        'Samsung A13', 'Samsung A14', 'Samsung A15', 'Samsung A33', 'Samsung A34', 'Samsung A35', 'Samsung A53', 'Samsung A54', 'Samsung A55'
-    ]
-};
-
-const getModelRange = (type, start, end) => {
-    const list = MODEL_DB[type] || [];
-    const sIdx = list.indexOf(start);
-    const eIdx = list.indexOf(end);
-    if (sIdx === -1 || eIdx === -1) return [];
-    const from = Math.min(sIdx, eIdx);
-    const to = Math.max(sIdx, eIdx);
-    return list.slice(from, to + 1);
-};
-
 const detectDeviceType = (item) => {
-    if (item.type && MODEL_DB[item.type]) return item.type;
-    if (item.category && MODEL_DB[item.category]) return item.category;
+    if (item.type && ['iPhone', 'iPad', 'Watch', 'Samsung'].includes(item.type)) return item.type;
+    if (item.category && ['iPhone', 'iPad', 'Watch', 'Samsung'].includes(item.category)) return item.category;
     const m = (item.model || '').toLowerCase();
     if (m.includes('ipad')) return 'iPad';
     if (m.includes('watch') || m.includes('series') || m.includes('ultra') || m.includes('se (')) return 'Watch';
@@ -80,10 +41,21 @@ const ServicePrices = () => {
     const { role } = useAuth();
     const navigate = useNavigate();
     
-    // --- Data State from Context ---
+    // --- 1. INSTANT CACHE HYDRATION (0ms Delay) ---
     const { services: globalServices, loading: globalLoading } = useData();
-    const [services, setServices] = useState([]);
-    
+    const [services, setServices] = useState(() => {
+        try {
+            const cached = localStorage.getItem('ftw_cached_services');
+            return cached ? JSON.parse(cached) : [];
+        } catch {
+            return [];
+        }
+    });
+
+    // --- Dynamic Device Models State ---
+    const [modelDb, setModelDb] = useState(() => getCachedDeviceModels());
+    const [isSyncingAPI, setIsSyncingAPI] = useState(false);
+
     // --- Filter & Search State ---
     const [searchTerm, setSearchTerm] = useState('');
     const [filterService, setFilterService] = useState('All');
@@ -129,24 +101,39 @@ const ServicePrices = () => {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isAdding, setIsAdding] = useState(false);
     const [activeTab, setActiveTab] = useState('single'); // 'single' or 'bulk'
-    const [addForm, setAddForm] = useState({
-        deviceType: 'iPhone',
-        service: '',
-        model: MODEL_DB.iPhone[0],
-        startModel: MODEL_DB.iPhone[0],
-        endModel: MODEL_DB.iPhone[MODEL_DB.iPhone.length - 1],
-        price: ''
+    const [addForm, setAddForm] = useState(() => {
+        const iList = getCachedDeviceModels().iPhone;
+        return {
+            deviceType: 'iPhone',
+            service: '',
+            model: iList[0] || 'iPhone 13',
+            startModel: iList[0] || 'iPhone 11',
+            endModel: iList[iList.length - 1] || 'iPhone 16 Pro Max',
+            price: ''
+        };
     });
 
     const isEditor = role === 'admin' || role === 'ceo';
     const isViewer = role === 'content_creator' || role === 'manager';
 
-    // Sync Firestore data
+    // Synchronize Firestore services silently and update localStorage cache
     useEffect(() => {
-        if (globalServices) {
+        if (globalServices && globalServices.length > 0) {
             setServices(globalServices);
+            try {
+                localStorage.setItem('ftw_cached_services', JSON.stringify(globalServices));
+            } catch (e) {
+                // Storage full or restricted
+            }
         }
     }, [globalServices]);
+
+    // Fetch cloud-stored custom models in background
+    useEffect(() => {
+        fetchCloudDeviceModels().then(updated => {
+            if (updated) setModelDb(updated);
+        });
+    }, []);
 
     // Focus input on edit
     useEffect(() => {
@@ -155,6 +142,17 @@ const ServicePrices = () => {
             editInputRef.current.select();
         }
     }, [editingId]);
+
+    // Model Range calculation
+    const getModelRange = (type, start, end) => {
+        const list = modelDb[type] || DEFAULT_DEVICE_MODELS[type] || [];
+        const sIdx = list.indexOf(start);
+        const eIdx = list.indexOf(end);
+        if (sIdx === -1 || eIdx === -1) return [];
+        const from = Math.min(sIdx, eIdx);
+        const to = Math.max(sIdx, eIdx);
+        return list.slice(from, to + 1);
+    };
 
     // Group services for the Manage Services Side Drawer
     const groupedServices = useMemo(() => {
@@ -203,7 +201,7 @@ const ServicePrices = () => {
     // Filtered List for Main Table
     const filteredList = useMemo(() => {
         return services.filter(item => {
-            if (item.isBase && !item.model) return false; // Hide pure base service placeholders from general matrix table
+            if (item.isBase && !item.model) return false;
             const model = item.model || '';
             const service = item.service || '';
             const type = detectDeviceType(item);
@@ -256,14 +254,14 @@ const ServicePrices = () => {
     // --- ACTION: Open Add Price Modal Pre-filled ---
     const handleOpenAddModel = (serviceName = '') => {
         const defaultType = 'iPhone';
-        const models = MODEL_DB[defaultType];
+        const models = modelDb[defaultType] || DEFAULT_DEVICE_MODELS[defaultType];
         setAddForm({
             deviceType: defaultType,
             service: serviceName,
             tab: 'single',
-            model: models[0],
-            startModel: models[0],
-            endModel: models[models.length - 1],
+            model: models[0] || 'iPhone 13',
+            startModel: models[0] || 'iPhone 11',
+            endModel: models[models.length - 1] || 'iPhone 16 Pro Max',
             price: ''
         });
         setIsAddModalOpen(true);
@@ -271,7 +269,7 @@ const ServicePrices = () => {
 
     // Handle device type change in Add Modal
     const handleDeviceTypeChange = (newType) => {
-        const list = MODEL_DB[newType] || MODEL_DB.iPhone;
+        const list = modelDb[newType] || DEFAULT_DEVICE_MODELS[newType] || [];
         setAddForm(prev => ({
             ...prev,
             deviceType: newType,
@@ -279,6 +277,22 @@ const ServicePrices = () => {
             startModel: list[0] || '',
             endModel: list[list.length - 1] || ''
         }));
+    };
+
+    // --- ACTION: Sync From Public Device API on demand ---
+    const handleSyncDeviceAPI = async () => {
+        setIsSyncingAPI(true);
+        try {
+            const updated = await syncFromPublicDeviceAPI(addForm.deviceType);
+            if (updated) {
+                setModelDb(updated);
+                setToast({ message: `Synced latest models for ${addForm.deviceType}!`, type: 'success' });
+            }
+        } catch (err) {
+            setToast({ message: "Failed to sync device API. Current catalog preserved.", type: 'error' });
+        } finally {
+            setIsSyncingAPI(false);
+        }
     };
 
     // --- ACTION: Submit Add Price Rule (Single or Bulk) ---
@@ -298,7 +312,6 @@ const ServicePrices = () => {
                 const models = getModelRange(addForm.deviceType, addForm.startModel, addForm.endModel);
                 if (models.length === 0) throw new Error("Invalid model range selected.");
 
-                // Batch write up to 400 per commit
                 const batch = writeBatch(db);
                 models.forEach(model => {
                     const docId = `${svc}_${model}`.replace(/[^a-zA-Z0-9]/g, '_');
@@ -316,13 +329,23 @@ const ServicePrices = () => {
                 await batch.commit();
                 setToast({ message: `Successfully generated ${models.length} price rules!`, type: 'success' });
             } else {
-                if (!addForm.model) throw new Error("Please select or enter a device model.");
-                const docId = `${svc}_${addForm.model}`.replace(/[^a-zA-Z0-9]/g, '_');
+                const rawModel = (addForm.model || '').trim();
+                if (!rawModel) throw new Error("Please select or enter a device model.");
+
+                // If this is a newly typed custom model, save it to the cloud catalog permanently!
+                const existing = modelDb[addForm.deviceType] || [];
+                if (!existing.includes(rawModel)) {
+                    addCustomDeviceModel(addForm.deviceType, rawModel).then(up => {
+                        if (up) setModelDb(up);
+                    });
+                }
+
+                const docId = `${svc}_${rawModel}`.replace(/[^a-zA-Z0-9]/g, '_');
                 const docRef = doc(db, "Services", docId);
                 
                 const batch = writeBatch(db);
                 batch.set(docRef, {
-                    model: addForm.model,
+                    model: rawModel,
                     service: svc,
                     price: priceNum,
                     type: addForm.deviceType,
@@ -331,7 +354,7 @@ const ServicePrices = () => {
                 }, { merge: true });
                 await batch.commit();
 
-                setToast({ message: `Price rule for "${svc} - ${addForm.model}" saved!`, type: 'success' });
+                setToast({ message: `Price rule for "${svc} - ${rawModel}" saved!`, type: 'success' });
             }
 
             setIsAddModalOpen(false);
@@ -423,7 +446,6 @@ const ServicePrices = () => {
             const basePrice = Number(serviceModalData.price) || 0;
 
             if (serviceModalData.isEdit) {
-                // Rename all records with the original service name
                 const matchingRules = services.filter(s => s.service === serviceModalData.originalName);
                 if (matchingRules.length > 0) {
                     const batch = writeBatch(db);
@@ -434,7 +456,6 @@ const ServicePrices = () => {
                 }
                 setToast({ message: `Service renamed to "${newName}" across ${matchingRules.length} rules!`, type: 'success' });
             } else {
-                // Check if already exists
                 const existing = services.find(s => s.service?.toLowerCase() === newName.toLowerCase());
                 if (existing) {
                     setToast({ message: `Service "${newName}" already exists!`, type: 'error' });
@@ -442,7 +463,6 @@ const ServicePrices = () => {
                     return;
                 }
 
-                // Create a base service record
                 const docId = `base_${newName}`.replace(/[^a-zA-Z0-9]/g, '_');
                 const docRef = doc(db, "Services", docId);
                 const batch = writeBatch(db);
@@ -476,6 +496,9 @@ const ServicePrices = () => {
             </div>
         );
     }
+
+    // Current models for the active device tab in Add Modal
+    const currentModelList = modelDb[addForm.deviceType] || DEFAULT_DEVICE_MODELS[addForm.deviceType] || [];
 
     return (
         <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
@@ -745,7 +768,7 @@ const ServicePrices = () => {
             )}
 
             {/* ======================================================== */}
-            {/* ADD PRICE RULE MODAL (SINGLE VS BULK RANGE)              */}
+            {/* ADD PRICE RULE MODAL (WITH ON-DEMAND DEVICE API & COMBO) */}
             {/* ======================================================== */}
             {isAddModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
@@ -753,7 +776,7 @@ const ServicePrices = () => {
                         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
                             <div>
                                 <h3 className="text-base font-extrabold text-slate-900">Add Model Repair Price</h3>
-                                <p className="text-xs text-slate-500 mt-0.5">Set repair pricing for a single model or whole series range</p>
+                                <p className="text-xs text-slate-500 mt-0.5">Select from library, type any new custom model, or sync online</p>
                             </div>
                             <button 
                                 onClick={() => setIsAddModalOpen(false)}
@@ -785,9 +808,21 @@ const ServicePrices = () => {
                                 </div>
                             </div>
 
-                            {/* Device Type Selector */}
+                            {/* Device Type Selector with API Sync Button */}
                             <div>
-                                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Device Type</label>
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Device Type</label>
+                                    <button
+                                        type="button"
+                                        onClick={handleSyncDeviceAPI}
+                                        disabled={isSyncingAPI}
+                                        className="text-[11px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200/80 px-2 py-0.5 rounded-lg flex items-center gap-1 transition"
+                                        title="Fetch latest newly released models from public registry"
+                                    >
+                                        <RefreshCw size={11} className={isSyncingAPI ? "animate-spin text-purple-600" : ""} />
+                                        <span>{isSyncingAPI ? "Syncing API..." : "Sync Device API"}</span>
+                                    </button>
+                                </div>
                                 <div className="grid grid-cols-4 gap-2">
                                     {['iPhone', 'iPad', 'Watch', 'Samsung'].map(type => {
                                         const isSel = addForm.deviceType === type;
@@ -842,17 +877,28 @@ const ServicePrices = () => {
                             {/* Conditional Model Pickers */}
                             {addForm.tab === 'single' ? (
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Device Model *</label>
-                                    <select
-                                        required
-                                        value={addForm.model}
-                                        onChange={e => setAddForm({ ...addForm, model: e.target.value })}
-                                        className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-purple-500 outline-none text-sm font-semibold"
-                                    >
-                                        {(MODEL_DB[addForm.deviceType] || []).map(m => (
-                                            <option key={m} value={m}>{m}</option>
-                                        ))}
-                                    </select>
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Device Model *</label>
+                                        <span className="text-[10px] text-slate-400">Select or type any new model</span>
+                                    </div>
+                                    <div className="relative">
+                                        <input
+                                            required
+                                            list="modelDatalistOptions"
+                                            value={addForm.model}
+                                            onChange={e => setAddForm({ ...addForm, model: e.target.value })}
+                                            placeholder="Choose or type e.g. iPhone 17 Pro, Samsung S25 Ultra..."
+                                            className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-purple-500 outline-none text-sm font-semibold"
+                                        />
+                                        <datalist id="modelDatalistOptions">
+                                            {currentModelList.map(m => (
+                                                <option key={m} value={m} />
+                                            ))}
+                                        </datalist>
+                                    </div>
+                                    <p className="text-[11px] text-slate-400 mt-1">
+                                        💡 Typing a new model will automatically register it to your device library for future use.
+                                    </p>
                                 </div>
                             ) : (
                                 <div className="space-y-3">
@@ -864,7 +910,7 @@ const ServicePrices = () => {
                                                 onChange={e => setAddForm({ ...addForm, startModel: e.target.value })}
                                                 className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-purple-500 outline-none text-xs font-semibold"
                                             >
-                                                {(MODEL_DB[addForm.deviceType] || []).map(m => (
+                                                {currentModelList.map(m => (
                                                     <option key={m} value={m}>{m}</option>
                                                 ))}
                                             </select>
@@ -876,7 +922,7 @@ const ServicePrices = () => {
                                                 onChange={e => setAddForm({ ...addForm, endModel: e.target.value })}
                                                 className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-purple-500 outline-none text-xs font-semibold"
                                             >
-                                                {(MODEL_DB[addForm.deviceType] || []).map(m => (
+                                                {currentModelList.map(m => (
                                                     <option key={m} value={m}>{m}</option>
                                                 ))}
                                             </select>
@@ -1033,7 +1079,7 @@ const ServicePrices = () => {
 
                 {/* Table Card */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                    {globalLoading ? (
+                    {services.length === 0 && globalLoading ? (
                         <div className="py-20 flex flex-col items-center justify-center gap-3 text-slate-400">
                             <Loader2 size={28} className="animate-spin text-purple-600" />
                             <span className="text-xs font-bold text-slate-500">Loading service prices...</span>
